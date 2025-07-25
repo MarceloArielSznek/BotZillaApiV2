@@ -3,8 +3,8 @@ import {
   Box, Typography, Button, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Paper, TablePagination, TextField, InputAdornment,
   CircularProgress, Alert, Chip, IconButton, Tooltip, Avatar,
-  Dialog, DialogTitle, DialogContent, DialogActions, Link,
-  TableSortLabel, FormControl, InputLabel, Select, MenuItem, SelectChangeEvent
+  Dialog, DialogTitle, DialogContent, DialogActions,
+  TableSortLabel, FormControl, InputLabel, Select, MenuItem, type SelectChangeEvent
 } from '@mui/material';
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
@@ -13,9 +13,9 @@ import {
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { debounce } from 'lodash';
-import salespersonService from '@/services/salespersonService';
-import branchService from '@/services/branchService';
-import { SalesPerson, Branch, Estimate, UpdateSalesPersonData } from '@/interfaces';
+import salespersonService from '../../services/salespersonService';
+import branchService from '../../services/branchService';
+import type { SalesPerson, Branch, Estimate, UpdateSalesPersonData, CreateSalesPersonData } from '../../interfaces';
 
 // Interfaces moved here for debugging
 // export interface Branch {
@@ -46,6 +46,12 @@ import { SalesPerson, Branch, Estimate, UpdateSalesPersonData } from '@/interfac
 type Order = 'asc' | 'desc';
 type OrderBy = 'name' | 'activeLeadsCount' | 'warning_count';
 
+const initialCreateFormData: CreateSalesPersonData = {
+    name: '',
+    phone: '',
+    telegram_id: '',
+    branchIds: [],
+};
 
 const SalespersonsTab: React.FC = () => {
     const [salespersons, setSalespersons] = useState<SalesPerson[]>([]);
@@ -60,13 +66,15 @@ const SalespersonsTab: React.FC = () => {
     
     const [viewModalOpen, setViewModalOpen] = useState(false);
     const [editModalOpen, setEditModalOpen] = useState(false);
+    const [createModalOpen, setCreateModalOpen] = useState(false);
     
     const [selectedSalesperson, setSelectedSalesperson] = useState<SalesPerson | null>(null);
     const [activeEstimates, setActiveEstimates] = useState<Estimate[]>([]);
     const [estimatesLoading, setEstimatesLoading] = useState(false);
     const [reportSending, setReportSending] = useState(false);
     
-    const [formData, setFormData] = useState<UpdateSalesPersonData>({ name: '', phone: '', telegram_id: ''});
+    const [createFormData, setCreateFormData] = useState<CreateSalesPersonData>(initialCreateFormData);
+    const [editFormData, setEditFormData] = useState<UpdateSalesPersonData>({ name: '', phone: '', telegram_id: '' });
     const [submitLoading, setSubmitLoading] = useState(false);
 
     const [order, setOrder] = useState<Order>('asc');
@@ -140,9 +148,14 @@ const SalespersonsTab: React.FC = () => {
         setSalespersons(sorted);
     };
 
+    const openCreateModal = () => {
+        setCreateFormData(initialCreateFormData);
+        setCreateModalOpen(true);
+    };
+
     const openEditModal = (salesperson: SalesPerson) => {
         setSelectedSalesperson(salesperson);
-        setFormData({
+        setEditFormData({
             name: salesperson.name,
             phone: salesperson.phone || '',
             telegram_id: salesperson.telegram_id || ''
@@ -150,16 +163,43 @@ const SalespersonsTab: React.FC = () => {
         setEditModalOpen(true);
     };
 
-    const handleUpdate = async () => {
-        if (!selectedSalesperson) return;
+    const handleCreate = async () => {
+        if (!createFormData.name.trim()) {
+            enqueueSnackbar('Salesperson name is required.', { variant: 'warning' });
+            return;
+        }
+        if (createFormData.branchIds.length === 0) {
+            enqueueSnackbar('At least one branch must be selected.', { variant: 'warning' });
+            return;
+        }
+
         setSubmitLoading(true);
         try {
-            await salespersonService.updateSalesPerson(selectedSalesperson.id, formData);
+            await salespersonService.createSalesPerson(createFormData);
+            enqueueSnackbar('Salesperson created successfully!', { variant: 'success' });
+            setCreateModalOpen(false);
+            fetchSalespersons();
+        } catch (err: any) {
+            enqueueSnackbar(`Error: ${err.response?.data?.message || err.message}`, { variant: 'error' });
+        } finally {
+            setSubmitLoading(false);
+        }
+    };
+
+    const handleUpdate = async () => {
+        if (!selectedSalesperson) return;
+        if (!editFormData.name.trim()) {
+            enqueueSnackbar('Salesperson name cannot be empty.', { variant: 'warning' });
+            return;
+        }
+        setSubmitLoading(true);
+        try {
+            await salespersonService.updateSalesPerson(selectedSalesperson.id, editFormData);
             enqueueSnackbar('Salesperson updated successfully', { variant: 'success' });
             setEditModalOpen(false);
             fetchSalespersons();
         } catch (err: any) {
-            enqueueSnackbar('Error updating salesperson: ' + err.message, { variant: 'error' });
+             enqueueSnackbar(`Error: ${err.response?.data?.message || err.message}`, { variant: 'error' });
         } finally {
             setSubmitLoading(false);
         }
@@ -232,7 +272,7 @@ const SalespersonsTab: React.FC = () => {
                         </Select>
                     </FormControl>
                 </Box>
-                <Button variant="contained" startIcon={<AddIcon />}>New Salesperson</Button>
+                <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateModal}>New Salesperson</Button>
             </Box>
 
             <TableContainer component={Paper}>
@@ -245,6 +285,7 @@ const SalespersonsTab: React.FC = () => {
                                 </TableSortLabel>
                             </TableCell>
                             <TableCell>Branches</TableCell>
+                            <TableCell>Telegram ID</TableCell>
                             <TableCell sortDirection={orderBy === 'activeLeadsCount' ? order : false}>
                                 <TableSortLabel active={orderBy === 'activeLeadsCount'} direction={order} onClick={() => handleRequestSort('activeLeadsCount')}>
                                     Active Leads
@@ -266,6 +307,13 @@ const SalespersonsTab: React.FC = () => {
                                 <TableCell>{sp.name}</TableCell>
                                 <TableCell>
                                     {sp.branches?.map((b: Branch) => <Chip key={b.id} label={b.name} size="small" sx={{ mr: 0.5 }} />)}
+                                </TableCell>
+                                <TableCell>
+                                    {sp.telegram_id ? (
+                                        <Chip label={sp.telegram_id} size="small" color="success" variant="outlined" />
+                                    ) : (
+                                        <Chip label="Not Set" size="small" />
+                                    )}
                                 </TableCell>
                                 <TableCell>{sp.activeLeadsCount}</TableCell>
                                 <TableCell>{sp.warning_count}</TableCell>
@@ -295,38 +343,56 @@ const SalespersonsTab: React.FC = () => {
                 />
             </TableContainer>
 
+            {/* Create Modal */}
+            <Dialog open={createModalOpen} onClose={() => setCreateModalOpen(false)} fullWidth>
+                <DialogTitle>Create New Salesperson</DialogTitle>
+                <DialogContent>
+                    <TextField autoFocus margin="dense" label="Name" type="text" fullWidth variant="outlined" value={createFormData.name} onChange={(e) => setCreateFormData({...createFormData, name: e.target.value})} />
+                    <TextField margin="dense" label="Phone" type="text" fullWidth variant="outlined" value={createFormData.phone || ''} onChange={(e) => setCreateFormData({...createFormData, phone: e.target.value})} />
+                    <TextField margin="dense" label="Telegram ID" type="text" fullWidth variant="outlined" value={createFormData.telegram_id || ''} onChange={(e) => setCreateFormData({...createFormData, telegram_id: e.target.value})} />
+                    <FormControl fullWidth margin="dense">
+                        <InputLabel>Branches</InputLabel>
+                        <Select
+                            multiple
+                            value={createFormData.branchIds}
+                            onChange={(e: SelectChangeEvent<number[]>) => {
+                                const value = e.target.value;
+                                setCreateFormData({
+                                    ...createFormData,
+                                    branchIds: typeof value === 'string' ? value.split(',').map(id => parseInt(id, 10)) : value,
+                                });
+                            }}
+                            renderValue={(selected: number[]) => (
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                    {selected.map((id) => (
+                                        <Chip key={id} label={branches.find(b => b.id === id)?.name || `ID: ${id}`} />
+                                    ))}
+                                </Box>
+                            )}
+                        >
+                            {branches.map((branch) => (
+                                <MenuItem key={branch.id} value={branch.id}>
+                                    {branch.name}
+                                </MenuItem>
+                            ))}
+                        </Select>
+                    </FormControl>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setCreateModalOpen(false)}>Cancel</Button>
+                    <Button onClick={handleCreate} variant="contained" disabled={submitLoading}>
+                        {submitLoading ? <CircularProgress size={24} /> : 'Create'}
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
             {/* Edit Modal */}
             <Dialog open={editModalOpen} onClose={() => setEditModalOpen(false)} fullWidth>
                 <DialogTitle>Edit {selectedSalesperson?.name}</DialogTitle>
                 <DialogContent>
-                    <TextField
-                        autoFocus
-                        margin="dense"
-                        label="Name"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={formData.name}
-                        onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    />
-                    <TextField
-                        margin="dense"
-                        label="Phone"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    />
-                    <TextField
-                        margin="dense"
-                        label="Telegram ID"
-                        type="text"
-                        fullWidth
-                        variant="outlined"
-                        value={formData.telegram_id}
-                        onChange={(e) => setFormData({...formData, telegram_id: e.target.value})}
-                    />
+                    <TextField autoFocus margin="dense" label="Name" type="text" fullWidth variant="outlined" value={editFormData.name} onChange={(e) => setEditFormData({...editFormData, name: e.target.value})} />
+                    <TextField margin="dense" label="Phone" type="text" fullWidth variant="outlined" value={editFormData.phone} onChange={(e) => setEditFormData({...editFormData, phone: e.target.value})} />
+                    <TextField margin="dense" label="Telegram ID" type="text" fullWidth variant="outlined" value={editFormData.telegram_id} onChange={(e) => setEditFormData({...editFormData, telegram_id: e.target.value})} />
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setEditModalOpen(false)}>Cancel</Button>

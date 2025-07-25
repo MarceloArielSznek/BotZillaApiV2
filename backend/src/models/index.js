@@ -15,6 +15,12 @@ const NotificationTemplate = require('./NotificationTemplate');
 const NotificationType = require('./NotificationType');
 const Notification = require('./Notification');
 const UserBranch = require('./UserBranch');
+const SheetColumnMap = require('./SheetColumnMap');
+const Job = require('./Job');
+const Shift = require('./Shift');
+const SpecialShift = require('./SpecialShift');
+const JobSpecialShift = require('./JobSpecialShift');
+const AutomationErrorLog = require('./AutomationErrorLog');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -185,6 +191,45 @@ Notification.belongsTo(NotificationType, { // <-- Añadir esta asociación
 });
 // No definimos un hasMany inverso para no sobrecargar el modelo de SalesPerson
 
+// Asociaciones para Job
+Job.belongsTo(Estimate, { foreignKey: 'estimate_id', as: 'estimate' });
+Estimate.hasOne(Job, { foreignKey: 'estimate_id', as: 'job' });
+
+Job.belongsTo(CrewMember, { foreignKey: 'crew_leader_id', as: 'crewLeader' });
+CrewMember.hasMany(Job, { foreignKey: 'crew_leader_id', as: 'ledJobs' });
+
+Job.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
+Branch.hasMany(Job, { foreignKey: 'branch_id', as: 'jobs' });
+
+// Asociaciones para Shift
+Shift.belongsTo(Job, { foreignKey: 'job_id', as: 'job', onDelete: 'CASCADE' });
+Job.hasMany(Shift, { foreignKey: 'job_id', as: 'shifts' });
+
+Shift.belongsTo(CrewMember, { foreignKey: 'crew_member_id', as: 'crewMember' });
+CrewMember.hasMany(Shift, { foreignKey: 'crew_member_id', as: 'shifts' });
+
+// Asociaciones para JobSpecialShift (Tabla de unión)
+Job.belongsToMany(SpecialShift, {
+    through: JobSpecialShift,
+    foreignKey: 'job_id',
+    otherKey: 'special_shift_id',
+    as: 'specialShifts',
+    onDelete: 'CASCADE'
+});
+SpecialShift.belongsToMany(Job, {
+    through: JobSpecialShift,
+    foreignKey: 'special_shift_id',
+    otherKey: 'job_id',
+    as: 'jobs'
+});
+
+// Asociaciones directas en el modelo de unión para includes
+JobSpecialShift.belongsTo(Job, { foreignKey: 'job_id', as: 'job', onDelete: 'CASCADE' });
+Job.hasMany(JobSpecialShift, { foreignKey: 'job_id', as: 'jobSpecialShifts' });
+JobSpecialShift.belongsTo(SpecialShift, { foreignKey: 'special_shift_id', as: 'specialShift' });
+SpecialShift.hasMany(JobSpecialShift, { foreignKey: 'special_shift_id', as: 'jobSpecialShifts' });
+
+
 module.exports = {
     User,
     UserRol,
@@ -200,5 +245,11 @@ module.exports = {
     NotificationTemplate,
     NotificationType,
     Notification,
-    UserBranch
+    UserBranch,
+    SheetColumnMap,
+    Job,
+    Shift,
+    SpecialShift,
+    JobSpecialShift,
+    AutomationErrorLog
 }; 

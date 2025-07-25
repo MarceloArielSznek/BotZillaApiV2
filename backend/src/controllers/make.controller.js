@@ -254,7 +254,7 @@ const listSalespersonsByBranchChoice = async (req, res) => {
     });
 
     if (!branchWithSalespersons || !branchWithSalespersons.salespersons || branchWithSalespersons.salespersons.length === 0) {
-      const message = `No salespersons without a registered Telegram ID were found for branch "${selectedBranch.name}".`;
+      const message = `It seems you've selected a branch that has no pending registrations.\n\nIf you believe this is an error, or if this is your correct branch, please contact an administrator for assistance.`;
       res.type('text/plain').send(message);
       return;
     }

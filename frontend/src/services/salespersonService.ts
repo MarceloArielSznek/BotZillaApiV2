@@ -1,11 +1,13 @@
 import axios from 'axios';
 import { API_BASE_URL } from '@/config/api';
 import authService from '@/services/authService';
-import { 
+import type { 
   SalesPerson, 
   SalesPersonListParams, 
   SalesPersonListResponse, 
-  UpdateSalesPersonData 
+  UpdateSalesPersonData,
+  CreateSalesPersonData,
+  Branch
 } from '@/interfaces';
 
 const getAuthHeaders = () => {
@@ -32,6 +34,24 @@ const salespersonService = {
       return response.data;
     } catch (error: any) {
       console.error('Error fetching salespersons:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  // GET /api/salespersons/for-filter - Obtener todos los salespersons para un filtro (sin paginación)
+  getSalesPersonsForFilter: async (): Promise<SalesPerson[]> => {
+    try {
+      // Usamos el endpoint existente pero con un límite alto para traer a todos
+      const response = await axios.get(
+        `${API_BASE_URL}/salespersons`,
+        {
+          ...getAuthHeaders(),
+          params: { limit: 1000 } // Un número grande para asegurar que traemos a todos
+        }
+      );
+      return response.data.salespersons;
+    } catch (error: any) {
+      console.error('Error fetching salespersons for filter:', error.response?.data || error.message);
       throw error;
     }
   },
@@ -94,7 +114,7 @@ const salespersonService = {
   },
 
   // GET /api/salespersons/:id/branches - Obtener branches de un salesperson
-  getSalesPersonBranches: async (id: number): Promise<SalesPersonBranches> => {
+  getSalesPersonBranches: async (id: number): Promise<Branch[]> => {
     try {
       const response = await axios.get(
         `${API_BASE_URL}/salespersons/${id}/branches`,

@@ -22,6 +22,8 @@ DROP TABLE IF EXISTS warning_reason;
 DROP TABLE IF EXISTS sales_person;
 DROP TABLE IF EXISTS notification_templates;
 DROP TABLE IF EXISTS notification_type;
+DROP TABLE IF EXISTS sheet_column_map;
+DROP TABLE IF EXISTS automation_error_log;
 
 -- Create tables
 CREATE TABLE warning_reason (
@@ -177,6 +179,28 @@ CREATE TABLE notification_templates (
     notification_type_id INTEGER NOT NULL REFERENCES notification_type(id),
     level INTEGER,
     template_text TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS botzilla.sheet_column_map (
+    id SERIAL PRIMARY KEY,
+    sheet_name TEXT NOT NULL,
+    field_name TEXT NOT NULL,
+    column_index INT NOT NULL,
+    type TEXT NOT NULL,
+    UNIQUE(sheet_name, field_name)
+);
+
+-- Crear tabla para los errores de automatización
+CREATE TABLE IF NOT EXISTS botzilla.automation_error_log (
+    id SERIAL PRIMARY KEY,
+    sheet_name VARCHAR(255) NOT NULL,
+    row_number INT NOT NULL,
+    error_type VARCHAR(255) NOT NULL,
+    error_message TEXT NOT NULL,
+    raw_data JSONB,
+    status VARCHAR(50) NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- Create indexes for better performance

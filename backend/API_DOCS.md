@@ -399,6 +399,87 @@ Authorization: Bearer <admin_token>
 - 403: Forbidden (user is not an administrator).
 - 500: Internal server error during the synchronization process.
 
+### Sync Column Map
+Receives the header row of a spreadsheet and syncs it with the `sheet_column_map` table.
+
+- **Endpoint**: `POST /api/automations/column-map/sync`
+- **Authentication**: Requires `X-API-Key` in the header.
+- **Query Parameters**:
+  - `dryRun` (boolean, optional): If `true`, the sync is simulated and no data is saved.
+- **Body**:
+  The endpoint accepts two formats.
+
+  **Formato 1: Objeto Directo (Preferido para Make.com)**
+  ```json
+  {
+      "name": "San Bernardino",
+      "columns": {
+          "0": "Date",
+          "1": "Client Name",
+          "2": "John Doe"
+      }
+  }
+  ```
+
+  **Formato 2: Array (Legado/Manual)**
+  ```json
+  {
+      "sheet_name": "San Bernardino",
+      "header_row": ["Date", "Client Name", "John Doe"]
+  }
+  ```
+- **Logic**:
+  - The API will automatically extract the values from the `columns` object.
+  - The `type` is determined as `"crew_member"` if the column name contains a space, otherwise it's `"field"`.
+  - Empty strings and internal Make.com fields (like `__ROW_NUMBER__`) are ignored.
+- **Success Response (200)**:
+  ```json
+  {
+      "success": true,
+      "message": "Successfully synced 3 columns for sheet \"San Bernardino\".",
+      "syncedRecords": 3
+  }
+  ```
+- **Error Responses**:
+  - `400 Bad Request`: If the body is malformed or required fields are missing.
+  - `401 Unauthorized`: If the API key is missing or invalid.
+  - `500 Internal Server Error`: For any other processing error.
+
+### Process Spreadsheet Row
+Receives a single row of data from a spreadsheet and uses the previously synced column map to transform it into a structured JSON object. This is the first step before persisting the data into specific tables like `Job` or `Shift`.
+
+- **Endpoint**: `POST /api/automations/process-row`
+- **Authentication**: Requires `X-API-Key` in the header.
+- **Query Parameters**:
+  - `dryRun` (boolean, optional): If `true`, the row is processed and returned, but no database operations (like saving a Job or Shift) are performed.
+- **Body**:
+  ```json
+  {
+      "sheet_name": "Testing",
+      "row_number": 3,
+      "row_data": ["Value for Col A", "Value for Col B", "Value for Col C"]
+  }
+  ```
+  *Note: `row_data` can also be a single comma-separated string, e.g., `"Value for Col A,Value for Col B,Value for Col C"`.*
+
+- **Success Response (200)**:
+  Returns the row data transformed into a key-value object based on the column map.
+  ```json
+  {
+      "success": true,
+      "message": "Row 3 from sheet \"Testing\" is ready for processing.",
+      "processedData": {
+          "Job Data": "Value for Col A",
+          "Job Name": "Value for Col B",
+          "ADMIN": "Value for Col C"
+      }
+  }
+  ```
+- **Error Responses**:
+  - `400 Bad Request`: If required fields are missing in the body.
+  - `404 Not Found`: If no column map has been synced for the given `sheet_name`.
+  - `500 Internal Server Error`: For any other processing error.
+
 ## Notifications
 
 Endpoints designed to be consumed by external notification services like Make.com. These endpoints generate structured JSON payloads that the external service can use to send notifications to the appropriate users (e.g., via Telegram). Access is restricted to administrators.
@@ -539,4 +620,6 @@ Gets a list of salespersons for a specific branch who do not have a Telegram ID 
 
 - **Endpoint**: `GET /make/branches/{id}/salespersons-no-telegram`
 - **Path Parameter**: `id` (The numerical ID of the branch)
-- **Success Response**: A JSON array of salesperson objects `[{ "id": 1, "name": "John Doe" }]`. 
+- **Success Response**: A JSON array of salesperson objects `[{ "id": 1, "name": "John Doe" }]`.
+
+--- 

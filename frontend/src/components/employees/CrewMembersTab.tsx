@@ -373,6 +373,7 @@ const CrewMembersTab = () => {
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Name</TableCell>
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Role</TableCell>
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Contact</TableCell>
+                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Telegram ID</TableCell>
                       {includeStats && (
                         <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Branches</TableCell>
                       )}
@@ -419,18 +420,19 @@ const CrewMembersTab = () => {
                                   <Typography variant="caption">{crewMember.phone}</Typography>
                                 </Box>
                               )}
-                              {crewMember.telegram_id && (
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                  <TelegramIcon fontSize="small" color="disabled" />
-                                  <Typography variant="caption">{crewMember.telegram_id}</Typography>
-                                </Box>
-                              )}
-                              {!crewMember.phone && !crewMember.telegram_id && (
+                              {!crewMember.phone && (
                                 <Typography variant="caption" color="text.secondary">
-                                  No contact info
+                                  No phone
                                 </Typography>
                               )}
                             </Box>
+                          </TableCell>
+                          <TableCell>
+                             {crewMember.telegram_id ? (
+                                <Chip label={crewMember.telegram_id} size="small" color="success" variant="outlined" />
+                            ) : (
+                                <Chip label="Not Set" size="small" />
+                            )}
                           </TableCell>
                           {includeStats && (
                             <TableCell>

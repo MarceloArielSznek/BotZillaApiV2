@@ -15,6 +15,7 @@ const notificationRoutes = require('./routes/notifications.routes');
 const notificationTypeRoutes = require('./routes/notificationType.routes');
 const notificationTemplateRoutes = require('./routes/notificationTemplate.routes');
 const makeRoutes = require('./routes/make.routes');
+const jobsRoutes = require('./routes/jobs.routes');
 // const botRoutes = require('./routes/bot.routes'); // No longer needed
 const { logger, requestLogger, errorLogger } = require('./utils/logger');
 const { caches } = require('./utils/cache');
@@ -48,6 +49,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/notification-types', notificationTypeRoutes);
 app.use('/api/notification-templates', notificationTemplateRoutes);
 app.use('/api/make', makeRoutes);
+app.use('/api/jobs', jobsRoutes);
+// app.use('/api/column-map', columnMapRoutes); // Eliminado
 // app.use('/api/bot', botRoutes); // No longer needed
 
 // Health check endpoint
