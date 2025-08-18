@@ -39,7 +39,7 @@ const createValidationMiddleware = (schema, source = 'body') => {
 // Schema base para paginación
 const paginationSchema = Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(10),
+    limit: Joi.number().integer().min(1).max(1000).default(10),
     search: Joi.string().trim().allow('').optional(),
     includeStats: Joi.boolean().default(false)
 });
@@ -61,12 +61,17 @@ const branchSchemas = {
         address: Joi.string().trim().max(255).allow('').optional()
             .messages({
                 'string.max': 'Address cannot exceed 255 characters'
+            }),
+        telegram_group_id: Joi.string().trim().max(100).allow('').optional()
+            .messages({
+                'string.max': 'Telegram Group ID cannot exceed 100 characters'
             })
     }),
 
     update: Joi.object({
         name: Joi.string().trim().min(2).max(100).required(),
-        address: Joi.string().trim().max(255).allow('').optional()
+        address: Joi.string().trim().max(255).allow('').optional(),
+        telegram_group_id: Joi.string().trim().max(100).allow('').optional()
     }),
 
     list: paginationSchema,
@@ -113,7 +118,8 @@ const salesPersonSchemas = {
     }),
 
     list: paginationSchema.keys({
-        branchId: Joi.number().integer().positive().optional()
+        branchId: Joi.number().integer().positive().optional(),
+        include_inactive: Joi.boolean().optional()
     }),
 
     assignBranches: Joi.object({
@@ -123,6 +129,15 @@ const salesPersonSchemas = {
                 'array.unique': 'Cannot assign duplicate branches',
                 'any.required': 'Branch IDs are required'
             })
+    }),
+
+    manageBranch: Joi.object({
+        salespersonId: Joi.number().integer().positive().required(),
+        branchId: Joi.number().integer().positive().required()
+    }),
+
+    toggleStatus: Joi.object({
+        is_active: Joi.boolean().required()
     })
 };
 
@@ -189,7 +204,9 @@ const validateSalesPerson = {
     update: createValidationMiddleware(salesPersonSchemas.update),
     list: createValidationMiddleware(salesPersonSchemas.list, 'query'),
     params: createValidationMiddleware(idParamSchema, 'params'),
-    assignBranches: createValidationMiddleware(salesPersonSchemas.assignBranches)
+    assignBranches: createValidationMiddleware(salesPersonSchemas.assignBranches),
+    manageBranch: createValidationMiddleware(salesPersonSchemas.manageBranch, 'params'),
+    toggleStatus: createValidationMiddleware(salesPersonSchemas.toggleStatus)
 };
 
 const validateStatus = {
@@ -222,4 +239,4 @@ module.exports = {
     validateEstimate,
     validateCompositeParams,
     createValidationMiddleware // Para casos especiales
-}; 
+};

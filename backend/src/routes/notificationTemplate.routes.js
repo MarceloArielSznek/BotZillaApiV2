@@ -3,6 +3,9 @@ const router = express.Router();
 const notificationTemplateController = require('../controllers/notificationTemplate.controller');
 const { verifyToken, isAdmin } = require('../middleware/auth.middleware');
 
+// Middleware para parsear JSON
+router.use(express.json());
+
 // GET all notification templates
 router.get('/', verifyToken, notificationTemplateController.getAllTemplates);
 

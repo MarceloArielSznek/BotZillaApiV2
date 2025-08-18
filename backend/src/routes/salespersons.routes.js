@@ -1,10 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const salespersonsController = require('../controllers/salespersons.controller');
-const { verifyToken } = require('../middleware/auth.middleware');
+const { verifyToken, isAdmin } = require('../middleware/auth.middleware');
 const { validateSalesPerson } = require('../middleware/validation.middleware');
 const { caches, cacheInvalidationMiddleware } = require('../utils/cache');
-const { isAdmin } = require('../middleware/auth.middleware');
+
+// Middleware para parsear JSON
+router.use(express.json());
 
 // Todas las rutas requieren autenticación
 router.use(verifyToken);
@@ -38,6 +40,14 @@ router.put('/:id',
     salespersonsController.updateSalesPerson
 );
 
+// PATCH /api/salespersons/:id/status - Activar/desactivar salesperson (con invalidación de cache)
+router.patch('/:id/status',
+    validateSalesPerson.params,
+    validateSalesPerson.toggleStatus,
+    cacheInvalidationMiddleware('salesperson'),
+    salespersonsController.toggleSalesPersonStatus
+);
+
 // DELETE /api/salespersons/:id - Eliminar salesperson (con invalidación de cache)
 router.delete('/:id', 
     validateSalesPerson.params,
@@ -52,12 +62,18 @@ router.get('/:id/branches',
     salespersonsController.getSalesPersonBranches
 );
 
-// POST /api/salespersons/:id/branches - Asignar branches a salesperson (con invalidación)
-router.post('/:id/branches', 
-    validateSalesPerson.params,
-    validateSalesPerson.assignBranches,
+// POST /api/salespersons/:salespersonId/branches/:branchId - Añadir una branch a un salesperson
+router.post('/:salespersonId/branches/:branchId',
+    validateSalesPerson.manageBranch,
     cacheInvalidationMiddleware('salesperson'),
-    salespersonsController.assignBranches
+    salespersonsController.addBranchToSalesperson
+);
+
+// DELETE /api/salespersons/:salespersonId/branches/:branchId - Eliminar una branch de un salesperson
+router.delete('/:salespersonId/branches/:branchId',
+    validateSalesPerson.manageBranch,
+    cacheInvalidationMiddleware('salesperson'),
+    salespersonsController.removeBranchFromSalesperson
 );
 
 // POST /api/salespersons/:id/warning - Incrementar warning count (con invalidación)
@@ -70,7 +86,6 @@ router.post('/:id/warning',
 // Obtener estimates activos de un salesperson (requiere token, admin)
 router.get(
     '/:id/active-estimates',
-    verifyToken,
     isAdmin,
     salespersonsController.getActiveEstimates
 );
@@ -78,9 +93,8 @@ router.get(
 // Enviar reporte de estimates activos a un salesperson (requiere token, admin)
 router.post(
     '/:id/send-report',
-    verifyToken,
     isAdmin,
     salespersonsController.sendActiveEstimatesReport
 );
 
-module.exports = router; 
+module.exports = router;

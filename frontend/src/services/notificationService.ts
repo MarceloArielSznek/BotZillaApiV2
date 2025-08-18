@@ -8,8 +8,8 @@ export interface Notification {
     recipient_type: string;
     recipient_id: number;
     recipient_name: string | null;
-    read_at: string | null;
-    sent_to_telegram: boolean;
+    read_at?: string | null;
+    sent_to_telegram?: boolean;
     created_at: string;
 }
 
@@ -20,6 +20,12 @@ export interface FetchNotificationsParams {
     recipientType?: string;
     sort_by?: string;
     sort_order?: 'ASC' | 'DESC';
+    notificationTypeId?: number;
+    notificationTypeName?: string;
+    dateFrom?: string; // ISO date
+    dateTo?: string;   // ISO date
+    recipientName?: string;
+    level?: string;
 }
 
 export interface FetchNotificationsResponse {
@@ -34,7 +40,11 @@ export interface DashboardStats {
     sentThisWeek: number;
     salespersonsOverLimit: { id: number; name: string; activeLeadsCount: string; }[];
     recentWarnings: (Notification & { salesPersonRecipient?: { name: string } })[];
+    recentCongratulations: (Notification & { salesPersonRecipient?: { name: string } })[];
     typeCounts: { name: string; count: string; }[];
+    typeCountsToday: { name: string; count: string; }[];
+    typeCountsThisWeek: { name: string; count: string; }[];
+    currentWarnings: { id: number; name: string; warning_count: number; activeLeadsCount: string; }[];
 }
 
 const getAuthHeaders = () => {

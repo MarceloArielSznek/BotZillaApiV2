@@ -1,6 +1,8 @@
 import axios from 'axios';
 import { API_BASE_URL } from '../config/api';
 import authService from './authService';
+import { api } from '../config/api';
+import type { EstimateStatus, SpecialShift } from '../interfaces';
 
 export interface EstimateStatus {
   id: number;
@@ -74,6 +76,21 @@ const getAuthHeaders = () => {
       'Content-Type': 'application/json',
     },
   };
+};
+
+export const getStatuses = async (): Promise<EstimateStatus[]> => {
+    const response = await api.get('/estimate-statuses');
+    return response.data.statuses;
+};
+
+export const getStatusAnalytics = async () => {
+    const response = await api.get('/estimate-statuses/analytics');
+    return response.data.analytics;
+};
+
+export const getSpecialShifts = async (): Promise<SpecialShift[]> => {
+    const response = await api.get('/special-shifts');
+    return response.data;
 };
 
 const statusService = {

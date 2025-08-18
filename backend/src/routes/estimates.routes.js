@@ -17,11 +17,22 @@ const { verifyToken } = require('../middleware/auth.middleware');
 //     estimatesController.syncExternalEstimates
 // );
 
+// Ruta para sincronización manual desde el frontend (usa JWT auth)
+router.post('/sync-estimates', 
+    verifyToken,
+    estimatesController.syncEstimatesManual.bind(estimatesController)
+);
+
 // Obtener todos los estimates con filtros y paginación (requiere autenticación)
 router.get('/', 
     verifyToken,
     // validateEstimate.fetch, // Se comenta por ahora
     estimatesController.getAllEstimates
+);
+
+router.get('/sold',
+    verifyToken,
+    estimatesController.getSoldEstimates
 );
 
 // Obtener detalles de un estimate específico (requiere autenticación)

@@ -35,6 +35,10 @@ const CrewMember = sequelize.define('CrewMember', {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false
+    },
+    animal: {
+        type: DataTypes.STRING(50),
+        allowNull: true
     }
 }, {
     tableName: 'crew_member',

@@ -6,6 +6,7 @@ export interface Branch {
   id: number;
   name: string;
   address: string;
+  telegram_group_id?: string;
   stats?: {
     salesPersonsCount: number;
     estimatesCount: number;
@@ -34,11 +35,13 @@ export interface BranchListResponse {
 export interface CreateBranchData {
   name: string;
   address?: string;
+  telegram_group_id?: string;
 }
 
 export interface UpdateBranchData {
   name: string;
   address?: string;
+  telegram_group_id?: string;
 }
 
 const getAuthHeaders = () => {

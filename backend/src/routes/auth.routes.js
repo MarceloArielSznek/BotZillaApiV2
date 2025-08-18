@@ -5,6 +5,9 @@ const authController = require('../controllers/auth.controller');
 const validateRequest = require('../middleware/validate.middleware');
 const { verifyToken } = require('../middleware/auth.middleware');
 
+// Middleware para parsear JSON en todas las rutas de este archivo
+router.use(express.json());
+
 // Login
 router.post('/login', [
     body('email').isEmail().withMessage('Debe ser un email válido'),

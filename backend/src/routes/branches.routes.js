@@ -4,6 +4,10 @@ const branchesController = require('../controllers/branches.controller');
 const { verifyToken } = require('../middleware/auth.middleware');
 const { validateBranch, validateCompositeParams } = require('../middleware/validation.middleware');
 const { caches, cacheInvalidationMiddleware } = require('../utils/cache');
+const { cleanBranchBody } = require('../middleware/cleanBody.middleware');
+
+// Middleware para parsear JSON
+router.use(express.json());
 
 // Todas las rutas requieren autenticación
 router.use(verifyToken);
@@ -24,6 +28,7 @@ router.get('/:id',
 
 // POST /api/branches - Crear nueva branch (con invalidación de cache)
 router.post('/', 
+    cleanBranchBody,
     validateBranch.create,
     cacheInvalidationMiddleware('branch'),
     branchesController.createBranch
@@ -31,6 +36,7 @@ router.post('/',
 
 // PUT /api/branches/:id - Actualizar branch (con invalidación de cache)
 router.put('/:id', 
+    cleanBranchBody,
     validateBranch.params,
     validateBranch.update,
     cacheInvalidationMiddleware('branch'),

@@ -5,6 +5,9 @@ const { verifyToken } = require('../middleware/auth.middleware');
 const { validateStatus } = require('../middleware/validation.middleware');
 const { caches, cacheInvalidationMiddleware } = require('../utils/cache');
 
+// Middleware para parsear JSON
+router.use(express.json());
+
 // Todas las rutas requieren autenticación
 router.use(verifyToken);
 

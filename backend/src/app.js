@@ -14,8 +14,12 @@ const automationsRoutes = require('./routes/automations.routes');
 const notificationRoutes = require('./routes/notifications.routes');
 const notificationTypeRoutes = require('./routes/notificationType.routes');
 const notificationTemplateRoutes = require('./routes/notificationTemplate.routes');
+const dashboardRoutes = require('./routes/dashboard.routes');
 const makeRoutes = require('./routes/make.routes');
 const jobsRoutes = require('./routes/jobs.routes');
+const specialShiftRoutes = require('./routes/specialShift.routes');
+const cacheRoutes = require('./routes/cache.routes');
+const aiRoutes = require('./routes/ai.routes');
 // const botRoutes = require('./routes/bot.routes'); // No longer needed
 const { logger, requestLogger, errorLogger } = require('./utils/logger');
 const { caches } = require('./utils/cache');
@@ -27,8 +31,20 @@ app.use(requestLogger);
 
 // Middlewares de seguridad
 app.use(helmet());
-app.use(cors());
-app.use(express.json());
+
+// Configuración CORS más permisiva para desarrollo con ngrok
+const corsOptions = {
+    origin: function (origin, callback) {
+        // Permite cualquier origen durante desarrollo
+        // En producción, especifica los dominios permitidos
+        callback(null, true);
+    },
+    credentials: true,
+    optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.use(express.json()); // Habilitado para parsear JSON en el body
 
 // Log del inicio de la aplicación
 logger.info('BotZilla API V2 iniciando...', {
@@ -48,8 +64,12 @@ app.use('/api/automations', automationsRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notification-types', notificationTypeRoutes);
 app.use('/api/notification-templates', notificationTemplateRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/make', makeRoutes);
 app.use('/api/jobs', jobsRoutes);
+app.use('/api/special-shifts', specialShiftRoutes);
+app.use('/api/cache', cacheRoutes);
+app.use('/api/ai', aiRoutes);
 // app.use('/api/column-map', columnMapRoutes); // Eliminado
 // app.use('/api/bot', botRoutes); // No longer needed
 

@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS notification_templates;
 DROP TABLE IF EXISTS notification_type;
 DROP TABLE IF EXISTS sheet_column_map;
 DROP TABLE IF EXISTS automation_error_log;
+DROP TABLE IF EXISTS branches;
 
 -- Create tables
 CREATE TABLE warning_reason (
@@ -36,7 +37,8 @@ CREATE TABLE sales_person (
     name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
     telegram_id VARCHAR(50),
-    warning_count INTEGER DEFAULT 0
+    warning_count INTEGER DEFAULT 0,
+    is_active BOOLEAN DEFAULT true NOT NULL
 );
 
 CREATE TABLE warning (
@@ -51,10 +53,15 @@ CREATE TABLE estimate_status (
     name VARCHAR(50) NOT NULL
 );
 
+-- Estructura para la tabla 'branch'
+-- --------------------------------------------------------
 CREATE TABLE branch (
     id SERIAL PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    address TEXT
+    name VARCHAR(100) NOT NULL UNIQUE,
+    address TEXT,
+    telegram_group_id TEXT, -- Puede ser un ID de grupo o de usuario
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE estimate (
@@ -63,6 +70,8 @@ CREATE TABLE estimate (
     name VARCHAR(200),
     customer_name VARCHAR(200),
     customer_address TEXT,
+    customer_email VARCHAR(200),
+    customer_phone VARCHAR(50),
     crew_notes TEXT,
     sales_person_id INTEGER REFERENCES sales_person(id),
     status_id INTEGER REFERENCES estimate_status(id),
@@ -72,7 +81,7 @@ CREATE TABLE estimate (
     final_price DECIMAL(10,2),
     sub_service_retail_cost DECIMAL(10,2),
     discount DECIMAL(10,2),
-    attic_tech_hours INTEGER,
+    attic_tech_hours DECIMAL(10,2),
     -- Timestamps de Attic Tech para auditoría
     at_created_date TIMESTAMP,
     at_updated_date TIMESTAMP,
@@ -109,7 +118,8 @@ CREATE TABLE crew_member (
     phone VARCHAR(20),
     telegram_id VARCHAR(50),
     name VARCHAR(100) NOT NULL,
-    is_leader BOOLEAN DEFAULT false
+    is_leader BOOLEAN DEFAULT false,
+    animal VARCHAR(50)
 );
 
 CREATE TABLE crew_member_branch (
@@ -134,8 +144,9 @@ CREATE TABLE job (
     branch_id INTEGER REFERENCES branch(id),
     note TEXT,
     review INTEGER CHECK (review >= 0 AND review <= 5),
-    attic_tech_hours INTEGER,
-    crew_leader_hours INTEGER
+    attic_tech_hours DECIMAL(10,2),
+    crew_leader_hours INTEGER,
+    notification_sent BOOLEAN DEFAULT false NOT NULL
 );
 
 CREATE TABLE shift (
@@ -255,7 +266,9 @@ INSERT INTO notification_templates (name, notification_type_id, level, template_
     ('warning_level_1', 1, 1, '🚨 **Warning 1: High Active Lead Count** 🚨\n\nHi {{salesperson_name}}, this is a friendly reminder. You currently have {{active_leads_count}} active leads, which is above the limit of 12. Please take action to manage your leads.'),
     ('warning_level_2', 1, 2, '⚠️ **Warning 2: Action Required** ⚠️\n\n{{salesperson_name}}, this is your second warning. You currently have {{active_leads_count}} active leads. Your manager has been notified. Please prioritize reducing your active leads.'),
     ('warning_level_3_plus', 1, 3, '🔥 **Final Warning ({{warning_count}}): Immediate Action Required** 🔥\n\n{{salesperson_name}}, this is a serious alert. You have {{active_leads_count}} active leads. This requires your immediate attention to avoid further escalation.'),
-    ('congratulations_reset', 2, null, '🎉 Great job {{salesperson_name}}! You''ve brought your active leads down to {{active_leads_count}}. Your warning count has been reset. Keep up the excellent work!');
+    ('congratulations_reset', 2, null, '🎉 Great job {{salesperson_name}}! You''ve brought your active leads down to {{active_leads_count}}. Your warning count has been reset. Keep up the excellent work!'),
+    ('job_summary_positive', 3, null, '✅ <b>Job Completed: {{job_name}}</b> ✅\n\nGreat work, {{crew_leader_name}}! Here is your performance summary:\n\n- <b>Planned Hours:</b> {{cl_plan_hours}}\n- <b>Hours Saved (%):</b> {{actual_saved_percent}}\n- <b>Potential Bonus:</b> ${{potential_bonus_pool}}\n- <b>Actual Bonus:</b> ${{actual_bonus_pool}}\n\nKeep up the excellent work!\n– Botzilla 🤖🦖'),
+    ('job_summary_negative', 3, null, '📝 <b>Job Completed: {{job_name}}</b> 📝\n\nHi {{crew_leader_name}}, this job has been closed. Here is the performance summary:\n\n- <b>Planned Hours:</b> {{cl_plan_hours}}\n- <b>Hours Saved (%):</b> {{actual_saved_percent}}\n- <b>Potential Bonus:</b> ${{potential_bonus_pool}}\n- <b>Actual Bonus:</b> ${{actual_bonus_pool}}\n\nLet''s review this one together to see how we can improve next time.\n– Botzilla 🤖🦖');
 
 
 -- Grant permissions (adjust according to your needs)

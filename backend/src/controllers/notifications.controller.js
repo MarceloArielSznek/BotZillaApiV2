@@ -117,18 +117,20 @@ class NotificationsController {
 
                         if (!isDryRun) {
                             await Warning.create({ sales_person_id: id, reason_id: warningReason.id });
-                            await SalesPerson.update({ warning_count: newWarningCount }, { where: { id } });
-                            await Notification.create({
-                                message: message_text,
-                                recipient_type: 'sales_person',
-                                recipient_id: id,
-                                notification_type_id: templateInfo.typeId
-                            });
                         }
+
+                        // Update salesperson and create notification record regardless of dryRun, as requested.
+                        await SalesPerson.update({ warning_count: newWarningCount }, { where: { id } });
+                        await Notification.create({
+                            message: message_text,
+                            recipient_type: 'sales_person',
+                            recipient_id: id,
+                            notification_type_id: templateInfo.typeId
+                        });
                         
                         notifications.push({
                             salesperson_name: name,
-                            telegram_id: isDryRun ? '123' : telegram_id,
+                            telegram_id: telegram_id, // Always use the real Telegram ID
                             branches: branches.map(b => b.name),
                             active_leads_count: activeLeadsCount,
                             warning_count: newWarningCount,
@@ -163,19 +165,18 @@ class NotificationsController {
                             active_leads_count: activeLeadsCount
                         });
     
-                        if (!isDryRun) {
-                            await SalesPerson.update({ warning_count: 0 }, { where: { id } });
-                            await Notification.create({
-                                message: message_text,
-                                recipient_type: 'sales_person',
-                                recipient_id: id,
-                                notification_type_id: templateInfo.typeId
-                            });
-                        }
+                        // Update salesperson and create notification record regardless of dryRun, as requested.
+                        await SalesPerson.update({ warning_count: 0 }, { where: { id } });
+                        await Notification.create({
+                            message: message_text,
+                            recipient_type: 'sales_person',
+                            recipient_id: id,
+                            notification_type_id: templateInfo.typeId
+                        });
     
                         notifications.push({
                             salesperson_name: name,
-                            telegram_id: isDryRun ? '123' : telegram_id,
+                            telegram_id: telegram_id, // Always use the real Telegram ID
                             branches: branches.map(b => b.name),
                             active_leads_count: activeLeadsCount,
                             warning_count: 0,
@@ -384,7 +385,7 @@ class NotificationsController {
             summaryMessage = messageParts.join('\n');
         }
 
-        const messageText = `${summaryMessage}\n\n– Botzilla ��`;
+        const messageText = `${summaryMessage}\n\n– Botzilla 🤖`;
 
         const [adminSummaryType] = await NotificationType.findOrCreate({
             where: { name: 'Admin Summary' }
@@ -424,29 +425,72 @@ class NotificationsController {
 
     async getAllNotifications(req, res) {
         try {
-            const { page = 1, limit = 10, recipientId, recipientType, sort_by = 'created_at', sort_order = 'DESC' } = req.query;
+            const {
+                page = 1,
+                limit = 10,
+                recipientId,
+                recipientType,
+                sort_by = 'created_at',
+                sort_order = 'DESC',
+                notificationTypeId,
+                notificationTypeName,
+                dateFrom,
+                dateTo,
+                recipientName,
+                level
+            } = req.query;
             const offset = (page - 1) * limit;
 
             const whereClause = {};
             if (recipientId) whereClause.recipient_id = recipientId;
             if (recipientType) whereClause.recipient_type = recipientType;
+            if (notificationTypeId) whereClause.notification_type_id = notificationTypeId;
+            if (level) {
+                if (level === '1') {
+                    whereClause.message = { [Op.like]: '%Warning 1%' };
+                } else if (level === '2') {
+                    whereClause.message = { [Op.like]: '%Warning 2%' };
+                } else if (level === '3+') {
+                    whereClause.message = { [Op.like]: '%Final Warning%' };
+                }
+            }
+            if (dateFrom || dateTo) {
+                whereClause.created_at = {};
+                if (dateFrom) whereClause.created_at[Op.gte] = new Date(dateFrom);
+                if (dateTo) {
+                    const end = new Date(dateTo);
+                    end.setHours(23, 59, 59, 999);
+                    whereClause.created_at[Op.lte] = end;
+                }
+            }
             
+            const includes = [
+                {
+                    model: SalesPerson,
+                    as: 'salesPersonRecipient',
+                    attributes: ['name'],
+                    ...(recipientName ? { where: { name: { [Op.iLike]: `%${recipientName}%` } }, required: true } : {})
+                }
+            ];
+            if (notificationTypeName) {
+                includes.push({
+                    model: NotificationType,
+                    as: 'notificationType',
+                    attributes: ['name'],
+                    where: { name: { [Op.iLike]: `%${notificationTypeName}%` } },
+                    required: true
+                });
+            }
+
             const { count, rows } = await Notification.findAndCountAll({
                 where: whereClause,
                 limit: parseInt(limit),
                 offset: offset,
                 order: [[sort_by, sort_order.toUpperCase()]],
-                include: [
-                    {
-                        model: SalesPerson,
-                        as: 'salesPersonRecipient',
-                        attributes: ['name']
-                    }
-                ],
+                include: includes,
                 distinct: true
             });
 
-            // Mapear para añadir el nombre del destinatario al objeto principal
             const data = rows.map(row => {
                 const plain = row.get({ plain: true });
                 return {
@@ -475,21 +519,18 @@ class NotificationsController {
             const startOfWeek = new Date(today);
             startOfWeek.setDate(today.getDate() - today.getDay());
 
-            // 1. Notification counts
-            const sentToday = await Notification.count({
-                where: { created_at: { [Op.gte]: today } }
-            });
-            const sentThisWeek = await Notification.count({
-                where: { created_at: { [Op.gte]: startOfWeek } }
-            });
+            // 1. Notification counts (hoy y semana)
+            const sentToday = await Notification.count({ where: { created_at: { [Op.gte]: today } } });
+            const sentThisWeek = await Notification.count({ where: { created_at: { [Op.gte]: startOfWeek } } });
 
-            // 2. Salespersons over lead limit
+            // 2. Estados activos tolerantes (nombres de seeds y legacy)
             const activeStatuses = await EstimateStatus.findAll({
-                where: { name: { [Op.in]: ["In Progress", "Released"] } }
+                where: { name: { [Op.in]: ["In Progress", "Released", "active", "released"] } },
+                attributes: ['id']
             });
             const activeStatusIds = activeStatuses.map(s => s.id);
-            
-            const salespersonsOverLimit = await SalesPerson.findAll({
+
+            const salespersonsOverLimit = activeStatusIds.length === 0 ? [] : await SalesPerson.findAll({
                 attributes: [
                     'id', 'name',
                     [literal(`(
@@ -500,35 +541,63 @@ class NotificationsController {
                 having: literal(`(
                     SELECT COUNT(*) FROM "botzilla"."estimate" AS "e"
                     WHERE "e"."sales_person_id" = "SalesPerson"."id" AND "e"."status_id" IN (${activeStatusIds.join(',')})
-                ) > 12`),
+                ) >= 12`),
                 group: ['SalesPerson.id'],
                 order: [[literal('"activeLeadsCount"'), 'DESC']]
             });
 
-            // 3. Recent warnings
+            // 3. Listas recientes (semana): warnings y felicitaciones
             const warningType = await NotificationType.findOne({ where: { name: 'warning' } });
+            const congratsType = await NotificationType.findOne({ where: { name: 'congratulations' } });
+
             const recentWarnings = await Notification.findAll({
-                where: { notification_type_id: warningType ? warningType.id : null },
+                where: {
+                    notification_type_id: warningType ? warningType.id : null,
+                    created_at: { [Op.gte]: startOfWeek }
+                },
                 order: [['created_at', 'DESC']],
-                limit: 5,
-                include: [
-                    { model: SalesPerson, as: 'salesPersonRecipient', attributes: ['name'] }
-                ]
+                limit: 10,
+                include: [{ model: SalesPerson, as: 'salesPersonRecipient', attributes: ['name'] }]
             });
 
-            // 4. Notification types breakdown
-            const typeCounts = await Notification.findAll({
+            const recentCongratulations = await Notification.findAll({
+                where: {
+                    notification_type_id: congratsType ? congratsType.id : null,
+                    created_at: { [Op.gte]: startOfWeek }
+                },
+                order: [['created_at', 'DESC']],
+                limit: 10,
+                include: [{ model: SalesPerson, as: 'salesPersonRecipient', attributes: ['name'] }]
+            });
+
+            // 4. Desgloses por tipo: global, hoy, semana
+            const buildTypeCounts = async (dateFilter) => {
+                return await Notification.findAll({
+                    attributes: [
+                        [literal('"notificationType"."name"'), 'name'],
+                        [literal('COUNT("Notification"."id")'), 'count']
+                    ],
+                    include: [{ model: NotificationType, as: 'notificationType', attributes: [] }],
+                    where: dateFilter || undefined,
+                    group: [literal('"notificationType"."name"')],
+                    raw: true
+                });
+            };
+            const typeCounts = await buildTypeCounts();
+            const typeCountsToday = await buildTypeCounts({ created_at: { [Op.gte]: today } });
+            const typeCountsThisWeek = await buildTypeCounts({ created_at: { [Op.gte]: startOfWeek } });
+
+            // 5. Quiénes tienen warnings actualmente (warning_count > 0) y sus activos
+            const currentWarnings = await SalesPerson.findAll({
                 attributes: [
-                    [literal('"notificationType"."name"'), 'name'],
-                    [literal('COUNT("Notification"."id")'), 'count']
+                    'id', 'name', 'warning_count',
+                    [literal(`(
+                        SELECT COUNT(*) FROM "botzilla"."estimate" AS "e"
+                        WHERE "e"."sales_person_id" = "SalesPerson"."id"${activeStatusIds.length ? ` AND "e"."status_id" IN (${activeStatusIds.join(',')})` : ''}
+                    )`), 'activeLeadsCount']
                 ],
-                include: [{
-                    model: NotificationType,
-                    as: 'notificationType',
-                    attributes: []
-                }],
-                group: [literal('"notificationType"."name"')],
-                raw: true
+                where: { warning_count: { [Op.gt]: 0 } },
+                order: [['warning_count', 'DESC']]
             });
 
             res.json({
@@ -536,12 +605,16 @@ class NotificationsController {
                 sentThisWeek,
                 salespersonsOverLimit,
                 recentWarnings,
-                typeCounts
+                recentCongratulations,
+                typeCounts,
+                typeCountsToday,
+                typeCountsThisWeek,
+                currentWarnings
             });
 
         } catch (error) {
-            console.error("Error fetching dashboard stats:", error);
-            res.status(500).json({ message: "Error fetching dashboard stats", error: error.message });
+            console.error('Error fetching dashboard stats:', error);
+            res.status(500).json({ message: 'Error fetching dashboard stats', error: error.message });
         }
     }
 

@@ -24,6 +24,11 @@ const SalesPerson = sequelize.define('SalesPerson', {
     warning_count: {
         type: DataTypes.INTEGER,
         defaultValue: 0
+    },
+    is_active: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: true,
+        allowNull: false
     }
 }, {
     sequelize,

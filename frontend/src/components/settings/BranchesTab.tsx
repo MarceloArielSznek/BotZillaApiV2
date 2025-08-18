@@ -70,7 +70,8 @@ const BranchesTab = () => {
   // Estados de formularios
   const [formData, setFormData] = useState<CreateBranchData>({
     name: '',
-    address: ''
+    address: '',
+    telegram_group_id: ''
   });
   const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -114,7 +115,7 @@ const BranchesTab = () => {
 
   // Funciones de modal
   const openCreateModal = () => {
-    setFormData({ name: '', address: '' });
+    setFormData({ name: '', address: '', telegram_group_id: '' });
     setFormErrors({});
     setCreateModalOpen(true);
   };
@@ -122,7 +123,8 @@ const BranchesTab = () => {
   const openEditModal = (branch: Branch) => {
     setFormData({
       name: branch.name,
-      address: branch.address
+      address: branch.address,
+      telegram_group_id: branch.telegram_group_id || ''
     });
     setFormErrors({});
     setSelectedBranch(branch);
@@ -147,7 +149,7 @@ const BranchesTab = () => {
     setEditModalOpen(false);
     setViewModalOpen(false);
     setSelectedBranch(null);
-    setFormData({ name: '', address: '' });
+    setFormData({ name: '', address: '', telegram_group_id: '' });
     setFormErrors({});
   };
 
@@ -311,6 +313,7 @@ const BranchesTab = () => {
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>ID</TableCell>
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Name</TableCell>
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Address</TableCell>
+                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Telegram Group ID</TableCell>
                       {includeStats && (
                         <>
                           <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Salespersons</TableCell>
@@ -340,6 +343,7 @@ const BranchesTab = () => {
                             </Typography>
                           </TableCell>
                           <TableCell>{branch.address || 'N/A'}</TableCell>
+                          <TableCell>{branch.telegram_group_id || 'N/A'}</TableCell>
                           {includeStats && (
                             <>
                               <TableCell>
@@ -454,6 +458,14 @@ const BranchesTab = () => {
               rows={3}
               disabled={submitLoading}
             />
+            <TextField
+              fullWidth
+              label="Telegram Group ID"
+              value={formData.telegram_group_id}
+              onChange={(e) => setFormData({ ...formData, telegram_group_id: e.target.value })}
+              helperText="The ID of the Telegram group for this branch's notifications."
+              disabled={submitLoading}
+            />
           </Box>
         </DialogContent>
         <DialogActions>
@@ -494,6 +506,14 @@ const BranchesTab = () => {
               rows={3}
               disabled={submitLoading}
             />
+            <TextField
+              fullWidth
+              label="Telegram Group ID"
+              value={formData.telegram_group_id}
+              onChange={(e) => setFormData({ ...formData, telegram_group_id: e.target.value })}
+              helperText="The ID of the Telegram group for this branch's notifications."
+              disabled={submitLoading}
+            />
           </Box>
         </DialogContent>
         <DialogActions>
@@ -522,6 +542,9 @@ const BranchesTab = () => {
               </Typography>
               <Typography variant="body1" sx={{ mb: 3 }}>
                 <strong>Address:</strong> {selectedBranch.address || 'N/A'}
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 3 }}>
+                <strong>Telegram Group ID:</strong> {selectedBranch.telegram_group_id || 'N/A'}
               </Typography>
               
               {selectedBranch.stats && (

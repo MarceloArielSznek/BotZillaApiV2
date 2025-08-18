@@ -127,16 +127,29 @@ const salespersonService = {
     }
   },
 
-  // POST /api/salespersons/:id/branches - Asignar branches a salesperson
-  assignBranches: async (id: number, branchIds: number[]): Promise<void> => {
+  // POST /api/salespersons/:salespersonId/branches/:branchId - Añadir una branch
+  addBranchToSalesperson: async (salespersonId: number, branchId: number): Promise<void> => {
     try {
       await axios.post(
-        `${API_BASE_URL}/salespersons/${id}/branches`,
-        { branchIds },
+        `${API_BASE_URL}/salespersons/${salespersonId}/branches/${branchId}`,
+        {},
         getAuthHeaders()
       );
     } catch (error: any) {
-      console.error('Error assigning branches:', error.response?.data || error.message);
+      console.error('Error adding branch to salesperson:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  // DELETE /api/salespersons/:salespersonId/branches/:branchId - Eliminar una branch
+  removeBranchFromSalesperson: async (salespersonId: number, branchId: number): Promise<void> => {
+    try {
+      await axios.delete(
+        `${API_BASE_URL}/salespersons/${salespersonId}/branches/${branchId}`,
+        getAuthHeaders()
+      );
+    } catch (error: any) {
+      console.error('Error removing branch from salesperson:', error.response?.data || error.message);
       throw error;
     }
   },
@@ -184,6 +197,35 @@ const salespersonService = {
       throw error;
     }
   },
+
+  toggleSalesPersonStatus: async (id: number, isActive: boolean): Promise<SalesPerson> => {
+    try {
+      const response = await axios.patch(
+        `${API_BASE_URL}/salespersons/${id}/status`,
+        { is_active: isActive },
+        getAuthHeaders()
+      );
+      return response.data.salesPerson;
+    } catch (error: any) {
+      console.error('Error toggling salesperson status:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  // POST /api/automations/clean-duplicate-salespersons - Limpiar duplicados
+  cleanDuplicateSalesPersons: async (): Promise<{ success: boolean; message: string; totalDuplicates: number; totalDeactivated: number; logs: string[] }> => {
+    try {
+      const response = await axios.post(
+        `${API_BASE_URL}/automations/clean-duplicate-salespersons`,
+        {},
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Error cleaning duplicate salespersons:', error.response?.data || error.message);
+      throw error;
+    }
+  },
 };
 
-export default salespersonService; 
+export default salespersonService;

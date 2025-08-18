@@ -10,8 +10,13 @@ const Branch = sequelize.define('Branch', {
         autoIncrement: true
     },
     name: {
-        type: DataTypes.STRING(100),
-        allowNull: false
+        type: DataTypes.STRING,
+        allowNull: false,
+        unique: true
+    },
+    telegram_group_id: {
+        type: DataTypes.TEXT,
+        allowNull: true
     },
     address: {
         type: DataTypes.TEXT

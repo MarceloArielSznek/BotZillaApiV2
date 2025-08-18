@@ -86,7 +86,7 @@ exports.getAllBranches = async (req, res) => {
         console.error('❌ Error al obtener branches:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al obtener branches',
+            message: 'Error fetching branches',
             error: error.message
         });
     }
@@ -119,7 +119,7 @@ exports.getBranchById = async (req, res) => {
         if (!branch) {
             return res.status(404).json({
                 success: false,
-                message: 'Branch no encontrada'
+                message: 'Branch not found'
             });
         }
 
@@ -141,7 +141,7 @@ exports.getBranchById = async (req, res) => {
         console.error('❌ Error al obtener branch:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al obtener branch',
+            message: 'Error fetching branch',
             error: error.message
         });
     }
@@ -150,14 +150,14 @@ exports.getBranchById = async (req, res) => {
 // POST /api/branches - Crear nueva branch
 exports.createBranch = async (req, res) => {
     try {
-        const { name, address } = req.body;
+        const { name, address, telegram_group_id } = req.body;
         console.log(`🏢 Creando nueva branch: ${name}`);
 
         // Validaciones
         if (!name) {
             return res.status(400).json({
                 success: false,
-                message: 'El nombre de la branch es requerido'
+                message: 'Branch name is required'
             });
         }
 
@@ -166,20 +166,21 @@ exports.createBranch = async (req, res) => {
         if (existingBranch) {
             return res.status(400).json({
                 success: false,
-                message: 'Ya existe una branch con ese nombre'
+                message: 'A branch with this name already exists'
             });
         }
 
         const branch = await Branch.create({
             name: name.trim(),
-            address: address?.trim() || null
+            address: address?.trim() || null,
+            telegram_group_id: telegram_group_id?.trim() || null
         });
 
-        console.log(`✅ Branch creada exitosamente: ${branch.name} (ID: ${branch.id})`);
+        console.log(`✅ Branch created successfully: ${branch.name} (ID: ${branch.id})`);
 
         res.status(201).json({
             success: true,
-            message: 'Branch creada exitosamente',
+            message: 'Branch created successfully',
             branch
         });
 
@@ -187,7 +188,7 @@ exports.createBranch = async (req, res) => {
         console.error('❌ Error al crear branch:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al crear branch',
+            message: 'Error creating branch',
             error: error.message
         });
     }
@@ -197,14 +198,14 @@ exports.createBranch = async (req, res) => {
 exports.updateBranch = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, address } = req.body;
+        const { name, address, telegram_group_id } = req.body;
         console.log(`🏢 Actualizando branch ID: ${id}`);
 
         const branch = await Branch.findByPk(id);
         if (!branch) {
             return res.status(404).json({
                 success: false,
-                message: 'Branch no encontrada'
+                message: 'Branch not found'
             });
         }
 
@@ -212,7 +213,7 @@ exports.updateBranch = async (req, res) => {
         if (!name) {
             return res.status(400).json({
                 success: false,
-                message: 'El nombre de la branch es requerido'
+                message: 'Branch name is required'
             });
         }
 
@@ -226,20 +227,21 @@ exports.updateBranch = async (req, res) => {
         if (existingBranch) {
             return res.status(400).json({
                 success: false,
-                message: 'Ya existe otra branch con ese nombre'
+                message: 'Another branch with this name already exists'
             });
         }
 
         await branch.update({
             name: name.trim(),
-            address: address?.trim() || null
+            address: address?.trim() || null,
+            telegram_group_id: telegram_group_id?.trim() || null
         });
 
-        console.log(`✅ Branch actualizada exitosamente: ${branch.name}`);
+        console.log(`✅ Branch updated successfully: ${branch.name}`);
 
         res.json({
             success: true,
-            message: 'Branch actualizada exitosamente',
+            message: 'Branch updated successfully',
             branch
         });
 
@@ -247,7 +249,7 @@ exports.updateBranch = async (req, res) => {
         console.error('❌ Error al actualizar branch:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al actualizar branch',
+            message: 'Error updating branch',
             error: error.message
         });
     }
@@ -263,7 +265,7 @@ exports.deleteBranch = async (req, res) => {
         if (!branch) {
             return res.status(404).json({
                 success: false,
-                message: 'Branch no encontrada'
+                message: 'Branch not found'
             });
         }
 
@@ -272,7 +274,7 @@ exports.deleteBranch = async (req, res) => {
         if (estimatesCount > 0) {
             return res.status(400).json({
                 success: false,
-                message: `No se puede eliminar la branch porque tiene ${estimatesCount} estimate(s) asociado(s)`
+                message: `Cannot delete branch because it has ${estimatesCount} estimate(s) associated`
             });
         }
 
@@ -282,18 +284,18 @@ exports.deleteBranch = async (req, res) => {
         // Eliminar la branch
         await branch.destroy();
 
-        console.log(`✅ Branch eliminada exitosamente: ${branch.name}`);
+        console.log(`✅ Branch deleted successfully: ${branch.name}`);
 
         res.json({
             success: true,
-            message: 'Branch eliminada exitosamente'
+            message: 'Branch deleted successfully'
         });
 
     } catch (error) {
         console.error('❌ Error al eliminar branch:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al eliminar branch',
+            message: 'Error deleting branch',
             error: error.message
         });
     }
@@ -311,7 +313,7 @@ exports.assignSalesPerson = async (req, res) => {
         if (!branch) {
             return res.status(404).json({
                 success: false,
-                message: 'Branch no encontrada'
+                message: 'Branch not found'
             });
         }
 
@@ -320,7 +322,7 @@ exports.assignSalesPerson = async (req, res) => {
         if (!salesPerson) {
             return res.status(404).json({
                 success: false,
-                message: 'Salesperson no encontrado'
+                message: 'Salesperson not found'
             });
         }
 
@@ -332,7 +334,7 @@ exports.assignSalesPerson = async (req, res) => {
         if (existingAssignment) {
             return res.status(400).json({
                 success: false,
-                message: 'El salesperson ya está asignado a esta branch'
+                message: 'Salesperson is already assigned to this branch'
             });
         }
 
@@ -342,18 +344,18 @@ exports.assignSalesPerson = async (req, res) => {
             branch_id: id
         });
 
-        console.log(`✅ Salesperson asignado exitosamente`);
+        console.log(`✅ Salesperson assigned successfully`);
 
         res.status(201).json({
             success: true,
-            message: 'Salesperson asignado exitosamente a la branch'
+            message: 'Salesperson assigned successfully to the branch'
         });
 
     } catch (error) {
         console.error('❌ Error al asignar salesperson:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al asignar salesperson',
+            message: 'Error assigning salesperson',
             error: error.message
         });
     }
@@ -372,24 +374,24 @@ exports.removeSalesPerson = async (req, res) => {
         if (!assignment) {
             return res.status(404).json({
                 success: false,
-                message: 'Asignación no encontrada'
+                message: 'Assignment not found'
             });
         }
 
         await assignment.destroy();
 
-        console.log(`✅ Salesperson removido exitosamente de la branch`);
+        console.log(`✅ Salesperson removed successfully from the branch`);
 
         res.json({
             success: true,
-            message: 'Salesperson removido exitosamente de la branch'
+            message: 'Salesperson removed successfully from the branch'
         });
 
     } catch (error) {
-        console.error('❌ Error al remover salesperson:', error);
+        console.error('❌ Error removing salesperson:', error);
         res.status(500).json({
             success: false,
-            message: 'Error al remover salesperson',
+            message: 'Error removing salesperson',
             error: error.message
         });
     }

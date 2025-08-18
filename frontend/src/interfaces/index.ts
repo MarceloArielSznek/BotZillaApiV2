@@ -20,6 +20,7 @@ export interface SalesPerson {
     warning_count: number;
     activeLeadsCount: number;
     branches: Branch[];
+    is_active: boolean;
 }
 
 // Interfaces para el servicio
@@ -28,6 +29,7 @@ export interface SalesPersonListParams {
   limit?: number;
   search?: string;
   branchId?: number;
+  include_inactive?: boolean;
 }
 
 export interface SalesPersonListResponse {
@@ -102,4 +104,5 @@ export interface JobDetails extends Job {
     note?: string;
     attic_tech_hours?: string;
     crew_leader_hours?: string;
+    estimate_id?: number;
 } 

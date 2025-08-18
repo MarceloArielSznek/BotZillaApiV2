@@ -46,6 +46,9 @@ import estimateService, {
   type SyncEstimatesResponse
 } from '../services/estimateService';
 import { format } from 'date-fns'; // Usaremos date-fns para un formateo robusto
+import EstimateDetailsModal from '../components/estimates/EstimateDetailsModal';
+import JobDetailsModal from '../components/jobs/JobDetailsModal';
+import { getJobById } from '../services/jobService';
 
 const Estimates: React.FC = () => {
   // Estados principales
@@ -56,6 +59,10 @@ const Estimates: React.FC = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const [selectedEstimateId, setSelectedEstimateId] = useState<number | null>(null);
+  const [jobModalOpen, setJobModalOpen] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
 
   // Estados de paginación
   const [page, setPage] = useState(0);
@@ -74,7 +81,8 @@ const Estimates: React.FC = () => {
     salesperson: undefined, // <--- Cambio aquí
     status: undefined, // <--- Cambio aquí
     startDate: '',
-    endDate: ''
+    endDate: '',
+    has_job: undefined
   });
 
   // Estados del modal de sync
@@ -199,6 +207,16 @@ const Estimates: React.FC = () => {
   const handleSync = async (filters: any) => {
     setSyncLoading(true);
     setNotification(null);
+    
+    // Log de los filtros que se van a enviar
+    console.log('🔍 Frontend - Filtros de sync a enviar:', {
+      filters: filters,
+      hasStartDate: !!filters.startDate,
+      hasEndDate: !!filters.endDate,
+      startDate: filters.startDate,
+      endDate: filters.endDate
+    });
+    
     try {
       const result = await estimateService.syncEstimates(filters);
       setNotification({ message: result.message, severity: 'success' });
@@ -392,6 +410,22 @@ const Estimates: React.FC = () => {
                 InputLabelProps={{ shrink: true }}
               />
             </Box>
+            <Box sx={{ minWidth: 200, flex: 1 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Has Job</InputLabel>
+                <Select
+                  value={typeof filters.has_job === 'boolean' ? String(filters.has_job) : ''}
+                  onChange={(e) => handleFilterChange('has_job', e.target.value === '' ? undefined : e.target.value === 'true')}
+                  label="Has Job"
+                >
+                  <MenuItem value="">
+                    <em>All</em>
+                  </MenuItem>
+                  <MenuItem value="true">With Job</MenuItem>
+                  <MenuItem value="false">Without Job</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
           </Box>
         </CardContent>
       </Card>
@@ -425,7 +459,11 @@ const Estimates: React.FC = () => {
                       <TableRow key={estimate.id} hover>
                         {/* <TableCell>{estimate.id}</TableCell> */}
                         <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontWeight: 'medium', cursor: 'pointer', color: 'primary.main' }}
+                            onClick={() => { setSelectedEstimateId(estimate.id); setDetailsOpen(true); }}
+                          >
                             {estimate.name}
                           </Typography>
                         </TableCell>
@@ -438,9 +476,15 @@ const Estimates: React.FC = () => {
                             size="small"
                           />
                         </TableCell>
-                        <TableCell>${parseFloat(estimate.final_price).toFixed(2)}</TableCell>
-                        <TableCell>{estimate.discount ? `${parseFloat(estimate.discount).toFixed(2)}%` : 'N/A'}</TableCell>
-                        <TableCell>{renderCell(estimate.attic_tech_hours)}h</TableCell>
+                        <TableCell>
+                          {estimate.final_price != null ? formatPrice(Number(estimate.final_price)) : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {estimate.discount != null ? `${parseFloat(String(estimate.discount)).toFixed(2)}%` : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          {estimate.attic_tech_hours != null ? `${Number(estimate.attic_tech_hours).toFixed(2)}h` : 'N/A'}
+                        </TableCell>
                         <TableCell>
                             <Typography variant="body2" sx={{ display: 'block' }}>
                                 AT Created: {formatDate(estimate.at_created_date)}
@@ -449,6 +493,7 @@ const Estimates: React.FC = () => {
                                 AT Updated: {formatDate(estimate.at_updated_date)}
                             </Typography>
                         </TableCell>
+                        {/* Jump to Job column removido por estética */}
                       </TableRow>
                     ))}
                     {estimates.length === 0 && !loading && (
@@ -582,6 +627,20 @@ const Estimates: React.FC = () => {
           {notification?.message}
         </Alert>
       </Snackbar>
+
+      {/* Estimate Details Modal */}
+      <EstimateDetailsModal
+        estimateId={selectedEstimateId}
+        open={detailsOpen}
+        onClose={() => { setDetailsOpen(false); setSelectedEstimateId(null); }}
+      />
+
+      {/* Job Details Modal */}
+      <JobDetailsModal
+        jobId={selectedJobId}
+        open={jobModalOpen}
+        onClose={() => { setJobModalOpen(false); setSelectedJobId(null); }}
+      />
 
     </Box>
   );

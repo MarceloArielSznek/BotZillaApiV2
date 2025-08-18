@@ -6,6 +6,9 @@ const validateRequest = require('../middleware/validate.middleware');
 const { caches, cacheInvalidationMiddleware } = require('../utils/cache');
 const userController = require('../controllers/user.controller');
 
+// Middleware para parsear JSON
+router.use(express.json());
+
 // Obtener todos los roles de usuario (solo admin)
 router.get('/roles',
     verifyToken,

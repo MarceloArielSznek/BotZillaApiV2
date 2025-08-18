@@ -31,32 +31,16 @@ exports.getAllCrewMembers = async (req, res) => {
             where.is_leader = isLeader === 'true';
         }
 
-        const includeOptions = [];
-        
-        // Siempre incluir branches usando la asociación directa
-        if (includeStats === 'true') {
-            includeOptions.push({
-                model: Branch,
-                as: 'branches',
-                attributes: ['id', 'name'],
-                through: {
-                    where: branchId ? { branch_id: branchId } : undefined,
-                    attributes: []
-                },
-                required: branchId ? true : false
-            });
-        } else if (branchId) {
-            // Filtrar por branch sin incluir estadísticas
-            includeOptions.push({
-                model: Branch,
-                as: 'branches',
-                through: {
-                    where: { branch_id: branchId },
-                    attributes: []
-                },
-                required: true
-            });
-        }
+        const includeOptions = [{
+            model: Branch,
+            as: 'branches',
+            attributes: ['id', 'name'],
+            through: {
+                where: branchId ? { branch_id: branchId } : undefined,
+                attributes: []
+            },
+            required: !!branchId
+        }];
 
         const { count, rows } = await CrewMember.findAndCountAll({
             where,
@@ -67,26 +51,26 @@ exports.getAllCrewMembers = async (req, res) => {
             distinct: true
         });
 
-        // Procesar estadísticas si se solicitan
-        const crewMembersWithStats = includeStats === 'true' 
-            ? rows.map(crewMember => {
-                const crewMemberData = crewMember.toJSON();
-                const branchesCount = crewMemberData.branches?.length || 0;
-                
-                return {
-                    ...crewMemberData,
-                    stats: {
-                        branchesCount
-                    }
-                };
-            })
-            : rows.map(crewMember => crewMember.toJSON());
+        const crewMembersData = rows.map(crewMember => {
+            const data = crewMember.toJSON();
+            // SIEMPRE incluir estadísticas de branches
+            data.stats = {
+                branchesCount: data.branches?.length || 0
+            };
+            return data;
+        });
 
         console.log(`✅ ${rows.length} crew members encontrados`);
-        console.log('Crew members data:', crewMembersWithStats.map(cm => ({ id: cm.id, name: cm.name, branches: cm.branches?.length || 0 })));
+        // Log detallado para mostrar las branches de cada crew member
+        console.log('🏢 Crew members con branches:', crewMembersData.map(cm => ({ 
+            id: cm.id, 
+            name: cm.name, 
+            branchesCount: cm.stats?.branchesCount || 0,
+            branches: cm.branches?.map(b => b.name) || []
+        })));
 
         res.json({
-            crewMembers: crewMembersWithStats,
+            crewMembers: crewMembersData,
             pagination: {
                 currentPage: parseInt(page),
                 totalPages: Math.ceil(count / limit),
@@ -158,7 +142,7 @@ exports.getCrewMemberById = async (req, res) => {
 // POST /api/crew-members - Crear nuevo crew member
 exports.createCrewMember = async (req, res) => {
     try {
-        const { name, phone, telegram_id, is_leader = false, branchIds = [] } = req.body;
+        const { name, phone, telegram_id, is_leader = false, branchIds = [], animal } = req.body;
         console.log(`👷 Creando nuevo crew member: ${name}`);
 
         // Validaciones
@@ -204,7 +188,8 @@ exports.createCrewMember = async (req, res) => {
             name: name.trim(),
             phone: phone?.trim() || null,
             telegram_id: telegram_id?.trim() || null,
-            is_leader: Boolean(is_leader)
+            is_leader: Boolean(is_leader),
+            animal: animal?.trim() || null
         });
 
         // Asignar branches si se proporcionan
@@ -248,7 +233,7 @@ exports.createCrewMember = async (req, res) => {
 exports.updateCrewMember = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, phone, telegram_id, is_leader } = req.body;
+        const { name, phone, telegram_id, is_leader, branchIds, animal } = req.body;
         console.log(`👷 Actualizando crew member ID: ${id}`);
 
         const crewMember = await CrewMember.findByPk(id);
@@ -317,8 +302,25 @@ exports.updateCrewMember = async (req, res) => {
             name: name.trim(),
             phone: phone?.trim() || null,
             telegram_id: telegram_id?.trim() || null,
-            is_leader: is_leader !== undefined ? Boolean(is_leader) : crewMember.is_leader
+            is_leader: is_leader !== undefined ? Boolean(is_leader) : crewMember.is_leader,
+            animal: animal !== undefined ? (animal?.trim() || null) : crewMember.animal
         });
+
+        // Actualizar asignaciones de branches si se proporcionan
+        if (Array.isArray(branchIds)) {
+            // Eliminar asignaciones existentes
+            await CrewMemberBranch.destroy({ where: { crew_member_id: id } });
+
+            // Crear nuevas asignaciones si el array no está vacío
+            if (branchIds.length > 0) {
+                const assignments = branchIds.map(branchId => ({
+                    crew_member_id: id,
+                    branch_id: branchId
+                }));
+                await CrewMemberBranch.bulkCreate(assignments);
+                console.log(`✅ Branches actualizadas para crew member ID: ${id}`);
+            }
+        }
 
         console.log(`✅ Crew member actualizado exitosamente: ${crewMember.name}`);
 

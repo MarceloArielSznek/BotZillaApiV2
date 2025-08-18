@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const automationsController = require('../controllers/automations.controller');
+const { AutomationsController } = require('../controllers/automations.controller');
+const automationsController = AutomationsController;
 const validateApiKey = require('../middleware/apiKey.middleware');
 const { isAdmin } = require('../middleware/auth.middleware');
+const { caches, cacheInvalidationMiddleware } = require('../utils/cache');
+const { cleanAndParseJson } = require('../middleware/cleanBody.middleware');
+const { verifyToken } = require('../middleware/auth.middleware');
 
 /**
  * @swagger
@@ -89,6 +93,7 @@ router.post(
  *         description: Bad Request - Missing or invalid parameters.
  */
 router.post('/column-map/sync',
+    express.json(), // Usamos el parser estándar aquí
     validateApiKey,
     automationsController.syncColumnMap
 );
@@ -134,8 +139,186 @@ router.post('/column-map/sync',
  *         description: Column map for the given sheet_name not found.
  */
 router.post('/process-row',
+    cleanAndParseJson, // Usamos nuestro middleware de limpieza aquí
     validateApiKey,
     automationsController.processRow
+);
+
+/**
+ * @swagger
+ * /api/automations/process-job-notifications:
+ *   post:
+ *     summary: Scans for closed jobs with low performance and returns them grouped by branch.
+ *     tags: [Automations]
+ *     description: >
+ *       This endpoint finds all jobs marked as `notification_sent = false`,
+ *       calculates their performance, and filters for those below the `LOW_PERFORMANCE_THRESHOLD`.
+ *       It then groups these jobs by their branch and returns a structured JSON payload
+ *       ready for a service like Make.com to process and send notifications.
+ *       After processing, jobs are marked as `notification_sent = true` to avoid reprocessing.
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dryRun
+ *         schema:
+ *           type: boolean
+ *         description: If true, jobs will be processed and returned but not marked as `notification_sent = true`.
+ *     responses:
+ *       200:
+ *         description: Successfully processed jobs and returned a payload for Make.com.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Processed 10 jobs. Found 2 branches with low-performing jobs."
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       branch_telegram_id:
+ *                         type: string
+ *                         example: "-123456789"
+ *                       jobs:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                           example: "John Doe: planned to save 25% | Actual saved -5%"
+ *       500:
+ *         description: Server error
+ */
+router.post(
+    '/process-job-notifications',
+    validateApiKey, // Usar la validación de API Key para servicios externos
+    automationsController.processJobNotifications
+);
+
+/**
+ * @swagger
+ * /api/automations/send-daily-summary:
+ *   post:
+ *     summary: Scans for low-performing jobs in the last 24h and sends a summary to managers.
+ *     tags: [Automations]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: dryRun
+ *         schema:
+ *           type: boolean
+ *         description: If true, the summary will be generated and returned without sending notifications.
+ *     responses:
+ *       200:
+ *         description: Successfully processed and sent the daily summary.
+ *       500:
+ *         description: Server error
+ */
+router.post(
+    '/send-daily-summary',
+    validateApiKey,
+    automationsController.sendDailySummary
+);
+
+/**
+ * @swagger
+ * /api/automations/clean-duplicate-salespersons:
+ *   post:
+ *     summary: Clean duplicate salespersons and mark unused ones as inactive.
+ *     tags: [Automations]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Successfully cleaned duplicate salespersons.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 totalDuplicates:
+ *                   type: integer
+ *                 totalDeactivated:
+ *                   type: integer
+ *                 logs:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *       500:
+ *         description: Server error during cleanup
+ */
+router.post(
+    '/clean-duplicate-salespersons',
+    validateApiKey,
+    automationsController.cleanDuplicateSalesPersons
+);
+
+/**
+ * @swagger
+ * /api/automations/debug-column-mapping:
+ *   get:
+ *     summary: Debug column mapping for a specific sheet.
+ *     tags: [Automations, Debug]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: sheet_name
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The name of the sheet to debug.
+ *     responses:
+ *       200:
+ *         description: Successfully retrieved column mapping debug information.
+ *       400:
+ *         description: Bad Request - Missing sheet_name parameter.
+ *       500:
+ *         description: Server error
+ */
+router.get(
+    '/debug-column-mapping',
+    validateApiKey,
+    automationsController.debugColumnMapping
+);
+
+/**
+ * @swagger
+ * /api/automations/fix-duplicate-column-mapping:
+ *   post:
+ *     summary: Fix duplicate column mappings for a specific sheet.
+ *     tags: [Automations, Debug]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: sheet_name
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: The name of the sheet to fix.
+ *     responses:
+ *       200:
+ *         description: Successfully fixed duplicate column mappings.
+ *       400:
+ *         description: Bad Request - Missing sheet_name parameter.
+ *       500:
+ *         description: Server error
+ */
+router.post(
+    '/fix-duplicate-column-mapping',
+    validateApiKey,
+    automationsController.fixDuplicateColumnMapping
 );
 
 module.exports = router; 

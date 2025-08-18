@@ -4,6 +4,9 @@ const notificationsController = require('../controllers/notifications.controller
 const { verifyToken, isAdmin } = require('../middleware/auth.middleware');
 const validateApiKey = require('../middleware/apiKey.middleware');
 
+// Middleware para parsear JSON
+router.use(express.json());
+
 /**
  * @swagger
  * tags:
@@ -240,6 +243,12 @@ router.get(
  *           type: string
  *           enum: [sales_person, user, crew_member]
  *         description: Filter notifications by the recipient's type.
+ *       - in: query
+ *         name: level
+ *         schema:
+ *           type: string
+ *           enum: ['1', '2', '3+']
+ *         description: Filter notifications by the warning level.
  *     responses:
  *       '200':
  *         description: A list of notifications.

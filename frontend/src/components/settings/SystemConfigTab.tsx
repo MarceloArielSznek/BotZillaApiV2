@@ -14,7 +14,8 @@ import {
   Card,
   CardContent,
   CardHeader,
-  Divider
+  Divider,
+  CircularProgress
 } from '@mui/material';
 import {
   Settings as SettingsIcon,
@@ -23,13 +24,18 @@ import {
   Api as ApiIcon,
   Security as SecurityIcon,
   CloudSync as SyncIcon,
-  Info as InfoIcon
+  Info as InfoIcon,
+  DeleteSweep as ClearCacheIcon,
 } from '@mui/icons-material';
+import { useSnackbar } from 'notistack';
+import systemService from '../../services/systemService';
 
 const SystemConfigTab = () => {
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cacheLoading, setCacheLoading] = useState(false);
+  const { enqueueSnackbar } = useSnackbar();
 
   // System configuration states
   const [config, setConfig] = useState({
@@ -108,6 +114,20 @@ const SystemConfigTab = () => {
     }
   };
 
+  const handleClearCache = async () => {
+    if (window.confirm('Are you sure you want to clear the entire system cache? This may temporarily slow down the application.')) {
+        setCacheLoading(true);
+        try {
+            const response = await systemService.clearCache();
+            enqueueSnackbar(response.message, { variant: 'success' });
+        } catch (error: any) {
+            enqueueSnackbar('Error clearing cache: ' + (error.response?.data?.message || error.message), { variant: 'error' });
+        } finally {
+            setCacheLoading(false);
+        }
+    }
+  };
+
   return (
     <Box>
       {/* Header */}
@@ -148,6 +168,31 @@ const SystemConfigTab = () => {
           {success}
         </Alert>
       )}
+
+      {/* Cache Management */}
+      <Card sx={{ mb: 3 }}>
+        <CardHeader
+          avatar={<ClearCacheIcon />}
+          title="Cache Management"
+          subheader="Manual control over the system cache"
+        />
+        <CardContent>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={handleClearCache}
+              disabled={cacheLoading}
+              startIcon={cacheLoading ? <CircularProgress size={20} color="inherit" /> : <ClearCacheIcon />}
+            >
+              {cacheLoading ? 'Clearing Cache...' : 'Clear All Caches'}
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Force the system to reload all data from the database. Use this if you see outdated information.
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
 
       {/* System Information */}
       <Card sx={{ mb: 3 }}>

@@ -47,8 +47,7 @@ import {
 import crewService, { 
   type CrewMember, 
   type CrewMemberListParams, 
-  type CreateCrewMemberData, 
-  type UpdateCrewMemberData,
+  type CreateCrewMemberData,
   type Branch
 } from '../../services/crewService';
 import branchService from '../../services/branchService';
@@ -68,7 +67,6 @@ const CrewMembersTab = () => {
 
   // Estados de filtros
   const [search, setSearch] = useState('');
-  const [includeStats, setIncludeStats] = useState(true);
   const [branchFilter, setBranchFilter] = useState<string>('');
   const [leaderFilter, setLeaderFilter] = useState<string>('');
 
@@ -84,7 +82,8 @@ const CrewMembersTab = () => {
     phone: '',
     telegram_id: '',
     is_leader: false,
-    branchIds: []
+    branchIds: [],
+    animal: ''
   });
   const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
   const [submitLoading, setSubmitLoading] = useState(false);
@@ -101,7 +100,7 @@ const CrewMembersTab = () => {
     }, 100);
     
     return () => clearTimeout(timeoutId);
-  }, [page, rowsPerPage, search, includeStats, branchFilter, leaderFilter]);
+  }, [page, rowsPerPage, search, branchFilter, leaderFilter]);
 
   const loadBranches = async () => {
     try {
@@ -121,12 +120,18 @@ const CrewMembersTab = () => {
         page: page + 1,
         limit: rowsPerPage,
         search: search || undefined,
-        includeStats,
         branchId: branchFilter ? parseInt(branchFilter) : undefined,
-        isLeader: leaderFilter ? leaderFilter === 'true' : undefined
+        isLeader: leaderFilter ? leaderFilter === 'true' : undefined,
+        includeStats: true // Incluir estadísticas de branches
       };
 
       const response = await crewService.getCrewMembers(params);
+      console.log('🏢 Frontend - Crew members recibidos:', response.crewMembers.map(cm => ({
+        id: cm.id,
+        name: cm.name,
+        branchesCount: cm.stats?.branchesCount || 0,
+        hasStats: !!cm.stats
+      })));
       setCrewMembers(response.crewMembers);
       setTotalCount(response.pagination.totalCount);
     } catch (error: any) {
@@ -151,13 +156,29 @@ const CrewMembersTab = () => {
     setPage(0);
   };
 
-  const handleRefresh = () => {
-    loadCrewMembers();
+  const handleRefresh = async () => {
+    try {
+      // Limpiar cache de crew members
+      await fetch(`${import.meta.env.VITE_API_BASE_URL}/cache/clear-crew-members`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      // Recargar crew members
+      loadCrewMembers();
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      // Si falla la limpieza de cache, al menos recargar los datos
+      loadCrewMembers();
+    }
   };
 
   // Funciones de modal
   const openCreateModal = () => {
-    setFormData({ name: '', phone: '', telegram_id: '', is_leader: false, branchIds: [] });
+    setFormData({ name: '', phone: '', telegram_id: '', is_leader: false, branchIds: [], animal: '' });
     setFormErrors({});
     setCreateModalOpen(true);
   };
@@ -168,7 +189,8 @@ const CrewMembersTab = () => {
       phone: crewMember.phone || '',
       telegram_id: crewMember.telegram_id || '',
       is_leader: crewMember.is_leader,
-      branchIds: crewMember.branches?.map(branch => branch.id) || []
+      branchIds: crewMember.branches?.map(branch => branch.id) || [],
+      animal: crewMember.animal || ''
     });
     setFormErrors({});
     setSelectedCrewMember(crewMember);
@@ -193,7 +215,7 @@ const CrewMembersTab = () => {
     setEditModalOpen(false);
     setViewModalOpen(false);
     setSelectedCrewMember(null);
-    setFormData({ name: '', phone: '', telegram_id: '', is_leader: false, branchIds: [] });
+    setFormData({ name: '', phone: '', telegram_id: '', is_leader: false, branchIds: [], animal: '' });
     setFormErrors({});
   };
 
@@ -374,16 +396,17 @@ const CrewMembersTab = () => {
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Role</TableCell>
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Contact</TableCell>
                       <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Telegram ID</TableCell>
-                      {includeStats && (
+                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Animal</TableCell>
+                      {/* includeStats && ( */}
                         <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Branches</TableCell>
-                      )}
+                      {/* ) */}
                       <TableCell align="center" sx={{ color: 'text.primary', fontWeight: 'bold' }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {crewMembers.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={includeStats ? 6 : 5} align="center" sx={{ py: 4 }}>
+                        <TableCell colSpan={/* includeStats ? 7 : 6 */ 6} align="center" sx={{ py: 4 }}>
                           <Typography color="text.secondary">
                             No crew members found
                           </Typography>
@@ -434,7 +457,10 @@ const CrewMembersTab = () => {
                                 <Chip label="Not Set" size="small" />
                             )}
                           </TableCell>
-                          {includeStats && (
+                          {/* includeStats && ( */}
+                            <TableCell>
+                              <Typography variant="caption">{crewMember.animal || 'N/A'}</Typography>
+                            </TableCell>
                             <TableCell>
                               <Chip
                                 icon={<BusinessIcon />}
@@ -444,7 +470,7 @@ const CrewMembersTab = () => {
                                 variant="outlined"
                               />
                             </TableCell>
-                          )}
+                          {/* ) */}
                           <TableCell align="center">
                             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
                               <Tooltip title="View details">
@@ -550,6 +576,14 @@ const CrewMembersTab = () => {
               }
               label="Is Leader"
             />
+            <TextField
+              fullWidth
+              label="Animal"
+              placeholder="e.g., GREAT WHITE SHARK, PANTHER, TIGER..."
+              value={formData.animal || ''}
+              onChange={(e) => setFormData({ ...formData, animal: e.target.value })}
+              disabled={submitLoading}
+            />
             <Autocomplete
               multiple
               options={branches}
@@ -630,6 +664,14 @@ const CrewMembersTab = () => {
                 />
               }
               label="Is Leader"
+            />
+            <TextField
+              fullWidth
+              label="Animal"
+              placeholder="e.g., GREAT WHITE SHARK, PANTHER, TIGER..."
+              value={formData.animal || ''}
+              onChange={(e) => setFormData({ ...formData, animal: e.target.value })}
+              disabled={submitLoading}
             />
             <Autocomplete
               multiple

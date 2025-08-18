@@ -1,5 +1,8 @@
 {
   "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "noEmit": false,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "target": "ES2022",
     "useDefineForClassFields": true,
@@ -12,7 +15,6 @@
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
-    "noEmit": true,
     "jsx": "react-jsx",
     
     "baseUrl": ".",

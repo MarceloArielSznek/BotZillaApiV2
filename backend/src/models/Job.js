@@ -49,6 +49,11 @@ Job.init({
   },
   crew_leader_hours: {
     type: DataTypes.DECIMAL(10, 2)
+  },
+  notification_sent: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false,
+    allowNull: false
   }
 }, {
   sequelize,

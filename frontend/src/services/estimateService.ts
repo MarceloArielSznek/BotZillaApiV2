@@ -5,14 +5,16 @@ import authService from './authService';
 export interface Estimate {
   id: number;
   name: string;
-  price: string; // Puede ser string si el backend lo envía como tal
-  retail_cost: string;
-  final_price: string;
-  sub_service_retail_cost: string;
-  discount: string;
-  attic_tech_hours: number;
+  price: number | null; // Puede ser string si el backend lo envía como tal
+  retail_cost: number | null;
+  final_price: number | null;
+  sub_service_retail_cost: number | null;
+  discount: number | null;
+  attic_tech_hours: number | null;
   customer_name: string;
   customer_address: string;
+  customer_email?: string | null;
+  customer_phone?: string | null;
   crew_notes: string;
   at_created_date: string;
   at_updated_date: string;
@@ -30,6 +32,8 @@ export interface Estimate {
     id: number;
     name: string;
   } | null;
+  has_job?: boolean;
+  job?: { id: number; name: string };
 }
 
 export interface FetchEstimatesParams {
@@ -40,6 +44,7 @@ export interface FetchEstimatesParams {
   status?: number;
   startDate?: string;
   endDate?: string;
+  has_job?: boolean;
 }
 
 export interface SyncEstimatesParams {
@@ -125,6 +130,13 @@ const estimateService = {
         return acc;
       }, {} as SyncEstimatesParams);
 
+      // Log de los parámetros que se envían
+      console.log('🔍 Frontend - Parámetros de sync enviados:', {
+        originalParams: params,
+        cleanParams: cleanParams,
+        hasParams: Object.keys(cleanParams).length > 0
+      });
+
       const response = await axios.post(
         `${API_BASE_URL}/estimates/sync-estimates`,
         cleanParams,
@@ -175,6 +187,32 @@ const estimateService = {
       return response.data.statuses || response.data;
     } catch (error: any) {
       console.error('Error fetching estimate statuses:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  getSoldEstimates: async (): Promise<Estimate[]> => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/estimates/sold`,
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error('Error fetching sold estimates:', error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  getEstimateDetails: async (id: number): Promise<Estimate> => {
+    try {
+      const response = await axios.get(
+        `${API_BASE_URL}/estimates/${id}`,
+        getAuthHeaders()
+      );
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error fetching estimate details for id ${id}:`, error.response?.data || error.message);
       throw error;
     }
   },

@@ -1,6 +1,7 @@
 const { SalesPerson, Branch, SalesPersonBranch, Estimate, EstimateStatus } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
+const { caches } = require('../utils/cache'); // Importar caches
 
 // GET /api/salespersons - Obtener todos los salespersons
 exports.getAllSalesPersons = async (req, res) => {
@@ -15,11 +16,20 @@ exports.getAllSalesPersons = async (req, res) => {
             branchId = null,
             hasTelegram = null, // 'true', 'false', o null para ambos
             minWarnings = null,
-            maxWarnings = null
+            maxWarnings = null,
+            include_inactive = false
         } = req.query;
+
+        // Convertir include_inactive a booleano
+        const shouldIncludeInactive = include_inactive === 'true' || include_inactive === true;
 
         const offset = (page - 1) * limit;
         const where = {};
+
+        // Por defecto, solo mostrar los activos
+        if (!shouldIncludeInactive) {
+            where.is_active = true;
+        }
 
         // Filtro de búsqueda
         if (search) {
@@ -50,7 +60,7 @@ exports.getAllSalesPersons = async (req, res) => {
         }
 
         // Filtro por branch usando subquery para evitar problemas con Sequelize
-        if (branchId) {
+        if (branchId && branchId !== '' && branchId !== null && branchId !== undefined) {
             where.id = {
                 [Op.in]: sequelize.literal(`(
                     SELECT sales_person_id 
@@ -293,89 +303,107 @@ exports.createSalesPerson = async (req, res) => {
 
 // PUT /api/salespersons/:id - Actualizar salesperson
 exports.updateSalesPerson = async (req, res) => {
-    try {
-        const { id } = req.params;
-        const { name, phone, telegram_id, warning_count } = req.body;
-        console.log(`👤 Actualizando salesperson ID: ${id}`);
+    const { id } = req.params;
+    const { name, phone, telegram_id, warning_count, is_active, branchIds } = req.body; // Añadir branchIds
+    console.log(`[UPDATE] Received request for salesperson ID: ${id}. Body:`, JSON.stringify(req.body, null, 2));
 
-        const salesPerson = await SalesPerson.findByPk(id);
+    const t = await sequelize.transaction(); // Iniciar transacción
+
+    try {
+        const salesPerson = await SalesPerson.findByPk(id, { transaction: t });
         if (!salesPerson) {
+            await t.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Salesperson no encontrado'
             });
         }
 
-        // Validaciones
-        if (!name) {
-            return res.status(400).json({
-                success: false,
-                message: 'El nombre del salesperson es requerido'
+        // --- Validaciones (igual que antes) ---
+        if (name) {
+            const existingSalesPerson = await SalesPerson.findOne({ 
+                where: { name, id: { [Op.ne]: id } },
+                transaction: t 
             });
+            if (existingSalesPerson) {
+                await t.rollback();
+                return res.status(400).json({ success: false, message: 'Ya existe otro salesperson con ese nombre' });
+            }
         }
-
-        // Verificar que no exista otro salesperson con el mismo nombre
-        const existingSalesPerson = await SalesPerson.findOne({ 
-            where: { 
-                name,
-                id: { [Op.ne]: id } 
-            } 
-        });
-        if (existingSalesPerson) {
-            return res.status(400).json({
-                success: false,
-                message: 'Ya existe otro salesperson con ese nombre'
-            });
-        }
-
-        // Verificar teléfono único si se proporciona
         if (phone) {
             const existingPhone = await SalesPerson.findOne({ 
-                where: { 
-                    phone,
-                    id: { [Op.ne]: id } 
-                } 
+                where: { phone, id: { [Op.ne]: id } },
+                transaction: t
             });
             if (existingPhone) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Ya existe otro salesperson con ese número de teléfono'
-                });
+                await t.rollback();
+                return res.status(400).json({ success: false, message: 'Ya existe otro salesperson con ese número de teléfono' });
             }
         }
-
-        // Verificar telegram_id único si se proporciona
         if (telegram_id) {
             const existingTelegram = await SalesPerson.findOne({ 
-                where: { 
-                    telegram_id,
-                    id: { [Op.ne]: id } 
-                } 
+                where: { telegram_id, id: { [Op.ne]: id } },
+                transaction: t
             });
             if (existingTelegram) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Ya existe otro salesperson con ese Telegram ID'
-                });
+                await t.rollback();
+                return res.status(400).json({ success: false, message: 'Ya existe otro salesperson con ese Telegram ID' });
             }
         }
+        // --- Fin Validaciones ---
 
-        await salesPerson.update({
-            name: name.trim(),
-            phone: phone?.trim() || null,
-            telegram_id: telegram_id?.trim() || null,
-            warning_count: warning_count !== undefined ? parseInt(warning_count) : salesPerson.warning_count
+        // Actualizar los campos del salesperson
+        const updateData = {};
+        if (name !== undefined) updateData.name = name.trim();
+        if (phone !== undefined) updateData.phone = phone?.trim() || null;
+        if (telegram_id !== undefined) updateData.telegram_id = telegram_id?.trim() || null;
+        if (warning_count !== undefined) updateData.warning_count = parseInt(warning_count);
+        if (is_active !== undefined) updateData.is_active = is_active;
+
+        await salesPerson.update(updateData, { transaction: t });
+
+        // Actualizar las asignaciones de sucursales si se proporciona el array branchIds
+        if (branchIds && Array.isArray(branchIds)) {
+            console.log(`🔄 Actualizando branches para salesperson ${id}:`, branchIds);
+
+            // Verificar que todas las branches existen
+            const branches = await Branch.findAll({ where: { id: branchIds }, transaction: t });
+            if (branches.length !== branchIds.length) {
+                await t.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'Una o más de las branches proporcionadas no existen.'
+                });
+            }
+
+            // Usar setBranches para manejar las asociaciones automáticamente
+            // Esto eliminará las antiguas y creará las nuevas.
+            await salesPerson.setBranches(branches, { transaction: t });
+            console.log(`✅ Branches actualizadas para ${salesPerson.name}`);
+        }
+
+        await t.commit(); // Confirmar la transacción
+
+        // Forzar la limpieza de todo el caché relacionado a salespersons
+        Object.values(caches).forEach(cache => {
+            cache.deletePattern('salesperson');
+        });
+        console.log('🧹 All salesperson-related cache cleared.');
+
+        const updatedSalesPerson = await SalesPerson.findByPk(id, {
+            include: [{ model: Branch, as: 'branches', through: { attributes: [] } }]
         });
 
-        console.log(`✅ Salesperson actualizado exitosamente: ${salesPerson.name}`);
+        console.log(`✅ Salesperson actualizado exitosamente: ${updatedSalesPerson.name}`);
 
         res.json({
             success: true,
             message: 'Salesperson actualizado exitosamente',
-            salesPerson
+            salesPerson: updatedSalesPerson
         });
 
     } catch (error) {
+        await t.rollback(); // Revertir la transacción en caso de error
         console.error('❌ Error al actualizar salesperson:', error);
         res.status(500).json({
             success: false,
@@ -650,4 +678,102 @@ exports.sendActiveEstimatesReport = async (req, res) => {
         console.error('❌ Error al generar el reporte:', error);
         res.status(500).json({ success: false, message: 'Error al generar el reporte', error: error.message });
     }
-}; 
+};
+
+// PATCH /api/salespersons/:id/status - Activar/desactivar un salesperson
+exports.toggleSalesPersonStatus = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { is_active } = req.body;
+
+        if (typeof is_active !== 'boolean') {
+            return res.status(400).json({
+                success: false,
+                message: 'El campo "is_active" es requerido y debe ser un booleano (true/false).'
+            });
+        }
+
+        const salesPerson = await SalesPerson.findByPk(id);
+        if (!salesPerson) {
+            return res.status(404).json({
+                success: false,
+                message: 'Salesperson no encontrado'
+            });
+        }
+
+        await salesPerson.update({ is_active });
+
+        const status = is_active ? 'activado' : 'desactivado';
+        console.log(`✅ Salesperson ${status} exitosamente: ${salesPerson.name}`);
+
+        res.json({
+            success: true,
+            message: `Salesperson ${status} exitosamente`,
+            salesPerson
+        });
+
+    } catch (error) {
+        console.error('❌ Error al cambiar el estado del salesperson:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al cambiar el estado del salesperson',
+            error: error.message
+        });
+    }
+};
+// POST /api/salespersons/:salespersonId/branches/:branchId - Añadir una branch a un salesperson
+exports.addBranchToSalesperson = async (req, res) => {
+    const { salespersonId, branchId } = req.params;
+    try {
+        const salesPerson = await SalesPerson.findByPk(salespersonId);
+        if (!salesPerson) {
+            return res.status(404).json({ success: false, message: 'Salesperson no encontrado' });
+        }
+
+        const branch = await Branch.findByPk(branchId);
+        if (!branch) {
+            return res.status(404).json({ success: false, message: 'Branch no encontrada' });
+        }
+
+        await salesPerson.addBranch(branch);
+
+        res.json({ success: true, message: 'Branch añadida al salesperson exitosamente' });
+
+    } catch (error) {
+        console.error('❌ Error al añadir branch al salesperson:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al añadir branch al salesperson',
+            error: error.message
+        });
+    }
+};
+
+// DELETE /api/salespersons/:salespersonId/branches/:branchId - Eliminar una branch de un salesperson
+exports.removeBranchFromSalesperson = async (req, res) => {
+    const { salespersonId, branchId } = req.params;
+    try {
+        const salesPerson = await SalesPerson.findByPk(salespersonId);
+        if (!salesPerson) {
+            return res.status(404).json({ success: false, message: 'Salesperson no encontrado' });
+        }
+
+        const branch = await Branch.findByPk(branchId);
+        if (!branch) {
+            return res.status(404).json({ success: false, message: 'Branch no encontrada' });
+        }
+
+        await salesPerson.removeBranch(branch);
+
+        res.json({ success: true, message: 'Branch eliminada del salesperson exitosamente' });
+
+    } catch (error) {
+        console.error('❌ Error al eliminar branch del salesperson:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error al eliminar branch del salesperson',
+            error: error.message
+        });
+    }
+};
+

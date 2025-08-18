@@ -8,6 +8,7 @@ export interface CrewMember {
   phone?: string;
   telegram_id?: string;
   is_leader: boolean;
+  animal?: string | null;
   branches?: Branch[];
   stats?: {
     branchesCount: number;
@@ -46,6 +47,7 @@ export interface CreateCrewMemberData {
   telegram_id?: string;
   is_leader?: boolean;
   branchIds?: number[];
+  animal?: string;
 }
 
 export interface UpdateCrewMemberData {
@@ -53,6 +55,7 @@ export interface UpdateCrewMemberData {
   phone?: string;
   telegram_id?: string;
   is_leader?: boolean;
+  animal?: string | null;
 }
 
 const getAuthHeaders = () => {

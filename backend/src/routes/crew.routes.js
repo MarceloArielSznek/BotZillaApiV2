@@ -4,6 +4,9 @@ const crewController = require('../controllers/crew.controller');
 const { verifyToken } = require('../middleware/auth.middleware');
 const { caches, cacheInvalidationMiddleware } = require('../utils/cache');
 
+// Middleware para parsear JSON
+router.use(express.json());
+
 // Todas las rutas requieren autenticación
 router.use(verifyToken);
 

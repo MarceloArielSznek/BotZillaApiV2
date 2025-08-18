@@ -3,6 +3,9 @@ const router = express.Router();
 const makeController = require('../controllers/make.controller');
 const apiKeyMiddleware = require('../middleware/apiKey.middleware');
 
+// Middleware para parsear JSON
+router.use(express.json());
+
 // All routes in this file are protected by the API key
 router.use(apiKeyMiddleware);
 

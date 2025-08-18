@@ -1,498 +1,727 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Paper,
   Typography,
   Card,
   CardContent,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Button,
+  Grid,
   Chip,
-  Tab,
-  Tabs,
-  IconButton,
   LinearProgress,
   Avatar,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
   Divider,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  CircularProgress,
   Alert,
-  Grid,
+  Stack,
+  IconButton,
+  Tooltip,
+  alpha,
 } from '@mui/material';
 import {
   Assessment as EstimatesIcon,
   People as PeopleIcon,
   Business as BusinessIcon,
   Work as JobsIcon,
-  Notifications as NotificationsIcon,
-  Warning as WarningIcon,
   TrendingUp as TrendingUpIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Add as AddIcon,
-  FilterList as FilterIcon,
-  Sync as SyncIcon,
+  TrendingDown as TrendingDownIcon,
+  AttachMoney as MoneyIcon,
+  Warning as WarningIcon,
+  CheckCircle as CheckCircleIcon,
+  Person as PersonIcon,
+  Groups as GroupsIcon,
+  Notifications as NotificationsIcon,
+  LocationOn as LocationIcon,
+  Star as StarIcon,
+  Schedule as ScheduleIcon,
+  Speed as SpeedIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { motion } from 'framer-motion';
+import { 
+  getDashboardSummary, 
+  type DashboardSummary, 
+  type EstimatesByStatus,
+  type SalespersonPerformance,
+  type BranchMetrics 
+} from '../services/dashboardService';
 
-// Hardcoded data based on database structure
-const hardcodedData = {
-  estimates: [
-    { id: 1, name: 'Smith House - Roof Repair', branch: 'Miami', salesperson: 'John Perez', status: 'active', created_date: '2024-01-15', price: 5500.00, discount: 200.00 },
-    { id: 2, name: 'Central Office - AC Installation', branch: 'Orlando', salesperson: 'Maria Gonzalez', status: 'pending', created_date: '2024-01-18', price: 8300.00, discount: 0.00 },
-    { id: 3, name: 'Johnson Residence - Painting', branch: 'Tampa', salesperson: 'Carlos Rivera', status: 'completed', created_date: '2024-01-10', price: 3200.00, discount: 150.00 },
-    { id: 4, name: 'Shopping Center - Repairs', branch: 'Jacksonville', salesperson: 'Ana Martinez', status: 'released', created_date: '2024-01-20', price: 12500.00, discount: 500.00 },
-    { id: 5, name: 'Elementary School - Maintenance', branch: 'Miami', salesperson: 'Robert Sanchez', status: 'cancelled', created_date: '2024-01-12', price: 4100.00, discount: 0.00 },
-  ],
-  salespersons: [
-    { id: 1, name: 'John Perez', phone: '+1-305-555-0101', telegram_id: '@johnperez', warning_count: 0, active_jobs: 3, branches: ['Miami', 'Fort Lauderdale'], is_manager: true },
-    { id: 2, name: 'Maria Gonzalez', phone: '+1-407-555-0102', telegram_id: '@mariag', warning_count: 1, active_jobs: 5, branches: ['Orlando'], is_manager: false },
-    { id: 3, name: 'Carlos Rivera', phone: '+1-813-555-0103', telegram_id: '@carlosr', warning_count: 0, active_jobs: 2, branches: ['Tampa'], is_manager: false },
-    { id: 4, name: 'Ana Martinez', phone: '+1-904-555-0104', telegram_id: '@anam', warning_count: 2, active_jobs: 4, branches: ['Jacksonville'], is_manager: false },
-    { id: 5, name: 'Robert Sanchez', phone: '+1-305-555-0105', telegram_id: '', warning_count: 0, active_jobs: 1, branches: ['Miami'], is_manager: false },
-  ],
-  branches: [
-    { id: 1, name: 'Miami', address: '1234 SW 8th St, Miami, FL 33135' },
-    { id: 2, name: 'Orlando', address: '5678 International Dr, Orlando, FL 32819' },
-    { id: 3, name: 'Tampa', address: '9101 N Florida Ave, Tampa, FL 33612' },
-    { id: 4, name: 'Jacksonville', address: '1121 Riverplace Blvd, Jacksonville, FL 32207' },
-    { id: 5, name: 'Fort Lauderdale', address: '1314 E Las Olas Blvd, Fort Lauderdale, FL 33301' },
-  ],
-  jobs: [
-    { id: 1, name: 'Smith House - Roof Repair', closing_date: '2024-01-25', estimate_id: 1, crew_leader: 'Mike Johnson', review: 5, hours: 24 },
-    { id: 2, name: 'Central Office - AC Installation', closing_date: '2024-02-01', estimate_id: 2, crew_leader: 'Steve Davis', review: 4, hours: 32 },
-    { id: 3, name: 'Johnson Residence - Painting', closing_date: '2024-01-28', estimate_id: 3, crew_leader: 'Tony Wilson', review: 5, hours: 16 },
-  ],
-  notifications: [
-    { id: 1, message: 'New estimate created: Smith House', created_at: '2024-01-20 10:30', type: 'info' },
-    { id: 2, message: 'Job completed: Johnson Residence', created_at: '2024-01-20 09:15', type: 'success' },
-    { id: 3, message: 'Warning sent to Maria Gonzalez', created_at: '2024-01-20 08:45', type: 'warning' },
-    { id: 4, message: 'System synchronized successfully', created_at: '2024-01-20 08:00', type: 'success' },
-  ],
-  warnings: [
-    { id: 1, salesperson: 'Maria Gonzalez', reason: 'Late submission', created_at: '2024-01-18' },
-    { id: 2, salesperson: 'Ana Martinez', reason: 'Missed appointment', created_at: '2024-01-17' },
-    { id: 3, salesperson: 'Ana Martinez', reason: 'Customer complaint', created_at: '2024-01-15' },
-  ]
+// Función para formatear moneda
+const formatCurrency = (amount: number | string) => {
+  const num = typeof amount === 'string' ? parseFloat(amount) : amount;
+  return new Intl.NumberFormat('es-US', { 
+    style: 'currency', 
+    currency: 'USD',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0
+  }).format(num || 0);
 };
 
-const StatCard = ({ icon, title, value, trend, color, subtitle }: any) => (
+// Función para formatear números
+const formatNumber = (num: number | string) => {
+  const number = typeof num === 'string' ? parseFloat(num) : num;
+  return new Intl.NumberFormat('es-US').format(number || 0);
+};
+
+// Función para obtener color de tendencia
+const getTrendColor = (value: number) => value >= 0 ? '#4CAF50' : '#F44336';
+
+// Componente StatCard mejorado
+interface StatCardProps {
+  title: string;
+  value: string | number;
+  icon: React.ReactElement;
+  color: string;
+  trend?: {
+    value: number;
+    label: string;
+  };
+  subtitle?: string;
+  onClick?: () => void;
+}
+
+const StatCard: React.FC<StatCardProps> = ({ 
+  title, 
+  value, 
+  icon, 
+  color, 
+  trend, 
+  subtitle,
+  onClick 
+}) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
     transition={{ duration: 0.3 }}
   >
-    <Paper
+    <Card
       sx={{
-        p: 3,
         height: '100%',
         background: `linear-gradient(135deg, ${color}15 0%, ${color}05 100%)`,
         border: `1px solid ${color}30`,
         borderRadius: 3,
-        display: 'flex',
-        flexDirection: 'column',
-        position: 'relative',
-        overflow: 'hidden',
+        cursor: onClick ? 'pointer' : 'default',
+        transition: 'all 0.3s ease-in-out',
         '&:hover': {
-          transform: 'translateY(-4px)',
-          transition: 'transform 0.3s ease-in-out',
+          transform: onClick ? 'translateY(-4px)' : 'none',
           boxShadow: `0 8px 25px ${color}20`,
+          borderColor: `${color}50`,
         },
       }}
+      onClick={onClick}
     >
-      <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-        <Avatar sx={{ bgcolor: color, mr: 2 }}>
-        {icon}
+      <CardContent sx={{ p: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
+          <Avatar sx={{ bgcolor: color, width: 56, height: 56 }}>
+            {React.cloneElement(icon, { sx: { fontSize: 28 } })}
         </Avatar>
-        <Box>
-          <Typography variant="h6" color="text.primary" fontWeight={600}>
+          {trend && (
+            <Box sx={{ textAlign: 'right' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', color: getTrendColor(trend.value) }}>
+                {trend.value >= 0 ? <TrendingUpIcon sx={{ fontSize: 16, mr: 0.5 }} /> : <TrendingDownIcon sx={{ fontSize: 16, mr: 0.5 }} />}
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {trend.value > 0 ? '+' : ''}{trend.value.toFixed(1)}%
+                </Typography>
+              </Box>
+              <Typography variant="caption" color="text.secondary">
+                {trend.label}
+              </Typography>
+            </Box>
+          )}
+        </Box>
+        <Typography variant="h4" sx={{ fontWeight: 700, color: color, mb: 1 }}>
+          {typeof value === 'number' ? formatNumber(value) : value}
+        </Typography>
+        <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600, mb: 0.5 }}>
             {title}
           </Typography>
+        {subtitle && (
           <Typography variant="body2" color="text.secondary">
             {subtitle}
           </Typography>
-        </Box>
-      </Box>
-      <Typography variant="h3" sx={{ mb: 1, fontWeight: 'bold', color: color }}>
-        {value}
-      </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <TrendingUpIcon sx={{ color: '#4CAF50', fontSize: '1.2rem' }} />
-        <Typography variant="body2" color="#4CAF50" fontWeight={500}>
-          {trend}
-        </Typography>
-      </Box>
-    </Paper>
+        )}
+      </CardContent>
+    </Card>
   </motion.div>
 );
 
-const DataTable = ({ title, data, columns, onEdit, onDelete, onAdd }: any) => (
-  <Paper sx={{ p: 0, borderRadius: 3, overflow: 'hidden' }}>
-    <Box sx={{ p: 3, display: 'flex', justifyContent: 'between', alignItems: 'center', bgcolor: 'primary.main' }}>
-      <Typography variant="h6" color="white" fontWeight={600}>
-        {title}
-      </Typography>
-      {onAdd && (
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={onAdd}
-          sx={{ bgcolor: 'secondary.main', '&:hover': { bgcolor: 'secondary.dark' } }}
-                 >
-           Add
-         </Button>
-      )}
-            </Box>
-    <TableContainer sx={{ maxHeight: 400 }}>
-      <Table stickyHeader>
-        <TableHead>
-          <TableRow>
-            {columns.map((column: any) => (
-              <TableCell key={column.id} sx={{ fontWeight: 600, bgcolor: 'background.paper' }}>
-                {column.label}
-              </TableCell>
-            ))}
-                             <TableCell sx={{ fontWeight: 600, bgcolor: 'background.paper' }}>Actions</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {data.map((row: any) => (
-            <TableRow key={row.id} hover>
-              {columns.map((column: any) => (
-                <TableCell key={column.id}>
-                  {column.format ? column.format(row[column.id]) : row[column.id]}
-                </TableCell>
-              ))}
-              <TableCell>
-                <Box sx={{ display: 'flex', gap: 1 }}>
-                  {onEdit && (
-                    <IconButton
-                      size="small"
-                      onClick={() => onEdit(row)}
-                      sx={{ color: 'primary.main' }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                  )}
-                  {onDelete && (
-                    <IconButton
-                      size="small"
-                      onClick={() => onDelete(row.id)}
-                      sx={{ color: 'error.main' }}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  )}
-            </Box>
-              </TableCell>
-            </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-    </Paper>
+// Componente para métricas de estimates por estado
+interface EstimateStatusChartProps {
+  data: EstimatesByStatus[];
+}
+
+const EstimateStatusChart: React.FC<EstimateStatusChartProps> = ({ data }) => {
+  const total = data.reduce((sum, item) => sum + parseInt(item.count), 0);
+  
+  const statusColors: { [key: string]: string } = {
+    'pending': '#FF9800',
+    'active': '#2196F3', 
+    'released': '#9C27B0',
+    'completed': '#4CAF50',
+    'cancelled': '#F44336',
+  };
+
+      return (
+      <Card sx={{ height: '100%', borderRadius: 3 }}>
+        <CardContent sx={{ p: 3 }}>
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
+            Estimates by Status
+          </Typography>
+        <Stack spacing={2}>
+          {data.map((item) => {
+            const percentage = total > 0 ? (parseInt(item.count) / total) * 100 : 0;
+            const color = statusColors[item.name.toLowerCase()] || '#9E9E9E';
+            
+            return (
+              <Box key={item.id}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 500, textTransform: 'capitalize' }}>
+                    {item.name}
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {item.count}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      ({percentage.toFixed(1)}%)
+          </Typography>
+        </Box>
+      </Box>
+                <LinearProgress
+                  variant="determinate"
+                  value={percentage}
+                  sx={{
+                    height: 8,
+                    borderRadius: 4,
+                    backgroundColor: alpha(color, 0.2),
+                    '& .MuiLinearProgress-bar': {
+                      backgroundColor: color,
+                      borderRadius: 4,
+                    },
+                  }}
+                />
+              </Box>
+            );
+          })}
+        </Stack>
+      </CardContent>
+    </Card>
+  );
+};
+
+// Componente para Top Performers
+interface TopPerformersProps {
+  performers: SalespersonPerformance[];
+}
+
+  const TopPerformers: React.FC<TopPerformersProps> = ({ performers }) => (
+    <Card sx={{ height: '100%', borderRadius: 3 }}>
+      <CardContent sx={{ p: 3 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
+          Top Performers This Month
+        </Typography>
+      <List>
+        {performers.slice(0, 5).map((performer, index) => (
+          <React.Fragment key={performer.id}>
+            <ListItem sx={{ px: 0 }}>
+              <ListItemAvatar>
+                <Avatar sx={{ 
+                  bgcolor: index === 0 ? '#FFD700' : index === 1 ? '#C0C0C0' : index === 2 ? '#CD7F32' : 'primary.main',
+                  width: 40,
+                  height: 40
+                }}>
+                  {index < 3 ? <StarIcon /> : <PersonIcon />}
+                </Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                primary={
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                      {performer.name}
+                    </Typography>
+                    <Chip 
+                      label={`#${index + 1}`} 
+                      size="small" 
+                      color={index < 3 ? 'primary' : 'default'}
+                    />
+                  </Box>
+                }
+                secondary={
+                  <Box>
+                    <Typography variant="body2" color="text.secondary">
+                      Revenue: {formatCurrency(performer.revenueThisMonth)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {performer.estimatesThisMonth} estimates • {performer.activeLeads} active
+                    </Typography>
+                  </Box>
+                }
+              />
+            </ListItem>
+            {index < performers.length - 1 && <Divider />}
+          </React.Fragment>
+        ))}
+      </List>
+    </CardContent>
+  </Card>
 );
 
-const Dashboard = () => {
-  const [activeTab, setActiveTab] = useState(0);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [dialogType, setDialogType] = useState('');
+// Componente para Branch Metrics
+interface BranchMetricsProps {
+  branches: BranchMetrics[];
+}
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setActiveTab(newValue);
+const BranchMetricsGrid: React.FC<BranchMetricsProps> = ({ branches }) => (
+  <Card sx={{ borderRadius: 3, width: '100%' }}>
+    <CardContent sx={{ p: 3 }}>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
+        Performance by Branch
+      </Typography>
+      <Box sx={{ 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: 2,
+        width: '100%',
+        overflow: 'hidden'
+      }}>
+        {branches.map((branch) => (
+          <Box key={branch.id} sx={{ flex: '1 1 280px', minWidth: '280px' }}>
+            <Paper
+              sx={{
+                p: 2,
+                borderRadius: 2,
+                background: 'linear-gradient(135deg, #2196F315 0%, #2196F305 100%)',
+                border: '1px solid #2196F330',
+                height: '100%'
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar sx={{ bgcolor: '#2196F3', mr: 2, width: 32, height: 32 }}>
+                  <LocationIcon sx={{ fontSize: 18 }} />
+                </Avatar>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                  {branch.name}
+                </Typography>
+              </Box>
+              <Stack spacing={1}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Active Estimates
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {branch.activeEstimates}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Jobs This Month
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {branch.jobsThisMonth}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Typography variant="body2" color="text.secondary">
+                    Monthly Revenue
+                  </Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#4CAF50' }}>
+                    {formatCurrency(branch.revenueThisMonth)}
+        </Typography>
+                </Box>
+              </Stack>
+            </Paper>
+          </Box>
+        ))}
+      </Box>
+    </CardContent>
+  </Card>
+);
+
+// Componente para alertas
+interface AlertsPanelProps {
+  overLimitSalespersons: SalespersonPerformance[];
+  recentWarnings: Array<{ id: number; message: string; created_at: string; salesPersonRecipient?: { name: string } }>;
+}
+
+const AlertsPanel: React.FC<AlertsPanelProps> = ({ overLimitSalespersons, recentWarnings }) => (
+  <Card sx={{ height: '100%', borderRadius: 3 }}>
+    <CardContent sx={{ p: 3 }}>
+      <Typography variant="h6" sx={{ fontWeight: 600, mb: 3, display: 'flex', alignItems: 'center' }}>
+        <WarningIcon sx={{ mr: 1, color: 'warning.main' }} />
+        System Alerts
+      </Typography>
+      
+      {overLimitSalespersons.length > 0 && (
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="subtitle2" sx={{ mb: 1, color: 'error.main' }}>
+            Salespersons Over Limit ({overLimitSalespersons.length})
+          </Typography>
+          {overLimitSalespersons.slice(0, 3).map((sp) => (
+            <Alert 
+              key={sp.id} 
+              severity="error" 
+              sx={{ mb: 1, py: 0 }}
+            >
+              <Typography variant="body2">
+                <strong>{sp.name}</strong> - {sp.activeLeads} active leads
+              </Typography>
+            </Alert>
+          ))}
+        </Box>
+      )}
+
+      {recentWarnings.length > 0 && (
+        <Box>
+          <Typography variant="subtitle2" sx={{ mb: 1, color: 'warning.main' }}>
+            Recent Warnings
+          </Typography>
+          {recentWarnings.slice(0, 3).map((warning) => (
+            <Alert 
+              key={warning.id} 
+              severity="warning" 
+              sx={{ mb: 1, py: 0 }}
+            >
+              <Typography variant="body2">
+                {warning.salesPersonRecipient?.name || 'User'}: {warning.message}
+              </Typography>
+            </Alert>
+          ))}
+        </Box>
+      )}
+
+      {overLimitSalespersons.length === 0 && recentWarnings.length === 0 && (
+        <Box sx={{ textAlign: 'center', py: 4 }}>
+          <CheckCircleIcon sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
+          <Typography variant="body2" color="text.secondary">
+            All clear! No pending alerts.
+          </Typography>
+        </Box>
+      )}
+    </CardContent>
+  </Card>
+);
+
+// Componente principal del Dashboard
+const Dashboard: React.FC = () => {
+  const [summary, setSummary] = useState<DashboardSummary | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadDashboard = async () => {
+      try {
+        setLoading(true);
+      setError(null);
+        const data = await getDashboardSummary();
+        setSummary(data);
+    } catch (err) {
+      setError('Error al cargar el dashboard. Por favor, intenta de nuevo.');
+      console.error('Dashboard error:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const formatStatus = (status: string) => {
-    const colors: any = {
-      pending: 'warning',
-      active: 'info',
-      released: 'primary',
-      completed: 'success',
-      cancelled: 'error',
-    };
-    return <Chip label={status.toUpperCase()} color={colors[status] || 'default'} size="small" />;
-  };
+  useEffect(() => {
+    loadDashboard();
+  }, []);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(amount);
-  };
+  if (loading) {
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '60vh' 
+      }}>
+        <CircularProgress size={60} />
+      </Box>
+    );
+  }
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US');
-  };
+  if (error) {
+    return (
+      <Alert 
+        severity="error" 
+        sx={{ m: 3 }}
+        action={
+          <IconButton onClick={loadDashboard} color="inherit">
+            <RefreshIcon />
+          </IconButton>
+        }
+      >
+        {error}
+      </Alert>
+    );
+  }
 
-  const estimateColumns = [
-    { id: 'name', label: 'Name' },
-    { id: 'branch', label: 'Branch' },
-    { id: 'salesperson', label: 'Salesperson' },
-    { id: 'status', label: 'Status', format: formatStatus },
-    { id: 'price', label: 'Price', format: formatCurrency },
-    { id: 'created_date', label: 'Date', format: formatDate },
-  ];
+  if (!summary) {
+    return (
+      <Alert severity="info" sx={{ m: 3 }}>
+        No hay datos disponibles para mostrar.
+      </Alert>
+    );
+  }
 
-  const salespersonColumns = [
-    { id: 'name', label: 'Name' },
-    { id: 'phone', label: 'Phone' },
-    { id: 'telegram_id', label: 'Telegram' },
-    { id: 'warning_count', label: 'Warnings' },
-    { id: 'active_jobs', label: 'Active Jobs' },
-    { id: 'branches', label: 'Branches', format: (branches: string[]) => branches.join(', ') },
-  ];
+  const { businessMetrics, teamPerformance, branchMetrics, notifications, systemStats } = summary;
 
-  const branchColumns = [
-    { id: 'name', label: 'Name' },
-    { id: 'address', label: 'Address' },
-  ];
-
-  const jobColumns = [
-    { id: 'name', label: 'Name' },
-    { id: 'crew_leader', label: 'Crew Leader' },
-    { id: 'review', label: 'Review', format: (review: number) => `⭐ ${review}/5` },
-    { id: 'hours', label: 'Hours' },
-    { id: 'closing_date', label: 'Closing Date', format: formatDate },
-  ];
-
-  const renderMainDashboard = () => (
-    <Box>
+    return (
+    <Box sx={{ 
+      width: '100%', 
+      maxWidth: '100vw',
+      minHeight: '100vh',
+      p: { xs: 2, sm: 3 },
+      display: 'flex',
+      flexDirection: 'column',
+      overflow: 'hidden',
+      boxSizing: 'border-box'
+    }}>
+      {/* Header */}
+      <Box sx={{ mb: 4 }}>
       <Typography
         variant="h4"
         component="h1"
         sx={{
-          mb: 4,
-          fontWeight: 600,
-          background: 'linear-gradient(45deg, #4CAF50, #FF9800)',
+            fontWeight: 700,
+            background: 'linear-gradient(45deg, #4CAF50, #2196F3)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
+            mb: 1,
         }}
       >
                  BotZilla Dashboard
       </Typography>
+        <Typography variant="body1" color="text.secondary">
+          Complete system overview - {new Date().toLocaleDateString('en-US', { 
+            weekday: 'long', 
+            year: 'numeric', 
+            month: 'long', 
+            day: 'numeric' 
+          })}
+       </Typography>
+      </Box>
 
-             {/* Main Statistics */}
-       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4 }}>
-         <Box sx={{ flex: '1 1 250px', minWidth: '250px' }}>
+      {/* Contenedor Flex para las métricas principales */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: 3, 
+        mb: 4,
+        width: '100%',
+        overflow: 'hidden'
+      }}>
+                <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
           <StatCard
-             icon={<EstimatesIcon />}
-             title="Total Estimates"
-             value={hardcodedData.estimates.length}
-             subtitle="Active estimates"
-            trend="+12% this week"
-             color="#4CAF50"
+            title="Total Estimates"
+            value={businessMetrics.estimates.total}
+            icon={<EstimatesIcon />}
+            color="#4CAF50"
+            subtitle={`${businessMetrics.estimates.active} active`}
+            trend={{
+              value: businessMetrics.estimates.weeklyAverage,
+              label: 'weekly average'
+            }}
           />
-         </Box>
-         <Box sx={{ flex: '1 1 250px', minWidth: '250px' }}>
+        </Box>
+        <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
           <StatCard
-             icon={<PeopleIcon />}
-             title="Salespersons"
-             value={hardcodedData.salespersons.length}
-             subtitle="Active salespeople"
-             trend="+5% this month"
-             color="#FF9800"
-           />
-         </Box>
-         <Box sx={{ flex: '1 1 250px', minWidth: '250px' }}>
+            title="Monthly Revenue"
+            value={formatCurrency(businessMetrics.revenue.thisMonth)}
+            icon={<MoneyIcon />}
+            color="#FF9800"
+            subtitle="Monthly income"
+            trend={{
+              value: businessMetrics.revenue.growth,
+              label: 'vs last month'
+            }}
+          />
+        </Box>
+        <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
           <StatCard
-             icon={<BusinessIcon />}
-             title="Branches"
-             value={hardcodedData.branches.length}
-             subtitle="Active locations"
-             trend="Stable"
-             color="#2196F3"
-           />
-         </Box>
-         <Box sx={{ flex: '1 1 250px', minWidth: '250px' }}>
+            title="Monthly Jobs"
+            value={businessMetrics.jobs.thisMonth}
+            icon={<JobsIcon />}
+            color="#2196F3"
+            subtitle={`${businessMetrics.jobs.completedToday} completed today`}
+            trend={{
+              value: businessMetrics.jobs.growth,
+              label: 'vs last month'
+            }}
+          />
+        </Box>
+        <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
           <StatCard
-             icon={<JobsIcon />}
-             title="Active Jobs"
-             value={hardcodedData.jobs.length}
-             subtitle="Jobs in progress"
-             trend="+8% this week"
-             color="#9C27B0"
-           />
-         </Box>
+            title="Total Team"
+            value={teamPerformance.salespersons.total + teamPerformance.crew.total}
+            icon={<GroupsIcon />}
+            color="#9C27B0"
+            subtitle={`${teamPerformance.salespersons.total} sales, ${teamPerformance.crew.total} crew`}
+          />
+        </Box>
+      </Box>
+
+      {/* Segunda fila de métricas en flex */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: 3, 
+        mb: 4,
+        width: '100%',
+        overflow: 'hidden'
+      }}>
+                <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
+          <StatCard
+            title="Branches"
+            value={systemStats.totalBranches}
+            icon={<BusinessIcon />}
+            color="#607D8B"
+            subtitle="Active locations"
+          />
+        </Box>
+        <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
+          <StatCard
+            title="Notifications"
+            value={notifications.sentToday}
+            icon={<NotificationsIcon />}
+            color="#FF5722"
+            subtitle={`${notifications.sentThisWeek} this week`}
+          />
+        </Box>
+        <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
+          <StatCard
+            title="Active Alerts"
+            value={teamPerformance.salespersons.overLimit.length}
+            icon={<WarningIcon />}
+            color="#F44336"
+            subtitle="Salespersons over limit"
+          />
+        </Box>
+        <Box sx={{ flex: '1 1 280px', minWidth: '280px', maxWidth: '380px' }}>
+          <StatCard
+            title="System Users"
+            value={systemStats.totalUsers}
+            icon={<PeopleIcon />}
+            color="#795548"
+            subtitle="Active accounts"
+          />
+        </Box>
        </Box>
 
-             {/* Actividad reciente y alertas */}
-       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
-         <Box sx={{ flex: '2 1 400px', minWidth: '400px' }}>
-           <Paper sx={{ p: 3, borderRadius: 3 }}>
-             <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
-               <NotificationsIcon sx={{ mr: 1, color: 'primary.main' }} />
-               Recent Activity
-             </Typography>
-             <Box>
-               {hardcodedData.notifications.map((notification, index) => (
-                 <Alert
-                   key={notification.id}
-                   severity={notification.type as any}
-                   sx={{ mb: 2 }}
-                 >
-                   <Box>
-                     <Typography variant="body1">{notification.message}</Typography>
-                     <Typography variant="caption" color="text.secondary">
-                       {notification.created_at}
-                     </Typography>
-                   </Box>
-                 </Alert>
-               ))}
+      {/* Gráficos y análisis detallado en flex */}
+      <Box sx={{ 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: 3, 
+        mb: 4,
+        width: '100%',
+        overflow: 'hidden'
+      }}>
+                <Box sx={{ flex: '1 1 350px', minWidth: '350px', maxWidth: '500px' }}>
+          <EstimateStatusChart data={businessMetrics.estimates.byStatus} />
+        </Box>
+        <Box sx={{ flex: '1 1 350px', minWidth: '350px', maxWidth: '500px' }}>
+          <TopPerformers performers={teamPerformance.salespersons.topPerformers} />
+        </Box>
+        <Box sx={{ flex: '1 1 350px', minWidth: '350px', maxWidth: '500px' }}>
+          <AlertsPanel 
+            overLimitSalespersons={teamPerformance.salespersons.overLimit}
+            recentWarnings={notifications.recentWarnings}
+          />
+        </Box>
              </Box>
+
+      {/* Performance por sucursal */}
+      <Box sx={{ mb: 4 }}>
+        <BranchMetricsGrid branches={branchMetrics} />
+         </Box>
+
+            {/* Jobs recientes con performance */}
+      {businessMetrics.jobs.recent.length > 0 && (
+        <Card sx={{ borderRadius: 3, width: '100%' }}>
+          <CardContent sx={{ p: 3 }}>
+                      <Typography variant="h6" sx={{ fontWeight: 600, mb: 3 }}>
+            Recent Jobs with Performance
+             </Typography>
+            <Box sx={{ 
+              display: 'flex', 
+              flexWrap: 'wrap', 
+              gap: 2,
+              width: '100%',
+              overflow: 'hidden'
+            }}>
+              {businessMetrics.jobs.recent.slice(0, 6).map((job) => (
+                <Box key={job.id} sx={{ flex: '1 1 320px', minWidth: '320px', maxWidth: '450px' }}>
+                  <Paper sx={{ p: 2, borderRadius: 2, border: '1px solid #e0e0e0', height: '100%' }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                      {job.name}
+                    </Typography>
+                    <Stack spacing={1}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Branch:
+                        </Typography>
+                        <Typography variant="caption">
+                          {job.branch || 'N/A'}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Crew Leader:
+                        </Typography>
+                        <Typography variant="caption">
+                          {job.crewLeader || 'N/A'}
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Time Savings:
+                        </Typography>
+                        <Typography variant="caption" sx={{ 
+                          color: job.actualSavedPercent >= 0 ? '#4CAF50' : '#F44336',
+                          fontWeight: 600
+                        }}>
+                          {job.actualSavedPercent >= 0 ? '+' : ''}{(job.actualSavedPercent * 100).toFixed(1)}%
+                        </Typography>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Bonus:
+                        </Typography>
+                        <Typography variant="caption" sx={{ 
+                          color: '#4CAF50',
+                          fontWeight: 600
+                        }}>
+                          {formatCurrency(job.jobBonusPool)}
+                    </Typography>
+                  </Box>
+                      {job.review && (
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <Typography variant="caption" color="text.secondary">
+                            Review:
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            {[...Array(5)].map((_, i) => (
+                              <StarIcon 
+                                key={i}
+                                sx={{ 
+                                  fontSize: 12, 
+                                  color: i < job.review! ? '#FFD700' : '#E0E0E0' 
+                                }} 
+                              />
+                ))}
+             </Box>
+                        </Box>
+                      )}
+                    </Stack>
            </Paper>
          </Box>
-         <Box sx={{ flex: '1 1 300px', minWidth: '300px' }}>
-           <Paper sx={{ p: 3, borderRadius: 3 }}>
-             <Typography variant="h6" sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
-               <WarningIcon sx={{ mr: 1, color: 'warning.main' }} />
-               Recent Warnings
-             </Typography>
-             <Box>
-               {hardcodedData.warnings.map((warning) => (
-                 <Box key={warning.id} sx={{ mb: 2, p: 2, bgcolor: 'rgba(255, 152, 0, 0.1)', borderRadius: 2, border: '1px solid rgba(255, 152, 0, 0.3)' }}>
-                   <Typography variant="body2" fontWeight={600} color="warning.main">
-                     {warning.salesperson}
-                   </Typography>
-                   <Typography variant="body2" color="text.primary">
-                     {warning.reason}
-                   </Typography>
-                   <Typography variant="caption" color="text.secondary">
-                     {formatDate(warning.created_at)}
-                   </Typography>
-                 </Box>
-               ))}
-             </Box>
-           </Paper>
-         </Box>
+              ))}
        </Box>
-    </Box>
-  );
-
-  const renderEstimates = () => (
-    <DataTable
-      title="Estimates"
-      data={hardcodedData.estimates}
-      columns={estimateColumns}
-      onEdit={() => setOpenDialog(true)}
-      onDelete={() => {}}
-      onAdd={() => setOpenDialog(true)}
-    />
-  );
-
-  const renderSalespersons = () => (
-    <DataTable
-      title="Salespersons"
-      data={hardcodedData.salespersons}
-      columns={salespersonColumns}
-      onEdit={() => setOpenDialog(true)}
-      onDelete={() => {}}
-      onAdd={() => setOpenDialog(true)}
-    />
-  );
-
-     const renderBranches = () => (
-     <DataTable
-       title="Branches"
-      data={hardcodedData.branches}
-      columns={branchColumns}
-      onEdit={() => setOpenDialog(true)}
-      onDelete={() => {}}
-      onAdd={() => setOpenDialog(true)}
-    />
-  );
-
-  const renderJobs = () => (
-    <DataTable
-      title="Jobs"
-      data={hardcodedData.jobs}
-      columns={jobColumns}
-      onEdit={() => setOpenDialog(true)}
-      onDelete={() => {}}
-      onAdd={() => setOpenDialog(true)}
-    />
-  );
-
-  const renderSync = () => (
-    <Paper sx={{ p: 4, borderRadius: 3, textAlign: 'center' }}>
-      <SyncIcon sx={{ fontSize: 64, color: 'primary.main', mb: 2 }} />
-      <Typography variant="h5" sx={{ mb: 2 }}>
-        System Synchronization
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        Synchronize data with external systems
-      </Typography>
-      <Button
-        variant="contained"
-        size="large"
-        startIcon={<SyncIcon />}
-        sx={{ mb: 3 }}
-      >
-        Run Synchronization
-      </Button>
-      <Paper sx={{ p: 2, bgcolor: 'background.default', fontFamily: 'monospace' }}>
-        <Typography variant="body2" color="success.main">
-          [2024-01-20 10:30:00] System started...
-          <br />
-          [2024-01-20 10:30:15] Connecting to external API...
-          <br />
-          [2024-01-20 10:30:30] Synchronization completed ✓
-          <br />
-          [2024-01-20 10:30:31] 15 estimates processed
-        </Typography>
-      </Paper>
-    </Paper>
-  );
-
-  const tabContent = [
-    renderMainDashboard(),
-    renderEstimates(),
-    renderSalespersons(),
-    renderBranches(),
-    renderJobs(),
-    renderSync(),
-  ];
-
-  return (
-    <Box>
-      <Paper sx={{ mb: 3 }}>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          variant="scrollable"
-          scrollButtons="auto"
-        >
-          <Tab label="Dashboard" />
-          <Tab label="Estimates" />
-          <Tab label="Salespersons" />
-          <Tab label="Branches" />
-          <Tab label="Jobs" />
-          <Tab label="Sync" />
-        </Tabs>
-      </Paper>
-
-      <Box>{tabContent[activeTab]}</Box>
-
-             <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="sm" fullWidth>
-         <DialogTitle>Functionality Under Development</DialogTitle>
-         <DialogContent>
-           <Typography>
-             This functionality will be implemented when the backend is fully developed.
-             For now, this is a hardcoded dashboard to show the final structure and design.
-           </Typography>
-         </DialogContent>
-         <DialogActions>
-           <Button onClick={() => setOpenDialog(false)}>Close</Button>
-         </DialogActions>
-       </Dialog>
+          </CardContent>
+        </Card>
+      )}
     </Box>
   );
 };

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Card, CardContent, Typography, List, ListItem, ListItemText, CircularProgress, Alert, Stack, IconButton, Tooltip, alpha } from '@mui/material';
+import { Box, Card, CardContent, Typography, List, ListItem, ListItemText, CircularProgress, Alert, Stack, IconButton, Tooltip, alpha, Divider } from '@mui/material';
 import { Notifications as NotificationsIcon, CalendarToday as CalendarIcon, PeopleAlt as PeopleAltIcon, Warning as WarningIcon, CheckCircleOutline as CheckCircleIcon, TrendingUp as TrendingUpIcon, ArrowForward as ArrowForwardIcon } from '@mui/icons-material';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -271,6 +271,50 @@ const WarningCard: React.FC<WarningCardProps> = ({ title, warnings, icon, iconCo
     );
 };
 
+interface TypeBreakdownCardProps {
+    title: string;
+    items: { name: string; count: string }[];
+    subtitle?: string;
+}
+
+const TypeBreakdownCard: React.FC<TypeBreakdownCardProps> = ({ title, items, subtitle }) => {
+    return (
+        <Card sx={{
+            height: '100%',
+            backgroundColor: 'rgba(30, 30, 30, 0.6)',
+            backdropFilter: 'blur(10px)',
+            borderRadius: 3,
+            border: '1px solid rgba(255,255,255,0.05)'
+        }}>
+            <CardContent sx={{ p: 3 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                    {title}
+                </Typography>
+                {subtitle && (
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
+                        {subtitle}
+                    </Typography>
+                )}
+                {items.length === 0 ? (
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>No data</Typography>
+                ) : (
+                    <List dense>
+                        {items.map((it, idx) => (
+                            <React.Fragment key={it.name + idx}>
+                                <ListItem sx={{ py: 0.5 }}>
+                                    <ListItemText primary={it.name} secondary={null} />
+                                    <Typography variant="body2" sx={{ fontWeight: 700 }}>{it.count}</Typography>
+                                </ListItem>
+                                {idx < items.length - 1 && <Divider component="li" sx={{ opacity: 0.1 }} />}
+                            </React.Fragment>
+                        ))}
+                    </List>
+                )}
+            </CardContent>
+        </Card>
+    );
+};
+
 interface NotificationDashboardProps {
     stats: DashboardStats | null;
     loading: boolean;
@@ -321,7 +365,7 @@ const NotificationDashboard: React.FC<NotificationDashboardProps> = ({ stats, lo
         </Alert>
     );
 
-    const { sentToday, sentThisWeek, salespersonsOverLimit, recentWarnings } = stats;
+    const { sentToday, sentThisWeek, salespersonsOverLimit, recentWarnings, recentCongratulations, typeCounts, typeCountsToday, typeCountsThisWeek, currentWarnings } = stats;
 
     return (
         <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
@@ -373,6 +417,23 @@ const NotificationDashboard: React.FC<NotificationDashboardProps> = ({ stats, lo
                     iconColor="#FFC107"
                 />
                 <WarningCard 
+                    title="Recent Congratulations" 
+                    warnings={recentCongratulations}
+                    icon={<CheckCircleIcon />}
+                    iconColor="#4CAF50"
+                />
+            </Box>
+
+            <Box sx={{ 
+                display: 'grid',
+                gap: 3,
+                gridTemplateColumns: {
+                    xs: '1fr',
+                    md: 'repeat(2, 1fr)'
+                },
+                mt: 3
+            }}>
+                <WarningCard 
                     title="Salespersons Over Limit" 
                     warnings={salespersonsOverLimit.map(sp => ({
                         id: sp.id,
@@ -383,6 +444,31 @@ const NotificationDashboard: React.FC<NotificationDashboardProps> = ({ stats, lo
                     icon={<PeopleAltIcon />}
                     iconColor="#F44336"
                 />
+                <WarningCard 
+                    title="Current Warnings (by user)" 
+                    warnings={currentWarnings.map(sp => ({
+                        id: sp.id,
+                        salesPersonRecipient: { name: sp.name },
+                        message: `Warnings: ${sp.warning_count} · Active Leads: ${sp.activeLeadsCount}`,
+                        created_at: new Date().toISOString()
+                    }))}
+                    icon={<WarningIcon />}
+                    iconColor="#FF9800"
+                />
+            </Box>
+
+            <Box sx={{
+                display: 'grid',
+                gap: 3,
+                gridTemplateColumns: {
+                    xs: '1fr',
+                    md: 'repeat(3, 1fr)'
+                },
+                mt: 3
+            }}>
+                <TypeBreakdownCard title="By Type (All Time)" items={typeCounts} />
+                <TypeBreakdownCard title="By Type (Today)" items={typeCountsToday} />
+                <TypeBreakdownCard title="By Type (This Week)" items={typeCountsThisWeek} />
             </Box>
         </Box>
     );

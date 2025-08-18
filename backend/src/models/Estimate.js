@@ -29,6 +29,14 @@ const Estimate = sequelize.define('Estimate', {
         type: DataTypes.TEXT,
         allowNull: true
     },
+    customer_email: {
+        type: DataTypes.STRING(200),
+        allowNull: true
+    },
+    customer_phone: {
+        type: DataTypes.STRING(50),
+        allowNull: true
+    },
     crew_notes: {
         type: DataTypes.TEXT,
         allowNull: true
@@ -78,7 +86,7 @@ const Estimate = sequelize.define('Estimate', {
         allowNull: true
     },
     attic_tech_hours: {
-        type: DataTypes.INTEGER
+        type: DataTypes.DECIMAL(10, 2)
     },
     at_created_date: {
         type: DataTypes.DATE,
