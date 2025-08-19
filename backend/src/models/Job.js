@@ -50,6 +50,11 @@ Job.init({
   crew_leader_hours: {
     type: DataTypes.DECIMAL(10, 2)
   },
+  cl_estimated_plan_hours: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Crew Leader Estimated Plan Hours from spreadsheet'
+  },
   notification_sent: {
     type: DataTypes.BOOLEAN,
     defaultValue: false,

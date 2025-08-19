@@ -1108,16 +1108,18 @@ class AutomationsController {
                 });
             }
             
-            console.log('💾 [processRow] Iniciando transacción de base de datos');
+                            console.log('💾 [processRow] Iniciando transacción de base de datos');
             const transaction = await sequelize.transaction();
             try {
                 const jobName = processedData['Job Name'];
                 const clPlanHours = processedData['CL Estimated Plan Hours'] || processedData['crew_leader_hours'];
+                const clEstimatedPlanHours = processedData['CL Estimated Plan Hours'];
                 const crewLeadName = processedData['Crew Lead'];
 
                 console.log('📋 [processRow] Datos extraídos:', {
                     jobName,
                     clPlanHours,
+                    clEstimatedPlanHours,
                     crewLeadName,
                     hasJobName: !!jobName
                 });
@@ -1302,6 +1304,7 @@ class AutomationsController {
                     estimate_id: estimate ? estimate.id : null,
                     branch_id: estimate ? estimate.branch_id : null,
                     attic_tech_hours: estimate ? estimate.attic_tech_hours : null,
+                    cl_estimated_plan_hours: parseFloat(clEstimatedPlanHours) || null,
                     closing_date: parseValidDate(processedData['Finish Date'])
                 };
 
@@ -1320,6 +1323,7 @@ class AutomationsController {
                     estimateId: jobData.estimate_id,
                     branchId: jobData.branch_id,
                     crewLeaderHours: jobData.crew_leader_hours,
+                    clEstimatedPlanHours: jobData.cl_estimated_plan_hours,
                     closingDate: jobData.closing_date
                 });
 
@@ -1373,6 +1377,17 @@ class AutomationsController {
                 const techHoursIndex = getIndex('Techs hours');
                 const unbillableJobHoursIndex = getIndex('Unbillable Job Hours');
                 const jobTotalsIndex = getIndex('Job Totals');
+
+                console.log('🔍 [processRow] Índices de delimitadores:', {
+                    techHoursIndex: techHoursIndex,
+                    unbillableJobHoursIndex: unbillableJobHoursIndex,
+                    jobTotalsIndex: jobTotalsIndex,
+                    problemDetected: unbillableJobHoursIndex > jobTotalsIndex,
+                    availableColumns: columnMap.map(col => ({
+                        index: col.column_index,
+                        fieldName: col.field_name
+                    })).filter(col => col.fieldName.toLowerCase().includes('unbillable') || col.fieldName.toLowerCase().includes('job totals'))
+                });
 
                 // Procesar Shifts Regulares
                 const regularShiftCols = columnMap.filter(c => c.column_index > techHoursIndex && c.column_index < unbillableJobHoursIndex);
@@ -1572,16 +1587,66 @@ class AutomationsController {
                 }
 
                 // Procesar Shifts Especiales
-                const specialShiftCols = columnMap.filter(c => c.column_index > unbillableJobHoursIndex && c.column_index < jobTotalsIndex);
+                // Si unbillableJobHoursIndex > jobTotalsIndex, hay un problema en el mapeo
+                // En este caso, buscaremos columnas específicas que sabemos que son Special Shifts
+                let specialShiftCols = [];
+                
+                if (unbillableJobHoursIndex > jobTotalsIndex || unbillableJobHoursIndex === -1) {
+                    console.log('⚠️ [processRow] Problema detectado con índices de delimitadores, usando búsqueda específica');
+                    // Buscar columnas específicas que sabemos que son Special Shifts
+                    const specialShiftNames = ['QC', 'Visit 1', 'Visit 2', 'Visit 3', 'Complaint / warranty calls hours', 'Job Delivery'];
+                    specialShiftCols = columnMap.filter(c => 
+                        specialShiftNames.some(name => 
+                            c.field_name.toLowerCase().includes(name.toLowerCase()) ||
+                            c.field_name.toLowerCase() === name.toLowerCase()
+                        )
+                    );
+                } else {
+                    // Lógica original
+                    specialShiftCols = columnMap.filter(c => c.column_index > unbillableJobHoursIndex && c.column_index < jobTotalsIndex);
+                }
+                
+                console.log('🔍 [processRow] Procesando Special Shifts:', {
+                    unbillableJobHoursIndex: unbillableJobHoursIndex,
+                    jobTotalsIndex: jobTotalsIndex,
+                    totalSpecialColumns: specialShiftCols.length,
+                    specialColumns: specialShiftCols.map(col => ({
+                        index: col.column_index,
+                        fieldName: col.field_name,
+                        value: processedData[col.field_name] || 'N/A'
+                    }))
+                });
+                
                 const specialShifts = [];
                 for (const col of specialShiftCols) {
-                    const hours = parseFloat(processedData[col.field_name]);
+                    const rawValue = processedData[col.field_name];
+                    const hours = parseFloat(rawValue);
+                    
+                    console.log('🔍 [processRow] Procesando Special Shift:', {
+                        columnIndex: col.column_index,
+                        fieldName: col.field_name,
+                        rawValue: rawValue,
+                        parsedHours: hours,
+                        isValidHours: !isNaN(hours) && hours > 0
+                    });
+                    
                     if (!isNaN(hours) && hours > 0) {
+                        console.log('✅ [processRow] Creando Special Shift:', {
+                            fieldName: col.field_name,
+                            hours: hours
+                        });
+                        
                         const [specialShift] = await SpecialShift.findOrCreate({ where: { name: col.field_name }, defaults: { name: col.field_name }, transaction });
                         specialShifts.push({ job_id: job.id, special_shift_id: specialShift.id, hours, date: new Date() });
                     }
                 }
-                if(specialShifts.length > 0) await JobSpecialShift.bulkCreate(specialShifts, { transaction });
+                
+                if(specialShifts.length > 0) {
+                    console.log('✅ [processRow] Creando Special Shifts:', specialShifts.length);
+                    await JobSpecialShift.bulkCreate(specialShifts, { transaction });
+                } else {
+                    console.log('⚠️ [processRow] No se encontraron Special Shifts válidos para procesar');
+                }
 
                 // --- INICIO: Lógica de Notificación al Crew Leader ---
                 if (crewLeader && crewLeader.telegram_id) {
@@ -1627,13 +1692,27 @@ class AutomationsController {
 
                     if (finalJob) {
                         const performance = await calculateJobPerformance(finalJob.id);
-                        const lowPerformanceThreshold = parseFloat(process.env.LOW_PERFORMANCE_THRESHOLD || 0.0);
+                        // Solo notificar jobs con % Actual Saved negativo (menor a 0%)
+                        const lowPerformanceThreshold = 0.0;
 
                         if (performance.actualSavedPercent < lowPerformanceThreshold) {
-                            if (finalJob.branch && finalJob.branch.telegram_group_id) {
-                                const crewLeaderName = finalJob.crewLeader?.name || 'Unknown Leader';
-                                const jobString = `${crewLeaderName}: planned to save ${(performance.plannedToSavePercent * 100).toFixed(0)}% | Actual saved ${(performance.actualSavedPercent * 100).toFixed(0)}%`;
-                                
+                            const crewLeaderName = finalJob.crewLeader?.name || 'Unknown Leader';
+                            const jobString = `${crewLeaderName}: planned to save ${(performance.plannedToSavePercent * 100).toFixed(0)}% | Actual saved ${(performance.actualSavedPercent * 100).toFixed(0)}%`;
+                            
+                            // Si el % Actual Saved es extremadamente negativo (< -100%), es un error de datos
+                            // Enviar notificación al ID especial para errores de sistema
+                            const isUnrealisticValue = performance.actualSavedPercent < -1.0; // Menor a -100%
+                            
+                            if (isUnrealisticValue) {
+                                notificationPayload = {
+                                    branch_telegram_id: "1940630658", // ID especial para errores de sistema
+                                    job_string: `⚠️ ERROR DE DATOS - ${jobString}`,
+                                    actual_saved_percent: performance.actualSavedPercent,
+                                    error_type: "unrealistic_performance",
+                                    branch_name: finalJob.branch?.name || 'Unknown Branch'
+                                };
+                                logger.warn(`[processRow] Unrealistic performance value detected for job ${finalJob.name}. Routing to system admin.`);
+                            } else if (finalJob.branch && finalJob.branch.telegram_group_id) {
                                 notificationPayload = {
                                     branch_telegram_id: finalJob.branch.telegram_group_id,
                                     job_string: jobString,
@@ -1657,11 +1736,27 @@ class AutomationsController {
                 caches.lists.deletePattern('.*crew.*member.*');
                 caches.lists.deletePattern('.*crew.*members.*');
 
+                // Obtener el telegram_group_id del branch para notificaciones en vivo
+                let branchTelegramId = null;
+                if (job.branch_id) {
+                    const jobWithBranch = await Job.findByPk(job.id, {
+                        include: [{ model: Branch, as: 'branch', attributes: ['telegram_group_id'] }]
+                    });
+                    branchTelegramId = jobWithBranch?.branch?.telegram_group_id || null;
+                    
+                    console.log('📱 [processRow] Branch Telegram ID obtenido:', {
+                        branchId: job.branch_id,
+                        branchTelegramId: branchTelegramId,
+                        jobName: jobName
+                    });
+                }
+
                 const response = {
                     success: true,
                     message: `Fila ${row_number} procesada exitosamente. Job "${jobName}" ha sido ${job ? 'actualizado' : 'creado'}.`,
                     jobId: job.id,
                     jobName: job.name,
+                    branchTelegramId: branchTelegramId, // Nuevo campo para notificaciones en vivo
                     notificationPayload, // Se añade el payload aquí
                     sheet_name,
                     row_number,
@@ -1756,27 +1851,40 @@ class AutomationsController {
                 return res.status(200).json({ success: true, message: 'No pending jobs to process.', data: [] });
             }
             
-            const lowPerformanceThreshold = parseFloat(process.env.LOW_PERFORMANCE_THRESHOLD || 0.05);
+            // Solo procesar jobs con % Actual Saved negativo (menor a 0%)
+            const lowPerformanceThreshold = 0.0;
 
             for (const job of pendingJobs) {
                 const performance = await calculateJobPerformance(job.id);
                 const { actualSavedPercent, plannedToSavePercent } = performance;
 
-                // Solo procesar trabajos con mal rendimiento
+                // Solo procesar trabajos con mal rendimiento (% Actual Saved negativo)
                 if (actualSavedPercent < lowPerformanceThreshold) {
                     const branch = job.branch;
                     const crewLeaderName = job.crewLeader?.name || 'Unknown Leader';
-
-                    // Solo considerar branches con un telegram_id configurado
-                    if (branch && branch.telegram_group_id) {
+                    const jobString = `${crewLeaderName}: planned to save ${(plannedToSavePercent * 100).toFixed(0)}% | Actual saved ${(actualSavedPercent * 100).toFixed(0)}%`;
+                    
+                    // Si el % Actual Saved es extremadamente negativo (< -100%), es un error de datos
+                    const isUnrealisticValue = actualSavedPercent < -1.0; // Menor a -100%
+                    
+                    if (isUnrealisticValue) {
+                        // Enviar al ID especial para errores de sistema
+                        const systemErrorKey = 'system_error';
+                        if (!lowPerformingJobsByBranch[systemErrorKey]) {
+                            lowPerformingJobsByBranch[systemErrorKey] = {
+                                branch_telegram_id: "1940630658",
+                                jobs: []
+                            };
+                        }
+                        lowPerformingJobsByBranch[systemErrorKey].jobs.push(`⚠️ ERROR DE DATOS - ${jobString} (Branch: ${branch?.name || 'Unknown'})`);
+                    } else if (branch && branch.telegram_group_id) {
+                        // Procesamiento normal para valores realistas
                         if (!lowPerformingJobsByBranch[branch.id]) {
                             lowPerformingJobsByBranch[branch.id] = {
                                 branch_telegram_id: branch.telegram_group_id,
                                 jobs: []
                             };
                         }
-
-                        const jobString = `${crewLeaderName}: planned to save ${(plannedToSavePercent * 100).toFixed(0)}% | Actual saved ${(actualSavedPercent * 100).toFixed(0)}%`;
                         lowPerformingJobsByBranch[branch.id].jobs.push(jobString);
                     }
                 }
@@ -1813,7 +1921,8 @@ class AutomationsController {
         const notificationPayloads = [];
 
         try {
-            const lowPerformanceThreshold = parseFloat(process.env.LOW_PERFORMANCE_THRESHOLD || 0.05);
+            // Solo procesar jobs con % Actual Saved negativo (menor a 0%)
+            const lowPerformanceThreshold = 0.0;
 
             const yesterday = new Date();
             yesterday.setDate(yesterday.getDate() - 1);

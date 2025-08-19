@@ -104,5 +104,6 @@ export interface JobDetails extends Job {
     note?: string;
     attic_tech_hours?: string;
     crew_leader_hours?: string;
+    cl_estimated_plan_hours?: string;
     estimate_id?: number;
 } 
