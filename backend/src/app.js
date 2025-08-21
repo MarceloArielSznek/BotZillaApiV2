@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth.routes');
@@ -32,12 +33,57 @@ app.use(requestLogger);
 // Middlewares de seguridad
 app.use(helmet());
 
-// Configuración CORS más permisiva para desarrollo con ngrok
+// Rate limiting para protección básica
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 100, // máximo 100 requests por IP por ventana
+    message: {
+        success: false,
+        message: 'Demasiadas solicitudes desde esta IP, intenta de nuevo en 15 minutos'
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+// Aplicar rate limiting a todas las rutas
+app.use(limiter);
+
+// Rate limiting más estricto para autenticación
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 5, // máximo 5 intentos de login por IP
+    message: {
+        success: false,
+        message: 'Demasiados intentos de login, intenta de nuevo en 15 minutos'
+    },
+    skipSuccessfulRequests: true,
+});
+
+// Configuración CORS específica para producción
 const corsOptions = {
     origin: function (origin, callback) {
-        // Permite cualquier origen durante desarrollo
-        // En producción, especifica los dominios permitidos
-        callback(null, true);
+        // En desarrollo, permitir cualquier origen
+        if (process.env.NODE_ENV === 'development') {
+            return callback(null, true);
+        }
+        
+        // En producción, solo permitir dominios específicos
+        const allowedOrigins = [
+            process.env.FRONTEND_URL,
+            'https://tudominio.com',
+            'https://www.tudominio.com',
+            'https://app.tudominio.com'
+        ].filter(Boolean); // Remover valores undefined
+        
+        // Permitir requests sin origin (como apps móviles o Postman)
+        if (!origin) return callback(null, true);
+        
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.warn('CORS blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
     },
     credentials: true,
     optionsSuccessStatus: 200

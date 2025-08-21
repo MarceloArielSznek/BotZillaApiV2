@@ -1,14 +1,16 @@
 const { Sequelize } = require('sequelize');
 require('dotenv').config();
 
-// Log para debugging de configuración
-console.log('🔧 DATABASE CONFIG:');
-console.log(`  Host: ${process.env.DB_HOST}`);
-console.log(`  Port: ${process.env.DB_PORT}`);
-console.log(`  Database: ${process.env.DB_NAME}`);
-console.log(`  Username: ${process.env.DB_USER}`);
-console.log(`  Schema: ${process.env.DB_SCHEMA}`);
-console.log('');
+// Log para debugging de configuración (solo en desarrollo)
+if (process.env.NODE_ENV === 'development') {
+    console.log('🔧 DATABASE CONFIG:');
+    console.log(`  Host: ${process.env.DB_HOST}`);
+    console.log(`  Port: ${process.env.DB_PORT}`);
+    console.log(`  Database: ${process.env.DB_NAME}`);
+    console.log(`  Username: ${process.env.DB_USER}`);
+    console.log(`  Schema: ${process.env.DB_SCHEMA}`);
+    console.log('');
+}
 
 const sequelize = new Sequelize({
     dialect: 'postgres',

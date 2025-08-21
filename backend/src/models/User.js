@@ -45,10 +45,14 @@ const User = sequelize.define('User', {
     hooks: {
         beforeSave: async (user) => {
             if (user.changed('password')) {
-                console.log('[USER MODEL] Hasheando nueva contraseña');
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[USER MODEL] Hasheando nueva contraseña');
+                }
                 const salt = await bcrypt.genSalt(10);
                 user.password = await bcrypt.hash(user.password, salt);
-                console.log('[USER MODEL] Contraseña hasheada exitosamente');
+                if (process.env.NODE_ENV === 'development') {
+                    console.log('[USER MODEL] Contraseña hasheada exitosamente');
+                }
             }
         }
     }
@@ -56,11 +60,14 @@ const User = sequelize.define('User', {
 
 // Método de instancia para validar contraseña
 User.prototype.validatePassword = async function(password) {
-    console.log('[USER MODEL] Validando contraseña para usuario:', this.email);
-    console.log('[USER MODEL] Contraseña almacenada (hash):', this.password);
+    if (process.env.NODE_ENV === 'development') {
+        console.log('[USER MODEL] Validando contraseña para usuario:', this.email);
+    }
     try {
         const isValid = await bcrypt.compare(password, this.password);
-        console.log('[USER MODEL] Resultado de validación:', isValid);
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[USER MODEL] Resultado de validación:', isValid);
+        }
         return isValid;
     } catch (error) {
         console.error('[USER MODEL] Error al validar contraseña:', error);

@@ -1,22 +1,34 @@
 const express = require('express');
 const { body } = require('express-validator');
+const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
 const validateRequest = require('../middleware/validate.middleware');
 const { verifyToken } = require('../middleware/auth.middleware');
 
+// Rate limiting específico para autenticación
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutos
+    max: 5, // máximo 5 intentos por IP
+    message: {
+        success: false,
+        message: 'Demasiados intentos de autenticación, intenta de nuevo en 15 minutos'
+    },
+    skipSuccessfulRequests: true,
+});
+
 // Middleware para parsear JSON en todas las rutas de este archivo
 router.use(express.json());
 
-// Login
-router.post('/login', [
+// Login con rate limiting
+router.post('/login', authLimiter, [
     body('email').isEmail().withMessage('Debe ser un email válido'),
     body('password').notEmpty().withMessage('La contraseña es requerida'),
     validateRequest
 ], authController.login);
 
-// Register
-router.post('/register', [
+// Register con rate limiting
+router.post('/register', authLimiter, [
     body('email').isEmail().withMessage('Debe ser un email válido'),
     body('password')
         .isLength({ min: 6 })
