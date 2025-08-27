@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   plugins: [react()],
   resolve: {
     alias: {
@@ -11,8 +11,24 @@ export default defineConfig({
     },
   },
   server: {
-    host: '0.0.0.0', // Permite acceso desde cualquier IP
-    port: 5173,      // Puerto por defecto de Vite
-    cors: true,      // Habilita CORS
+    host: mode === 'development' ? '0.0.0.0' : 'localhost',
+    port: 5173,
+    cors: mode === 'development',
   },
-})
+  build: {
+    outDir: 'dist',
+    sourcemap: mode === 'development',
+    minify: mode === 'production',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          mui: ['@mui/material', '@mui/icons-material'],
+        },
+      },
+    },
+  },
+  define: {
+    __DEV__: mode === 'development',
+  },
+}))

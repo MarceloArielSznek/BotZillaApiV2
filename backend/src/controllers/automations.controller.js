@@ -2006,25 +2006,11 @@ class AutomationsController {
 
     async cleanDuplicateSalesPersons(req, res) {
         try {
-            const { cleanDuplicateSalesPersons } = require('../scripts/clean-duplicate-salespersons');
-            const result = await cleanDuplicateSalesPersons();
-            
-            if (result.success) {
-                res.status(200).json({
-                    success: true,
-                    message: result.message,
-                    totalDuplicates: result.totalDuplicates,
-                    totalDeactivated: result.totalDeactivated,
-                    logs: result.logs
-                });
-            } else {
-                res.status(500).json({
-                    success: false,
-                    message: 'Error during cleanup',
-                    error: result.error,
-                    logs: result.logs
-                });
-            }
+            // Script removed during cleanup - function temporarily disabled
+            res.status(503).json({
+                success: false,
+                message: 'Cleanup function temporarily unavailable - script was removed during cleanup'
+            });
         } catch (error) {
             console.error('❌ Error in cleanDuplicateSalesPersons:', error);
             res.status(500).json({
