@@ -108,7 +108,10 @@ async function runSync() {
 
         // Fecha de inicio fija, como se requirió.
         const startDate = '2025-06-15'; 
-        const endDate = new Date().toISOString().split('T')[0];
+        // Fecha de fin: fecha actual + 2 días para capturar estimates que se actualicen durante el día
+        const endDateObj = new Date();
+        endDateObj.setDate(endDateObj.getDate() + 2);
+        const endDate = endDateObj.toISOString().split('T')[0];
 
         const allLeads = await fetchAllEstimatesFromAtticTech(apiKey, startDate, endDate, logMessages);
         const mappedEstimates = mapAtticTechDataToEstimates(allLeads);
@@ -739,7 +742,10 @@ class AutomationsController {
 
                 // Usar parámetros del frontend si están disponibles, sino usar valores por defecto
                 let startDate = '2025-06-15'; // Fecha por defecto
-                let endDate = new Date().toISOString().split('T')[0]; // Hoy por defecto
+                // Fecha de fin por defecto: fecha actual + 2 días para capturar estimates que se actualicen durante el día
+                const endDateObj = new Date();
+                endDateObj.setDate(endDateObj.getDate() + 2);
+                let endDate = endDateObj.toISOString().split('T')[0];
                 
                 // Si hay parámetros en el body, usarlos
                 if (req.body && Object.keys(req.body).length > 0) {

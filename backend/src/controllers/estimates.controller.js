@@ -207,7 +207,10 @@ class EstimatesController {
             startDate.setDate(startDate.getDate() - 7); // Últimos 7 días por defecto
             startDate = startDate.toISOString().split('T')[0];
             
-            let endDate = new Date().toISOString().split('T')[0]; // Hoy por defecto
+            // Fecha de fin por defecto: fecha actual + 2 días para capturar estimates que se actualicen durante el día
+            const endDateObj = new Date();
+            endDateObj.setDate(endDateObj.getDate() + 2);
+            let endDate = endDateObj.toISOString().split('T')[0];
             
             // Si hay parámetros en el body, usarlos
             if (req.body && Object.keys(req.body).length > 0) {
