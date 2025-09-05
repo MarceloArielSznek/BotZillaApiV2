@@ -9,6 +9,7 @@ if (process.env.NODE_ENV === 'development') {
     console.log(`  Database: ${process.env.DB_NAME}`);
     console.log(`  Username: ${process.env.DB_USER}`);
     console.log(`  Schema: ${process.env.DB_SCHEMA}`);
+    console.log(`  SSL: ${process.env.DB_SSL_ENABLED || 'false'}`);
     console.log('');
 }
 
@@ -25,6 +26,12 @@ const sequelize = new Sequelize({
         timestamps: true,
         underscored: true,
         schema: process.env.DB_SCHEMA
+    },
+    dialectOptions: {
+        ssl: process.env.DB_SSL_ENABLED === 'true' ? {
+            require: true,
+            rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED === 'true'
+        } : false
     },
     pool: {
         max: 5,

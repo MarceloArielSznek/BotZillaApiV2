@@ -49,7 +49,13 @@ function App() {
                 } />
                 <Route path="profile" element={<Profile />} />
               </Route>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/" element={
+                <ProtectedRoute>
+                  <Navigate to="/dashboard" replace />
+                </ProtectedRoute>
+              } />
+              {/* Ruta catch-all para prevenir acceso no autorizado */}
+              <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </Router>
         </AuthProvider>

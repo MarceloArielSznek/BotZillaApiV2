@@ -1,6 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
+import { api } from '../config/api';
 import { type NotificationType } from './notificationTypeService';
 
 export interface NotificationTemplate {
@@ -16,36 +14,25 @@ export type CreateTemplateData = Omit<NotificationTemplate, 'id' | 'notification
 export type UpdateTemplateData = Partial<CreateTemplateData>;
 
 
-const getAuthHeaders = () => {
-    const token = authService.getToken();
-    if (!token) {
-        throw new Error('No authentication token found');
-    }
-    return {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    };
-};
 
 const notificationTemplateService = {
     getAll: async (): Promise<NotificationTemplate[]> => {
-        const response = await axios.get(`${API_BASE_URL}/notification-templates`, getAuthHeaders());
+        const response = await api.get('/notification-templates');
         return response.data;
     },
 
     create: async (data: CreateTemplateData): Promise<NotificationTemplate> => {
-        const response = await axios.post(`${API_BASE_URL}/notification-templates`, data, getAuthHeaders());
+        const response = await api.post('/notification-templates', data);
         return response.data;
     },
 
     update: async (id: number, data: UpdateTemplateData): Promise<NotificationTemplate> => {
-        const response = await axios.put(`${API_BASE_URL}/notification-templates/${id}`, data, getAuthHeaders());
+        const response = await api.put(`/notification-templates/${id}`, data);
         return response.data;
     },
 
     delete: async (id: number): Promise<void> => {
-        await axios.delete(`${API_BASE_URL}/notification-templates/${id}`, getAuthHeaders());
+        await api.delete(`/notification-templates/${id}`);
     },
 };
 

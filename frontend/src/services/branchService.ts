@@ -1,6 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
+import { api } from '../config/api';
 
 export interface Branch {
   id: number;
@@ -44,27 +42,12 @@ export interface UpdateBranchData {
   telegram_group_id?: string;
 }
 
-const getAuthHeaders = () => {
-  const token = authService.getToken();
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
-};
 
 const branchService = {
   // GET /api/branches - Obtener todas las branches
   getBranches: async (params: BranchListParams = {}): Promise<BranchListResponse> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/branches`,
-        {
-          ...getAuthHeaders(),
-          params
-        }
-      );
+      const response = await api.get('/branches', { params });
       return response.data;
     } catch (error: any) {
       console.error('Error fetching branches:', error.response?.data || error.message);
@@ -75,10 +58,7 @@ const branchService = {
   // GET /api/branches/:id - Obtener una branch específica
   getBranchById: async (id: number): Promise<Branch> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/branches/${id}`,
-        getAuthHeaders()
-      );
+      const response = await api.get(`/branches/${id}`);
       return response.data;
     } catch (error: any) {
       console.error('Error fetching branch:', error.response?.data || error.message);
@@ -89,11 +69,7 @@ const branchService = {
   // POST /api/branches - Crear nueva branch
   createBranch: async (data: CreateBranchData): Promise<Branch> => {
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/branches`,
-        data,
-        getAuthHeaders()
-      );
+      const response = await api.post('/branches', data);
       return response.data.branch;
     } catch (error: any) {
       console.error('Error creating branch:', error.response?.data || error.message);
@@ -104,11 +80,7 @@ const branchService = {
   // PUT /api/branches/:id - Actualizar branch
   updateBranch: async (id: number, data: UpdateBranchData): Promise<Branch> => {
     try {
-      const response = await axios.put(
-        `${API_BASE_URL}/branches/${id}`,
-        data,
-        getAuthHeaders()
-      );
+      const response = await api.put(`/branches/${id}`, data);
       return response.data.branch;
     } catch (error: any) {
       console.error('Error updating branch:', error.response?.data || error.message);
@@ -119,10 +91,7 @@ const branchService = {
   // DELETE /api/branches/:id - Eliminar branch
   deleteBranch: async (id: number): Promise<void> => {
     try {
-      await axios.delete(
-        `${API_BASE_URL}/branches/${id}`,
-        getAuthHeaders()
-      );
+      await api.delete(`/branches/${id}`);
     } catch (error: any) {
       console.error('Error deleting branch:', error.response?.data || error.message);
       throw error;
@@ -132,11 +101,7 @@ const branchService = {
   // POST /api/branches/:id/salespersons - Asignar salesperson a branch
   assignSalesPerson: async (branchId: number, salesPersonId: number): Promise<void> => {
     try {
-      await axios.post(
-        `${API_BASE_URL}/branches/${branchId}/salespersons`,
-        { salesPersonId },
-        getAuthHeaders()
-      );
+      await api.post(`/branches/${branchId}/salespersons`, { salesPersonId });
     } catch (error: any) {
       console.error('Error assigning salesperson:', error.response?.data || error.message);
       throw error;
@@ -146,10 +111,7 @@ const branchService = {
   // DELETE /api/branches/:id/salespersons/:salesPersonId - Remover salesperson de branch
   removeSalesPerson: async (branchId: number, salesPersonId: number): Promise<void> => {
     try {
-      await axios.delete(
-        `${API_BASE_URL}/branches/${branchId}/salespersons/${salesPersonId}`,
-        getAuthHeaders()
-      );
+      await api.delete(`/branches/${branchId}/salespersons/${salesPersonId}`);
     } catch (error: any) {
       console.error('Error removing salesperson:', error.response?.data || error.message);
       throw error;

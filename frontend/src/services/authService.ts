@@ -1,5 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
+import { api } from '../config/api';
 
 interface LoginCredentials {
   email: string;
@@ -17,7 +16,7 @@ const authService = {
   login: async (credentials: LoginCredentials): Promise<AuthResponse> => {
     try {
       console.log('Intentando login con:', credentials.email);
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, credentials);
+      const response = await api.post('/auth/login', credentials);
       console.log('Respuesta del servidor:', response.data);
       
       if (response.data.token) {
@@ -62,6 +61,22 @@ const authService = {
 
   getToken: () => {
     return localStorage.getItem('token');
+  },
+
+  // Verificar si el token es válido
+  validateToken: async (): Promise<boolean> => {
+    const token = localStorage.getItem('token');
+    if (!token) return false;
+
+    try {
+      const response = await api.get('/auth/verify');
+      return response.status === 200;
+    } catch (error) {
+      // Token inválido, limpiar localStorage
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+      return false;
+    }
   }
 };
 

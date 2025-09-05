@@ -1,6 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
+import { api } from '../config/api';
 
 export interface GenerateOperationPostResponse {
   eligible: boolean;
@@ -19,12 +17,7 @@ export interface GenerateOperationPostResponse {
 }
 
 export async function generateOperationPost(jobId: number, notes?: string): Promise<GenerateOperationPostResponse> {
-  const token = await authService.getToken();
-  const resp = await axios.post(
-    `${API_BASE_URL}/ai/generate-operation-post`,
-    { jobId, notes },
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  const resp = await api.post('/ai/generate-operation-post', { jobId, notes });
   return resp.data.data;
 }
 

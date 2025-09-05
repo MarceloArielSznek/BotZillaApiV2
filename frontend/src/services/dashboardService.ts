@@ -1,6 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
+import { api } from '../config/api';
 
 export interface EstimatesByStatus {
   id: number;
@@ -100,10 +98,8 @@ export interface DashboardSummary {
   };
 }
 
-const getAuthHeaders = () => ({ headers: { Authorization: `Bearer ${authService.getToken()}` } });
-
 export const getDashboardSummary = async (): Promise<DashboardSummary> => {
-  const res = await axios.get(`${API_BASE_URL}/dashboard/summary`, getAuthHeaders());
+  const res = await api.get('/dashboard/summary');
   return res.data as DashboardSummary;
 };
 

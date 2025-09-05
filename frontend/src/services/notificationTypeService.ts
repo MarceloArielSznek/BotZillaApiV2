@@ -1,42 +1,29 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
+import { api } from '../config/api';
 
 export interface NotificationType {
     id: number;
     name: string;
 }
 
-const getAuthHeaders = () => {
-    const token = authService.getToken();
-    if (!token) {
-        throw new Error('No authentication token found');
-    }
-    return {
-        headers: {
-            Authorization: `Bearer ${token}`,
-        },
-    };
-};
 
 const notificationTypeService = {
     getAll: async (): Promise<NotificationType[]> => {
-        const response = await axios.get(`${API_BASE_URL}/notification-types`, getAuthHeaders());
+        const response = await api.get('/notification-types');
         return response.data;
     },
 
     create: async (name: string): Promise<NotificationType> => {
-        const response = await axios.post(`${API_BASE_URL}/notification-types`, { name }, getAuthHeaders());
+        const response = await api.post('/notification-types', { name });
         return response.data;
     },
 
     update: async (id: number, name: string): Promise<NotificationType> => {
-        const response = await axios.put(`${API_BASE_URL}/notification-types/${id}`, { name }, getAuthHeaders());
+        const response = await api.put(`/notification-types/${id}`, { name });
         return response.data;
     },
 
     delete: async (id: number): Promise<void> => {
-        await axios.delete(`${API_BASE_URL}/notification-types/${id}`, getAuthHeaders());
+        await api.delete(`/notification-types/${id}`);
     },
 };
 

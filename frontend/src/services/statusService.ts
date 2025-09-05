@@ -1,6 +1,3 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
 import { api } from '../config/api';
 import type { EstimateStatus, SpecialShift } from '../interfaces';
 
@@ -68,15 +65,6 @@ export interface StatusAnalyticsResponse {
   };
 }
 
-const getAuthHeaders = () => {
-  const token = authService.getToken();
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
-};
 
 export const getStatuses = async (): Promise<EstimateStatus[]> => {
     const response = await api.get('/estimate-statuses');
@@ -97,13 +85,7 @@ const statusService = {
   // GET /api/estimate-statuses - Obtener todos los estimate statuses
   getStatuses: async (params: StatusListParams = {}): Promise<StatusListResponse> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/estimate-statuses`,
-        {
-          ...getAuthHeaders(),
-          params
-        }
-      );
+      const response = await api.get('/estimate-statuses', { params });
       return response.data;
     } catch (error: any) {
       console.error('Error fetching statuses:', error.response?.data || error.message);
@@ -114,10 +96,7 @@ const statusService = {
   // GET /api/estimate-statuses/:id - Obtener un estimate status específico
   getStatusById: async (id: number): Promise<EstimateStatus> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/estimate-statuses/${id}`,
-        getAuthHeaders()
-      );
+      const response = await api.get(`/estimate-statuses/${id}`);
       return response.data;
     } catch (error: any) {
       console.error('Error fetching status:', error.response?.data || error.message);
@@ -128,11 +107,7 @@ const statusService = {
   // POST /api/estimate-statuses - Crear nuevo estimate status
   createStatus: async (data: CreateStatusData): Promise<EstimateStatus> => {
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/estimate-statuses`,
-        data,
-        getAuthHeaders()
-      );
+      const response = await api.post('/estimate-statuses', data);
       return response.data.status;
     } catch (error: any) {
       console.error('Error creating status:', error.response?.data || error.message);
@@ -143,11 +118,7 @@ const statusService = {
   // PUT /api/estimate-statuses/:id - Actualizar estimate status
   updateStatus: async (id: number, data: UpdateStatusData): Promise<EstimateStatus> => {
     try {
-      const response = await axios.put(
-        `${API_BASE_URL}/estimate-statuses/${id}`,
-        data,
-        getAuthHeaders()
-      );
+      const response = await api.put(`/estimate-statuses/${id}`, data);
       return response.data.status;
     } catch (error: any) {
       console.error('Error updating status:', error.response?.data || error.message);
@@ -158,10 +129,7 @@ const statusService = {
   // DELETE /api/estimate-statuses/:id - Eliminar estimate status
   deleteStatus: async (id: number): Promise<void> => {
     try {
-      await axios.delete(
-        `${API_BASE_URL}/estimate-statuses/${id}`,
-        getAuthHeaders()
-      );
+      await api.delete(`/estimate-statuses/${id}`);
     } catch (error: any) {
       console.error('Error deleting status:', error.response?.data || error.message);
       throw error;
@@ -171,13 +139,7 @@ const statusService = {
   // GET /api/estimate-statuses/analytics - Obtener analytics de statuses
   getStatusAnalytics: async (params: StatusAnalyticsParams = {}): Promise<StatusAnalyticsResponse> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/estimate-statuses/analytics`,
-        {
-          ...getAuthHeaders(),
-          params
-        }
-      );
+      const response = await api.get('/estimate-statuses/analytics', { params });
       return response.data;
     } catch (error: any) {
       console.error('Error fetching status analytics:', error.response?.data || error.message);

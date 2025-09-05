@@ -1,6 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
+import { api } from '../config/api';
 
 export interface Notification {
     id: number;
@@ -47,21 +45,11 @@ export interface DashboardStats {
     currentWarnings: { id: number; name: string; warning_count: number; activeLeadsCount: string; }[];
 }
 
-const getAuthHeaders = () => {
-    const token = authService.getToken();
-    return {
-        headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-        },
-    };
-};
 
 const notificationService = {
     fetchNotifications: async (params: FetchNotificationsParams = {}): Promise<FetchNotificationsResponse> => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/notifications`, {
-                ...getAuthHeaders(),
+            const response = await api.get('/notifications', {
                 params: params,
             });
             return response.data;
@@ -73,7 +61,7 @@ const notificationService = {
 
     fetchDashboardStats: async (): Promise<DashboardStats> => {
         try {
-            const response = await axios.get(`${API_BASE_URL}/notifications/dashboard-stats`, getAuthHeaders());
+            const response = await api.get('/notifications/dashboard-stats');
             return response.data;
         } catch (error: any) {
             console.error('Error fetching notification dashboard stats:', error);

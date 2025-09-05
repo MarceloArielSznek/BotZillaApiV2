@@ -25,6 +25,36 @@ api.interceptors.request.use((config) => {
     return Promise.reject(error);
 });
 
+// Interceptor de respuesta para manejar errores de autenticación
+api.interceptors.response.use(
+    (response) => response,
+    (error) => {
+        if (error.response?.status === 401) {
+            // Token inválido o expirado - NO mostrar URL por seguridad
+            if (import.meta.env.MODE === 'development') {
+                console.warn('🔒 Sesión expirada - redirigiendo al login');
+            }
+            
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            
+            // Redirigir al login solo si no estamos ya en la página de login
+            if (!window.location.pathname.includes('/login')) {
+                window.location.href = '/login';
+            }
+        }
+        
+        // En producción, no mostrar detalles de errores de API
+        if (import.meta.env.MODE === 'production') {
+            // Crear error genérico sin exponer URLs o detalles internos
+            const sanitizedError = new Error('Error de conexión');
+            return Promise.reject(sanitizedError);
+        }
+        
+        return Promise.reject(error);
+    }
+);
+
 
 export const API_ENDPOINTS = {
     AUTH: {

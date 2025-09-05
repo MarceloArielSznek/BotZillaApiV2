@@ -1,6 +1,4 @@
-import axios from 'axios';
-import { API_BASE_URL } from '../config/api';
-import authService from './authService';
+import { api } from '../config/api';
 
 export interface CrewMember {
   id: number;
@@ -58,27 +56,12 @@ export interface UpdateCrewMemberData {
   animal?: string | null;
 }
 
-const getAuthHeaders = () => {
-  const token = authService.getToken();
-  return {
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-  };
-};
 
 const crewService = {
   // GET /api/crew-members - Obtener todos los crew members
   getCrewMembers: async (params: CrewMemberListParams = {}): Promise<CrewMemberListResponse> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/crew-members`,
-        {
-          ...getAuthHeaders(),
-          params
-        }
-      );
+      const response = await api.get('/crew-members', { params });
       return response.data;
     } catch (error: any) {
       console.error('Error fetching crew members:', error.response?.data || error.message);
@@ -89,10 +72,7 @@ const crewService = {
   // GET /api/crew-members/:id - Obtener un crew member específico
   getCrewMemberById: async (id: number): Promise<CrewMember> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/crew-members/${id}`,
-        getAuthHeaders()
-      );
+      const response = await api.get(`/crew-members/${id}`);
       return response.data.crewMember;
     } catch (error: any) {
       console.error('Error fetching crew member:', error.response?.data || error.message);
@@ -103,11 +83,7 @@ const crewService = {
   // POST /api/crew-members - Crear nuevo crew member
   createCrewMember: async (data: CreateCrewMemberData): Promise<CrewMember> => {
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/crew-members`,
-        data,
-        getAuthHeaders()
-      );
+      const response = await api.post('/crew-members', data);
       return response.data.crewMember;
     } catch (error: any) {
       console.error('Error creating crew member:', error.response?.data || error.message);
@@ -118,11 +94,7 @@ const crewService = {
   // PUT /api/crew-members/:id - Actualizar crew member
   updateCrewMember: async (id: number, data: UpdateCrewMemberData): Promise<CrewMember> => {
     try {
-      const response = await axios.put(
-        `${API_BASE_URL}/crew-members/${id}`,
-        data,
-        getAuthHeaders()
-      );
+      const response = await api.put(`/crew-members/${id}`, data);
       return response.data.crewMember;
     } catch (error: any) {
       console.error('Error updating crew member:', error.response?.data || error.message);
@@ -133,10 +105,7 @@ const crewService = {
   // DELETE /api/crew-members/:id - Eliminar crew member
   deleteCrewMember: async (id: number): Promise<void> => {
     try {
-      await axios.delete(
-        `${API_BASE_URL}/crew-members/${id}`,
-        getAuthHeaders()
-      );
+      await api.delete(`/crew-members/${id}`);
     } catch (error: any) {
       console.error('Error deleting crew member:', error.response?.data || error.message);
       throw error;
@@ -146,10 +115,7 @@ const crewService = {
   // GET /api/crew-members/:id/branches - Obtener branches de un crew member
   getCrewMemberBranches: async (id: number): Promise<Branch[]> => {
     try {
-      const response = await axios.get(
-        `${API_BASE_URL}/crew-members/${id}/branches`,
-        getAuthHeaders()
-      );
+      const response = await api.get(`/crew-members/${id}/branches`);
       return response.data.branches;
     } catch (error: any) {
       console.error('Error fetching crew member branches:', error.response?.data || error.message);
@@ -160,11 +126,7 @@ const crewService = {
   // POST /api/crew-members/:id/branches - Asignar branches a crew member
   assignBranches: async (id: number, branchIds: number[]): Promise<void> => {
     try {
-      await axios.post(
-        `${API_BASE_URL}/crew-members/${id}/branches`,
-        { branchIds },
-        getAuthHeaders()
-      );
+      await api.post(`/crew-members/${id}/branches`, { branchIds });
     } catch (error: any) {
       console.error('Error assigning branches:', error.response?.data || error.message);
       throw error;
