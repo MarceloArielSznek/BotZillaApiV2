@@ -390,6 +390,217 @@ const confirmTelegramIdAssignment = async (req, res) => {
   }
 };
 
+/**
+ * @description Find a salesperson's telegram_id by their name using fuzzy matching.
+ * This handles variations like "Marcelo Ariel Sznek" vs "Marcelo Sznek" or typos like "Marclo" vs "Marcelo".
+ * @param {object} req - Express request object.
+ * @param {object} res - Express response object.
+ */
+const findTelegramIdByName = async (req, res) => {
+  const { name } = req.body;
+
+  if (!name || typeof name !== 'string' || name.trim().length === 0) {
+    return res.status(400).json({ 
+      success: false,
+      message: 'name is required and must be a non-empty string' 
+    });
+  }
+
+  const searchName = name.trim();
+
+  try {
+    // 1. Búsqueda exacta primero
+    let salesperson = await SalesPerson.findOne({
+      where: { name: searchName },
+      attributes: ['id', 'name', 'telegram_id'],
+      include: [{ 
+        model: Branch, 
+        as: 'branches', 
+        attributes: ['id', 'name'],
+        through: { attributes: [] } 
+      }]
+    });
+
+    if (salesperson) {
+      const nameParts = splitName(salesperson.name);
+      return res.json({
+        success: true,
+        exact_match: true,
+        salesperson_id: salesperson.id,
+        name: salesperson.name,
+        first_name: nameParts.first_name,
+        last_name: nameParts.last_name,
+        telegram_id: salesperson.telegram_id,
+        has_telegram: !!salesperson.telegram_id,
+        branches: salesperson.branches.map(b => ({ id: b.id, name: b.name }))
+      });
+    }
+
+    // 2. Búsqueda fuzzy usando ILIKE con múltiples patrones
+    const searchPatterns = [];
+    const words = searchName.split(/\s+/).filter(word => word.length > 2); // Solo palabras de 3+ caracteres
+
+    // Crear patrones de búsqueda
+    words.forEach(word => {
+      searchPatterns.push(`%${word}%`); // Cada palabra individual
+    });
+    
+    // Patrón con todas las palabras
+    searchPatterns.push(`%${words.join('%')}%`);
+
+    // Buscar usando OR con todos los patrones
+    const whereConditions = searchPatterns.map(pattern => ({
+      name: { [SequelizeOp.iLike]: pattern }
+    }));
+
+    const salespersons = await SalesPerson.findAll({
+      where: {
+        [SequelizeOp.or]: whereConditions
+      },
+      attributes: ['id', 'name', 'telegram_id'],
+      include: [{ 
+        model: Branch, 
+        as: 'branches', 
+        attributes: ['id', 'name'],
+        through: { attributes: [] } 
+      }],
+      limit: 10 // Limitar resultados para evitar sobrecarga
+    });
+
+    if (salespersons.length === 0) {
+      return res.json({
+        success: false,
+        message: 'No salesperson found with similar name',
+        searched_name: searchName,
+        suggestions: []
+      });
+    }
+
+    // 3. Si hay múltiples resultados, calcular similitud básica
+    const results = salespersons.map(sp => {
+      const similarity = calculateNameSimilarity(searchName, sp.name);
+      const nameParts = splitName(sp.name);
+      return {
+        salesperson_id: sp.id,
+        name: sp.name,
+        first_name: nameParts.first_name,
+        last_name: nameParts.last_name,
+        telegram_id: sp.telegram_id,
+        has_telegram: !!sp.telegram_id,
+        similarity_score: similarity,
+        branches: sp.branches.map(b => ({ id: b.id, name: b.name }))
+      };
+    });
+
+    // Ordenar por similitud (mayor a menor)
+    results.sort((a, b) => b.similarity_score - a.similarity_score);
+
+    // Si el primer resultado tiene alta similitud (>0.7), devolverlo como match
+    if (results[0].similarity_score > 0.7) {
+      return res.json({
+        success: true,
+        exact_match: false,
+        fuzzy_match: true,
+        searched_name: searchName,
+        ...results[0],
+        other_matches: results.slice(1, 3) // Incluir hasta 2 matches alternativos
+      });
+    }
+
+    // Si no hay un match claro, devolver las opciones
+    return res.json({
+      success: false,
+      message: 'Multiple similar names found, please be more specific',
+      searched_name: searchName,
+      suggestions: results.slice(0, 5) // Top 5 sugerencias
+    });
+
+  } catch (error) {
+    console.error('Error finding telegram_id by name:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Internal server error',
+      error: error.message 
+    });
+  }
+};
+
+/**
+ * Separa un nombre completo en first_name y last_name
+ * @param {string} fullName - Nombre completo
+ * @returns {object} { first_name, last_name }
+ */
+function splitName(fullName) {
+  if (!fullName || typeof fullName !== 'string') {
+    return { first_name: '', last_name: '' };
+  }
+
+  const nameParts = fullName.trim().split(/\s+/);
+  
+  if (nameParts.length === 0) {
+    return { first_name: '', last_name: '' };
+  } else if (nameParts.length === 1) {
+    return { first_name: nameParts[0], last_name: '' };
+  } else {
+    // Primer nombre = first_name, resto = last_name
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ');
+    return { first_name: firstName, last_name: lastName };
+  }
+}
+
+/**
+ * Calcula una puntuación de similitud básica entre dos nombres
+ * @param {string} search - Nombre buscado
+ * @param {string} target - Nombre en la base de datos
+ * @returns {number} Puntuación entre 0 y 1
+ */
+function calculateNameSimilarity(search, target) {
+  const searchLower = search.toLowerCase().trim();
+  const targetLower = target.toLowerCase().trim();
+  
+  // Si son iguales, puntuación perfecta
+  if (searchLower === targetLower) return 1.0;
+  
+  // Dividir en palabras
+  const searchWords = searchLower.split(/\s+/);
+  const targetWords = targetLower.split(/\s+/);
+  
+  let matchingWords = 0;
+  let totalWords = Math.max(searchWords.length, targetWords.length);
+  
+  // Contar palabras que coinciden
+  searchWords.forEach(searchWord => {
+    const found = targetWords.some(targetWord => {
+      // Coincidencia exacta
+      if (searchWord === targetWord) return true;
+      
+      // Coincidencia si una palabra contiene a la otra (para casos como "Marcelo" vs "Marclo")
+      if (searchWord.length >= 3 && targetWord.length >= 3) {
+        return searchWord.includes(targetWord) || targetWord.includes(searchWord);
+      }
+      
+      return false;
+    });
+    
+    if (found) matchingWords++;
+  });
+  
+  // Bonus si el target contiene todas las palabras del search
+  const allWordsFound = searchWords.every(searchWord => 
+    targetWords.some(targetWord => 
+      targetWord.includes(searchWord) || searchWord.includes(targetWord)
+    )
+  );
+  
+  let score = matchingWords / totalWords;
+  if (allWordsFound && searchWords.length <= targetWords.length) {
+    score += 0.2; // Bonus por contener todas las palabras
+  }
+  
+  return Math.min(score, 1.0);
+}
+
 
 module.exports = {
   findUserByTelegramId,
@@ -400,4 +611,5 @@ module.exports = {
   listSalespersonsByBranchChoice,
   prepareTelegramIdAssignment,
   confirmTelegramIdAssignment,
+  findTelegramIdByName,
 }; 

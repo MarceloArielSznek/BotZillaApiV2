@@ -622,4 +622,125 @@ Gets a list of salespersons for a specific branch who do not have a Telegram ID 
 - **Path Parameter**: `id` (The numerical ID of the branch)
 - **Success Response**: A JSON array of salesperson objects `[{ "id": 1, "name": "John Doe" }]`.
 
+### Find Telegram ID by Name (Fuzzy Search)
+Busca el telegram_id de un vendedor utilizando su nombre con soporte para búsqueda aproximada. Maneja variaciones como nombres incompletos o con errores tipográficos.
+
+- **Endpoint**: `POST /make/find-telegram-by-name`
+- **Authentication**: Requiere `X-API-Key` en el header
+- **Body**:
+  ```json
+  {
+      "name": "Marcelo Ariel Sznek"
+  }
+  ```
+
+**Casos de Uso:**
+- Nombre exacto: `"Marcelo Sznek"` → encuentra `"Marcelo Sznek"`
+- Nombre con segundo nombre: `"Marcelo Ariel Sznek"` → encuentra `"Marcelo Sznek"`
+- Error tipográfico: `"Marclo Sznek"` → encuentra `"Marcelo Sznek"`
+- Nombre parcial: `"Marcelo"` → encuentra `"Marcelo Sznek"`
+
+**Success Response - Match Exacto (200)**:
+```json
+{
+    "success": true,
+    "exact_match": true,
+    "salesperson_id": 42,
+    "name": "Marcelo Sznek",
+    "first_name": "Marcelo",
+    "last_name": "Sznek",
+    "telegram_id": "123456789",
+    "has_telegram": true,
+    "branches": [
+        {"id": 1, "name": "San Bernardino"},
+        {"id": 3, "name": "Orange County"}
+    ]
+}
+```
+
+**Success Response - Match Aproximado (200)**:
+```json
+{
+    "success": true,
+    "exact_match": false,
+    "fuzzy_match": true,
+    "searched_name": "Marcelo Ariel Sznek",
+    "salesperson_id": 42,
+    "name": "Marcelo Sznek",
+    "first_name": "Marcelo",
+    "last_name": "Sznek",
+    "telegram_id": "123456789",
+    "has_telegram": true,
+    "similarity_score": 0.85,
+    "branches": [
+        {"id": 1, "name": "San Bernardino"}
+    ],
+    "other_matches": [
+        {
+            "salesperson_id": 43,
+            "name": "Marco Sznek",
+            "first_name": "Marco",
+            "last_name": "Sznek",
+            "telegram_id": null,
+            "has_telegram": false,
+            "similarity_score": 0.72,
+            "branches": []
+        }
+    ]
+}
+```
+
+**Response - Sin Match Claro (200)**:
+```json
+{
+    "success": false,
+    "message": "Multiple similar names found, please be more specific",
+    "searched_name": "Marc",
+    "suggestions": [
+        {
+            "salesperson_id": 42,
+            "name": "Marcelo Sznek",
+            "first_name": "Marcelo",
+            "last_name": "Sznek",
+            "telegram_id": "123456789",
+            "has_telegram": true,
+            "similarity_score": 0.65,
+            "branches": [{"id": 1, "name": "San Bernardino"}]
+        },
+        {
+            "salesperson_id": 44,
+            "name": "Marcus Johnson",
+            "first_name": "Marcus",
+            "last_name": "Johnson",
+            "telegram_id": null,
+            "has_telegram": false,
+            "similarity_score": 0.58,
+            "branches": [{"id": 2, "name": "Kent"}]
+        }
+    ]
+}
+```
+
+**Response - No Encontrado (200)**:
+```json
+{
+    "success": false,
+    "message": "No salesperson found with similar name",
+    "searched_name": "Nombre Inexistente",
+    "suggestions": []
+}
+```
+
+**Error Responses:**
+- `400 Bad Request`: Nombre faltante o inválido
+- `401 Unauthorized`: API key faltante
+- `403 Forbidden`: API key inválido  
+- `500 Internal Server Error`: Error del servidor
+
+**Notas:**
+- El algoritmo considera coincidencias exactas, parciales y con errores tipográficos
+- Si `similarity_score > 0.7`, se considera un match válido automáticamente
+- El campo `has_telegram` indica si el vendedor ya tiene telegram_id configurado
+- Se incluyen las branches asociadas al vendedor para contexto adicional
+
 --- 

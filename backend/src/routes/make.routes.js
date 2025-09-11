@@ -258,5 +258,72 @@ router.post('/salespersons/prepare-assignment', makeController.prepareTelegramId
  */
 router.post('/salespersons/confirm-assignment', makeController.confirmTelegramIdAssignment);
 
+/**
+ * @swagger
+ * /make/find-telegram-by-name:
+ *   post:
+ *     summary: Find a salesperson's telegram_id by their name using fuzzy matching
+ *     tags: [Make.com]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *             properties:
+ *               name:
+ *                 type: string
+ *                 description: The name of the salesperson to search for (supports fuzzy matching)
+ *                 example: "Marcelo Ariel Sznek"
+ *     responses:
+ *       200:
+ *         description: Search results with telegram_id if found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 exact_match:
+ *                   type: boolean
+ *                 fuzzy_match:
+ *                   type: boolean
+ *                 salesperson_id:
+ *                   type: integer
+ *                 name:
+ *                   type: string
+ *                 telegram_id:
+ *                   type: string
+ *                 has_telegram:
+ *                   type: boolean
+ *                 similarity_score:
+ *                   type: number
+ *                 branches:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                 other_matches:
+ *                   type: array
+ *                   description: Alternative matches when fuzzy matching is used
+ *                 suggestions:
+ *                   type: array
+ *                   description: Suggested matches when no clear match is found
+ *       400:
+ *         description: Bad Request. Name is missing or invalid.
+ *       500:
+ *         description: Internal server error.
+ */
+router.post('/find-telegram-by-name', makeController.findTelegramIdByName);
+
 
 module.exports = router; 
