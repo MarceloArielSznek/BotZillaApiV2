@@ -226,42 +226,6 @@ router.post(
     automationsController.sendDailySummary
 );
 
-/**
- * @swagger
- * /api/automations/clean-duplicate-salespersons:
- *   post:
- *     summary: Clean duplicate salespersons and mark unused ones as inactive.
- *     tags: [Automations]
- *     security:
- *       - ApiKeyAuth: []
- *     responses:
- *       200:
- *         description: Successfully cleaned duplicate salespersons.
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                 message:
- *                   type: string
- *                 totalDuplicates:
- *                   type: integer
- *                 totalDeactivated:
- *                   type: integer
- *                 logs:
- *                   type: array
- *                   items:
- *                     type: string
- *       500:
- *         description: Server error during cleanup
- */
-router.post(
-    '/clean-duplicate-salespersons',
-    validateApiKey,
-    automationsController.cleanDuplicateSalesPersons
-);
 
 /**
  * @swagger

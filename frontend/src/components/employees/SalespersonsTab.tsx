@@ -9,7 +9,7 @@ import {
 import {
   Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon,
   Search as SearchIcon, Refresh as RefreshIcon, Visibility as ViewIcon,
-  Send as SendIcon, CleaningServices as CleaningIcon
+  Send as SendIcon
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import { debounce } from 'lodash';
@@ -47,7 +47,6 @@ const SalespersonsTab: React.FC = () => {
     const [activeEstimates, setActiveEstimates] = useState<Estimate[]>([]);
     const [estimatesLoading, setEstimatesLoading] = useState(false);
     const [reportSending, setReportSending] = useState(false);
-    const [cleaningLoading, setCleaningLoading] = useState(false);
     
     const [createFormData, setCreateFormData] = useState<CreateSalesPersonData>(initialCreateFormData);
     const [editFormData, setEditFormData] = useState<UpdateSalesPersonData>({ name: '', phone: '', telegram_id: '' });
@@ -270,27 +269,6 @@ const SalespersonsTab: React.FC = () => {
         }
     };
 
-    const handleCleanDuplicates = async () => {
-        if (!window.confirm('¿Estás seguro de que quieres ejecutar la limpieza de duplicados? Esta acción no se puede deshacer.')) {
-            return;
-        }
-
-        setCleaningLoading(true);
-        try {
-            const result = await salespersonService.cleanDuplicateSalesPersons();
-            enqueueSnackbar(result.message, { variant: 'success' });
-            
-            // Mostrar logs en consola para debugging
-            console.log('Limpieza completada:', result);
-            
-            // Recargar la lista
-            fetchSalespersons();
-        } catch (err: any) {
-            enqueueSnackbar(`Error durante la limpieza: ${err.response?.data?.message || err.message}`, { variant: 'error' });
-        } finally {
-            setCleaningLoading(false);
-        }
-    };
     
     const availableBranches = branches.filter(b => 
         !selectedSalesperson?.branches.some(assigned => assigned.id === b.id)
@@ -317,7 +295,7 @@ const SalespersonsTab: React.FC = () => {
                             label="Branch"
                         >
                             <MenuItem value=""><em>All Branches</em></MenuItem>
-                            {branches.map(branch => (
+                            {branches && branches.map(branch => (
                                 <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>
                             ))}
                         </Select>
@@ -333,15 +311,6 @@ const SalespersonsTab: React.FC = () => {
                     />
                 </Box>
                 <Box display="flex" gap={2}>
-                    <Button 
-                        variant="outlined" 
-                        startIcon={<CleaningIcon />} 
-                        onClick={handleCleanDuplicates}
-                        disabled={cleaningLoading}
-                        color="warning"
-                    >
-                        {cleaningLoading ? <CircularProgress size={20} /> : 'Clean Duplicates'}
-                    </Button>
                     <Button variant="contained" startIcon={<AddIcon />} onClick={openCreateModal}>New Salesperson</Button>
                 </Box>
             </Box>
@@ -513,7 +482,7 @@ const SalespersonsTab: React.FC = () => {
                                 </Box>
                             )}
                         >
-                            {branches.map((branch) => (
+                            {branches && branches.map((branch) => (
                                 <MenuItem key={branch.id} value={branch.id}>
                                     {branch.name}
                                 </MenuItem>

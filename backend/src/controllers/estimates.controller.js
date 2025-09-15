@@ -22,14 +22,31 @@ class EstimatesController {
     // Obtener todos los estimates con filtros y paginación
     async getAllEstimates(req, res) {
         try {
-            const { page = 1, limit = 10, status, branch, salesperson, startDate, endDate, sort_by, sort_order, has_job } = req.query;
+            const { page = 1, limit = 10, status, branch, salesperson, startDate, endDate, sort_by, sort_order, search } = req.query;
             const offset = (page - 1) * limit;
 
             const whereClause = {};
             if (status) whereClause.status_id = status;
             if (branch) whereClause.branch_id = branch;
             if (salesperson) whereClause.sales_person_id = salesperson;
-            let usedEstimateIdsSet = null;
+            
+            // Para la búsqueda, usaremos include con where en lugar de whereClause
+            const includeClause = [
+                { model: SalesPerson, as: 'salesperson', attributes: ['name'] },
+                { model: Branch, as: 'branch', attributes: ['name'] },
+                { model: EstimateStatus, as: 'status', attributes: ['name'] }
+            ];
+
+            // Agregar búsqueda por texto
+            if (search && search.trim()) {
+                const searchTerm = search.trim();
+                whereClause[Op.or] = [
+                    { name: { [Op.iLike]: `%${searchTerm}%` } },
+                    { customer_name: { [Op.iLike]: `%${searchTerm}%` } },
+                    { '$salesperson.name$': { [Op.iLike]: `%${searchTerm}%` } },
+                    { '$branch.name$': { [Op.iLike]: `%${searchTerm}%` } }
+                ];
+            }
             
             // Agregar filtros de fecha
             if (startDate) {
@@ -47,21 +64,6 @@ class EstimatesController {
                 }
             }
 
-            // Filtro por estimates con/ sin job relacionado
-            if (has_job === 'true' || has_job === true || has_job === 'false' || has_job === false) {
-                const usedEstimateIds = await Job.findAll({
-                    attributes: ['estimate_id'],
-                    where: { estimate_id: { [Op.ne]: null } },
-                    raw: true
-                }).then(jobs => jobs.map(j => j.estimate_id));
-                usedEstimateIdsSet = new Set(usedEstimateIds);
-
-                if (has_job === 'true' || has_job === true) {
-                    whereClause.id = { [Op.in]: usedEstimateIds };
-                } else {
-                    whereClause.id = { [Op.notIn]: usedEstimateIds };
-                }
-            }
 
             const orderClause = [];
             if (sort_by) {
@@ -78,34 +80,14 @@ class EstimatesController {
 
             const estimates = await Estimate.findAndCountAll({
                 where: whereClause,
-                include: [
-                    { model: SalesPerson, as: 'salesperson', attributes: ['name'] },
-                    { model: Branch, as: 'branch', attributes: ['name'] },
-                    { model: EstimateStatus, as: 'status', attributes: ['name'] }
-                ],
+                include: includeClause,
                 limit: parseInt(limit),
                 offset: offset,
                 order: orderClause
             });
 
-            // Mapear jobs para los estimates de la página actual
-            const currentEstimateIds = estimates.rows.map(e => e.id);
-            const jobsForCurrent = await Job.findAll({
-                attributes: ['id', 'name', 'estimate_id'],
-                where: { estimate_id: { [Op.in]: currentEstimateIds } },
-                raw: true
-            });
-            const jobMap = new Map();
-            for (const j of jobsForCurrent) {
-                if (j.estimate_id) jobMap.set(j.estimate_id, { id: j.id, name: j.name });
-            }
-
             const transformedData = estimates.rows.map(e => {
-                const t = transformEstimateForFrontend(e);
-                const job = jobMap.get(t.id);
-                t.has_job = !!job;
-                if (job) t.job = job;
-                return t;
+                return transformEstimateForFrontend(e);
             });
 
             res.json({
@@ -795,6 +777,95 @@ class EstimatesController {
         }
 
         return newStatus;
+    }
+
+    // Actualizar un estimate
+    async updateEstimate(req, res) {
+        try {
+            const { id } = req.params;
+            const updateData = req.body;
+            
+            console.log(`🔄 Actualizando estimate ID: ${id}`, updateData);
+            
+            // Verificar si el estimate existe
+            const estimate = await Estimate.findByPk(id);
+            if (!estimate) {
+                return res.status(404).json({ message: 'Estimate not found' });
+            }
+
+            // Campos permitidos para actualizar
+            const allowedFields = [
+                'name',
+                'customer_name', 
+                'customer_address',
+                'customer_email',
+                'customer_phone',
+                'crew_notes',
+                'price',
+                'retail_cost',
+                'final_price',
+                'sub_service_retail_cost',
+                'discount',
+                'attic_tech_hours',
+                'sales_person_id',
+                'branch_id',
+                'status_id'
+            ];
+
+            // Filtrar solo los campos permitidos
+            const filteredData = {};
+            Object.keys(updateData).forEach(key => {
+                if (allowedFields.includes(key) && updateData[key] !== undefined) {
+                    filteredData[key] = updateData[key];
+                }
+            });
+
+            // Actualizar el estimate
+            await estimate.update(filteredData);
+
+            // Obtener el estimate actualizado con relaciones
+            const updatedEstimate = await Estimate.findByPk(id, {
+                include: [
+                    { model: SalesPerson, as: 'salesperson', attributes: ['id', 'name'] },
+                    { model: Branch, as: 'branch', attributes: ['id', 'name'] },
+                    { model: EstimateStatus, as: 'status', attributes: ['id', 'name'] }
+                ]
+            });
+
+            console.log(`✅ Estimate ${id} actualizado exitosamente`);
+            
+            res.json({
+                message: 'Estimate updated successfully',
+                estimate: transformEstimateForFrontend(updatedEstimate)
+            });
+        } catch (error) {
+            console.error('❌ Error updating estimate:', error);
+            res.status(500).json({ 
+                message: 'Error updating estimate', 
+                error: error.message 
+            });
+        }
+    }
+
+    // Eliminar un estimate
+    async deleteEstimate(req, res) {
+        try {
+            const { id } = req.params;
+            
+            // Verificar si el estimate existe
+            const estimate = await Estimate.findByPk(id);
+            if (!estimate) {
+                return res.status(404).json({ message: 'Estimate not found' });
+            }
+
+            // Eliminar el estimate
+            await estimate.destroy();
+
+            res.json({ message: 'Estimate deleted successfully' });
+        } catch (error) {
+            console.error('Error deleting estimate:', error);
+            res.status(500).json({ message: 'Error deleting estimate', error: error.message });
+        }
     }
 }
 

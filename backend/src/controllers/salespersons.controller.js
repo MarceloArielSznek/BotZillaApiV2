@@ -160,7 +160,7 @@ exports.getSalesPersonById = async (req, res) => {
                         { model: EstimateStatus, as: 'status', attributes: ['id', 'name'] }
                     ],
                     limit: 20,
-                    order: [['created_date', 'DESC']]
+                    order: [['created_at', 'DESC']]
                 }
             ]
         });
@@ -430,12 +430,19 @@ exports.deleteSalesPerson = async (req, res) => {
         // Verificar si tiene estimates asociados
         const estimatesCount = await Estimate.count({ where: { sales_person_id: id } });
         if (estimatesCount > 0) {
-            return res.status(400).json({
-                success: false,
-                message: `No se puede eliminar el salesperson porque tiene ${estimatesCount} estimate(s) asociado(s)`
+            // Si tiene estimates, hacer soft delete (marcar como inactivo)
+            await salesPerson.update({ is_active: false });
+            
+            console.log(`✅ Salesperson marcado como inactivo (soft delete): ${salesPerson.name} - ${estimatesCount} estimates asociados`);
+            
+            return res.json({
+                success: true,
+                message: `Salesperson desactivado exitosamente. Se mantuvieron ${estimatesCount} estimate(s) asociado(s)`,
+                action: 'deactivated'
             });
         }
 
+        // Si no tiene estimates, eliminar completamente
         // Eliminar relaciones con branches
         await SalesPersonBranch.destroy({ where: { sales_person_id: id } });
 

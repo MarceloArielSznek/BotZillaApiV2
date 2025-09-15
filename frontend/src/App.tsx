@@ -10,10 +10,12 @@ import Dashboard from './pages/Dashboard';
 import Estimates from './pages/Estimates';
 import Jobs from './pages/Jobs';
 import Employees from './pages/Employees';
+import EmployeeRegistration from './pages/EmployeeRegistration';
 import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import ProtectedRoute from './components/ProtectedRoute';
+import ErrorBoundary from './components/ErrorBoundary';
 
 function App() {
   return (
@@ -21,7 +23,8 @@ function App() {
       <CssBaseline />
       <SnackbarProvider maxSnack={3}>
         <AuthProvider>
-          <Router>
+          <ErrorBoundary>
+            <Router>
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route
@@ -41,6 +44,7 @@ function App() {
                     <Employees />
                   </ProtectedRoute>
                 } />
+                <Route path="employee-registration" element={<EmployeeRegistration />} />
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="settings" element={
                   <ProtectedRoute allowedRoles={['admin']}>
@@ -54,10 +58,13 @@ function App() {
                   <Navigate to="/dashboard" replace />
                 </ProtectedRoute>
               } />
+              {/* Ruta pública para registro de empleados */}
+              <Route path="/employee-registration" element={<EmployeeRegistration />} />
               {/* Ruta catch-all para prevenir acceso no autorizado */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
-          </Router>
+            </Router>
+          </ErrorBoundary>
         </AuthProvider>
       </SnackbarProvider>
     </ThemeProvider>

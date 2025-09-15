@@ -41,4 +41,16 @@ router.get('/:id',
     estimatesController.getEstimateDetails
 );
 
+// Actualizar un estimate (requiere autenticación)
+router.put('/:id',
+    verifyToken,
+    estimatesController.updateEstimate
+);
+
+// Eliminar un estimate (requiere autenticación)
+router.delete('/:id',
+    verifyToken,
+    estimatesController.deleteEstimate
+);
+
 module.exports = router; 

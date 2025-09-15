@@ -287,7 +287,7 @@ const BranchMetricsGrid: React.FC<BranchMetricsProps> = ({ branches }) => (
         width: '100%',
         overflow: 'hidden'
       }}>
-        {branches.map((branch) => (
+        {branches && branches.map((branch) => (
           <Box key={branch.id} sx={{ flex: '1 1 280px', minWidth: '280px' }}>
             <Paper
               sx={{

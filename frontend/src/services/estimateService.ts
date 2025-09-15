@@ -44,7 +44,7 @@ export interface FetchEstimatesParams {
   status?: number;
   startDate?: string;
   endDate?: string;
-  has_job?: boolean;
+  search?: string;
 }
 
 export interface SyncEstimatesParams {
@@ -102,10 +102,55 @@ const estimateService = {
       const response = await api.get('/estimates', {
         params: params
       });
-      return response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response?.data;
+      if (!data) {
+        console.warn('Empty response from estimates API');
+        return {
+          data: [],
+          total: 0,
+          pages: 0,
+          currentPage: 1
+        };
+      }
+      
+      // Si la respuesta tiene la estructura esperada
+      if (typeof data === 'object' && Array.isArray(data.data)) {
+        return {
+          data: data.data,
+          total: data.total || data.data.length,
+          pages: data.pages || Math.ceil((data.total || data.data.length) / (params.limit || 10)),
+          currentPage: data.currentPage || 1
+        };
+      }
+      
+      // Si es un array directo
+      if (Array.isArray(data)) {
+        return {
+          data: data,
+          total: data.length,
+          pages: 1,
+          currentPage: 1
+        };
+      }
+      
+      console.warn('Unexpected estimates response structure:', data);
+      return {
+        data: [],
+        total: 0,
+        pages: 0,
+        currentPage: 1
+      };
     } catch (error: any) {
       console.error('Error fetching estimates:', error.response?.data || error.message);
-      throw error;
+      // En lugar de hacer throw, devolver estructura vacía
+      return {
+        data: [],
+        total: 0,
+        pages: 0,
+        currentPage: 1
+      };
     }
   },
 
@@ -141,10 +186,21 @@ const estimateService = {
       const response = await api.get('/branches', {
         params: { limit: 50 } // Límite ajustado a 50
       });
-      return response.data.branches || response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return data;
+      }
+      if (data && Array.isArray(data.branches)) {
+        return data.branches;
+      }
+      
+      console.warn('Unexpected branches response structure:', data);
+      return []; // Devolver array vacío en lugar de null
     } catch (error: any) {
       console.error('Error fetching branches:', error.response?.data || error.message);
-      throw error;
+      return []; // Devolver array vacío en caso de error
     }
   },
 
@@ -154,10 +210,21 @@ const estimateService = {
       const response = await api.get('/salespersons', {
         params: { ...params, limit: 50 } // Unir params con el límite
       });
-      return response.data.salespersons || response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return data;
+      }
+      if (data && Array.isArray(data.salespersons)) {
+        return data.salespersons;
+      }
+      
+      console.warn('Unexpected salespersons response structure:', data);
+      return []; // Devolver array vacío en lugar de null
     } catch (error: any) {
       console.error('Error fetching sales persons:', error.response?.data || error.message);
-      throw error;
+      return []; // Devolver array vacío en caso de error
     }
   },
 
@@ -167,29 +234,84 @@ const estimateService = {
       const response = await api.get('/estimate-statuses', {
         params: { limit: 50 } // Límite ajustado a 50
       });
-      return response.data.statuses || response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return data;
+      }
+      if (data && Array.isArray(data.statuses)) {
+        return data.statuses;
+      }
+      
+      console.warn('Unexpected statuses response structure:', data);
+      return []; // Devolver array vacío en lugar de null
     } catch (error: any) {
       console.error('Error fetching estimate statuses:', error.response?.data || error.message);
-      throw error;
+      return []; // Devolver array vacío en caso de error
     }
   },
 
   getSoldEstimates: async (): Promise<Estimate[]> => {
     try {
       const response = await api.get('/estimates/sold');
-      return response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response?.data;
+      if (!data) {
+        console.warn('Empty response from sold estimates API');
+        return [];
+      }
+      
+      if (Array.isArray(data)) {
+        return data;
+      }
+      
+      if (data && Array.isArray(data.data)) {
+        return data.data;
+      }
+      
+      console.warn('Unexpected sold estimates response structure:', data);
+      return [];
     } catch (error: any) {
       console.error('Error fetching sold estimates:', error.response?.data || error.message);
-      throw error;
+      return []; // Devolver array vacío en lugar de throw
     }
   },
 
   getEstimateDetails: async (id: number): Promise<Estimate> => {
     try {
       const response = await api.get(`/estimates/${id}`);
-      return response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response?.data;
+      if (!data) {
+        throw new Error(`No data returned for estimate ${id}`);
+      }
+      
+      return data;
     } catch (error: any) {
       console.error(`Error fetching estimate details for id ${id}:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  updateEstimate: async (id: number, data: Partial<Estimate>): Promise<Estimate> => {
+    try {
+      const response = await api.put(`/estimates/${id}`, data);
+      return response.data.estimate;
+    } catch (error: any) {
+      console.error(`Error updating estimate ${id}:`, error.response?.data || error.message);
+      throw error;
+    }
+  },
+
+  deleteEstimate: async (id: number): Promise<{ message: string }> => {
+    try {
+      const response = await api.delete(`/estimates/${id}`);
+      return response.data;
+    } catch (error: any) {
+      console.error(`Error deleting estimate ${id}:`, error.response?.data || error.message);
       throw error;
     }
   },

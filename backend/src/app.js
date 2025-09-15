@@ -21,6 +21,10 @@ const jobsRoutes = require('./routes/jobs.routes');
 const specialShiftRoutes = require('./routes/specialShift.routes');
 const cacheRoutes = require('./routes/cache.routes');
 const aiRoutes = require('./routes/ai.routes');
+const healthRoutes = require('./routes/health.routes');
+const columnMapRoutes = require('./routes/columnMap.routes');
+const shiftApprovalRoutes = require('./routes/shiftApproval.routes');
+const employeeRegistrationRoutes = require('./routes/employeeRegistration.routes');
 // const botRoutes = require('./routes/bot.routes'); // No longer needed
 const { logger, requestLogger, errorLogger } = require('./utils/logger');
 const { caches } = require('./utils/cache');
@@ -80,38 +84,71 @@ const authLimiter = rateLimit({
     skipSuccessfulRequests: true,
 });
 
-// Configuración CORS específica para producción
+// Configuración CORS simplificada para desarrollo
 const corsOptions = {
-    origin: function (origin, callback) {
-        // En desarrollo, permitir cualquier origen
-        if (process.env.NODE_ENV === 'development') {
-            return callback(null, true);
-        }
-        
-        // En producción, solo permitir dominios específicos
+    origin: true, // En desarrollo, permitir cualquier origin
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+    optionsSuccessStatus: 204
+};
+
+// Middleware EXPLÍCITO para manejar preflight requests ANTES de CORS
+app.options('*', (req, res) => {
+    const origin = req.get('origin');
+    
+    if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+        console.log(`[PREFLIGHT] OPTIONS ${req.path} from origin: ${origin}`);
+        // En desarrollo, permitir cualquier origin
+        res.header('Access-Control-Allow-Origin', origin || '*');
+    } else {
+        // En producción, usar lógica más estricta
         const allowedOrigins = [
             process.env.FRONTEND_URL,
             'https://tudominio.com',
             'https://www.tudominio.com',
             'https://app.tudominio.com'
-        ].filter(Boolean); // Remover valores undefined
+        ].filter(Boolean);
         
-        // Permitir requests sin origin (como apps móviles o Postman)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            console.warn('CORS blocked origin:', origin);
-            callback(new Error('Not allowed by CORS'));
+        if (!origin || allowedOrigins.includes(origin)) {
+            res.header('Access-Control-Allow-Origin', origin || '*');
         }
-    },
-    credentials: true,
-    optionsSuccessStatus: 200
-};
+    }
+    
+    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+    res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization');
+    res.header('Access-Control-Allow-Credentials', 'true');
+    res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
+    
+    return res.status(204).end();
+});
 
 app.use(cors(corsOptions));
-app.use(express.json()); // Habilitado para parsear JSON en el body
+
+// Middleware adicional para logging
+app.use((req, res, next) => {
+    // Solo log detallado en desarrollo (NODE_ENV no definido o development)
+    if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+        console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    }
+    next();
+});
+
+app.use(express.json({ limit: '10mb' })); // Habilitado para parsear JSON en el body
+
+// Timeout para requests
+app.use((req, res, next) => {
+    req.setTimeout(30000, () => {
+        console.log('[TIMEOUT] Request timeout after 30s:', req.method, req.path);
+        if (!res.headersSent) {
+            res.status(408).json({ 
+                success: false, 
+                message: 'Request timeout' 
+            });
+        }
+    });
+    next();
+});
 
 // Log del inicio de la aplicación
 logger.info('BotZilla API V2 iniciando...', {
@@ -137,7 +174,10 @@ app.use('/api/jobs', jobsRoutes);
 app.use('/api/special-shifts', specialShiftRoutes);
 app.use('/api/cache', cacheRoutes);
 app.use('/api/ai', aiRoutes);
-// app.use('/api/column-map', columnMapRoutes); // Eliminado
+app.use('/api', healthRoutes);
+app.use('/api/column-map', columnMapRoutes);
+app.use('/api/shift-approval', shiftApprovalRoutes);
+app.use('/api/employee-registration', employeeRegistrationRoutes);
 // app.use('/api/bot', botRoutes); // No longer needed
 
 // Health check endpoint

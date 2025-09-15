@@ -11,7 +11,8 @@ import {
   Label as StatusIcon,
   AccountCircle as UserIcon,
   Settings as ConfigIcon,
-  Notifications as NotificationsIcon
+  Notifications as NotificationsIcon,
+  TableChart as ColumnMapIcon
 } from '@mui/icons-material';
 
 // Import tab components
@@ -20,6 +21,7 @@ import StatusesTab from '../components/settings/StatusesTab';
 import UsersTab from '../components/settings/UsersTab';
 import SystemConfigTab from '../components/settings/SystemConfigTab';
 import NotificationsTab from '../components/settings/NotificationsTab';
+import ColumnMapManager from '../components/settings/ColumnMapManager';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -76,6 +78,11 @@ const Settings = () => {
       label: 'Users',
       icon: <UserIcon />,
       component: <UsersTab />
+    },
+    {
+      label: 'Column Maps',
+      icon: <ColumnMapIcon />,
+      component: <ColumnMapManager />
     },
     {
       label: 'Notifications',

@@ -901,17 +901,41 @@ class AutomationsController {
           });
         }
 
-        const result = await SheetColumnMap.bulkCreate(recordsToSync, {
-          updateOnDuplicate: ['column_index', 'type']
-        });
+        // Usar transacción para garantizar consistencia: DELETE + INSERT
+        const sequelize = require('../config/database');
+        const transaction = await sequelize.transaction();
 
-        console.log(`✅ Column map for sheet "${effectiveSheetName}" synced successfully.`);
+        try {
+          // 1. Eliminar todos los registros existentes para esta sheet
+          const deletedCount = await SheetColumnMap.destroy({
+            where: { sheet_name: effectiveSheetName },
+            transaction
+          });
 
-        res.status(200).json({
-          success: true,
-          message: `Successfully synced ${result.length} columns for sheet "${effectiveSheetName}".`,
-          syncedRecords: result.length
-        });
+          // 2. Insertar los nuevos registros
+          const result = await SheetColumnMap.bulkCreate(recordsToSync, {
+            transaction
+          });
+
+          // 3. Confirmar la transacción
+          await transaction.commit();
+
+          console.log(`✅ Column map for sheet "${effectiveSheetName}" synced successfully.`);
+          console.log(`   - Deleted ${deletedCount} old records`);
+          console.log(`   - Created ${result.length} new records`);
+
+          res.status(200).json({
+            success: true,
+            message: `Successfully synced ${result.length} columns for sheet "${effectiveSheetName}". Replaced ${deletedCount} old records.`,
+            syncedRecords: result.length,
+            deletedRecords: deletedCount
+          });
+
+        } catch (transactionError) {
+          // Rollback en caso de error
+          await transaction.rollback();
+          throw transactionError;
+        }
 
       } catch (error) {
         console.error(`❌ Error syncing column map for sheet "${effectiveSheetName}":`, error);
@@ -955,7 +979,10 @@ class AutomationsController {
             hasRowData: !!row_data,
             rowDataLength: Array.isArray(row_data) ? row_data.length : 'string',
             rowDataType: typeof row_data,
-            rowDataPreview: Array.isArray(row_data) ? row_data.slice(0, 5) : row_data?.substring(0, 100)
+            rowDataPreview: Array.isArray(row_data) ? row_data.slice(0, 5) : 
+                           typeof row_data === 'string' ? row_data.substring(0, 100) : 
+                           typeof row_data === 'object' ? JSON.stringify(row_data).substring(0, 100) : 
+                           String(row_data).substring(0, 100)
         });
 
         // 1. Validation mejorada
@@ -985,6 +1012,24 @@ class AutomationsController {
             console.log('📝 [processRow] Usando array existente:', { 
                 length: effectiveRowData.length 
             });
+        } else if (typeof row_data === 'object' && row_data !== null) {
+            // Manejar objetos con keys numéricas (formato de Make.com)
+            const numericKeys = Object.keys(row_data)
+                .filter(key => !key.startsWith('__')) // Excluir metadatos de Make.com
+                .filter(key => !isNaN(parseInt(key))) // Solo keys numéricas
+                .sort((a, b) => parseInt(a) - parseInt(b)); // Ordenar numéricamente
+            
+            effectiveRowData = numericKeys.map(key => {
+                const value = row_data[key];
+                return typeof value === 'string' ? value.trim() : value;
+            });
+            
+            console.log('📝 [processRow] Convirtiendo objeto a array:', { 
+                originalKeys: Object.keys(row_data).length,
+                numericKeys: numericKeys.length,
+                convertedLength: effectiveRowData.length,
+                firstFewValues: effectiveRowData.slice(0, 5)
+            });
         } else {
             console.log('❌ [processRow] Invalid row_data type:', { 
                 type: typeof row_data,
@@ -992,12 +1037,19 @@ class AutomationsController {
             });
             return res.status(400).json({
                 success: false,
-                message: '`row_data` must be an array or a comma-separated string.',
+                message: '`row_data` must be an array, object with numeric keys, or a comma-separated string.',
                 receivedType: typeof row_data
             });
         }
 
         try {
+            // Variables para rastrear sugerencias y crew members faltantes
+            const suggestions = {
+                missingCrewMembers: [],
+                suggestedShifts: [],
+                requiresApproval: false
+            };
+            
             console.log('🔍 [processRow] Buscando column map para sheet:', sheet_name);
             
             const columnMap = await SheetColumnMap.findAll({
@@ -1244,14 +1296,29 @@ class AutomationsController {
                         hasEmojis: cleanCrewLeadName !== crewLeadName
                     });
 
-                    const [crewLeaderResult, crewLeaderWasCreated] = await CrewMember.findOrCreate({
+                    // Buscar crew leader existente, NO crear automáticamente
+                    crewLeader = await CrewMember.findOne({
                         where: { name: cleanCrewLeadName },
-                        defaults: { name: cleanCrewLeadName, is_leader: true },
                         transaction
                     });
                     
-                    // Asignar el resultado a la variable crewLeader
-                    crewLeader = crewLeaderResult;
+                    let crewLeaderWasCreated = false;
+                    if (!crewLeader) {
+                        console.log('⚠️ [processRow] Crew Leader no encontrado - se requiere aprobación manual:', {
+                            suggestedName: cleanCrewLeadName,
+                            action: 'CREATE_CREW_LEADER'
+                        });
+                        
+                        // Agregar a sugerencias
+                        suggestions.missingCrewMembers.push({
+                            name: cleanCrewLeadName,
+                            type: 'crew_leader',
+                            suggestedHours: crewLeaderHours || 0,
+                            action: 'CREATE_CREW_LEADER'
+                        });
+                        suggestions.requiresApproval = true;
+                        // NO crear automáticamente - será manejado en el frontend
+                    }
                     
                     // Si el crew leader ya existía pero no estaba marcado como leader, actualizarlo
                     if (!crewLeaderWasCreated && !crewLeader.is_leader) {
@@ -1485,11 +1552,32 @@ class AutomationsController {
                             crewLeadName: cleanCrewLeadName
                         });
 
-                        const [crewMember, wasCreated] = await CrewMember.findOrCreate({ 
+                        // Buscar crew member existente, NO crear automáticamente
+                        const crewMember = await CrewMember.findOne({ 
                             where: { name: cleanCrewMemberName }, 
-                            defaults: { name: cleanCrewMemberName }, 
                             transaction 
                         });
+                        
+                        let wasCreated = false;
+                        if (!crewMember) {
+                            console.log('⚠️ [processRow] Crew Member no encontrado - se requiere aprobación manual:', {
+                                suggestedName: cleanCrewMemberName,
+                                suggestedHours: hours,
+                                action: 'CREATE_CREW_MEMBER'
+                            });
+                            
+                            // Agregar a sugerencias
+                            suggestions.missingCrewMembers.push({
+                                name: cleanCrewMemberName,
+                                type: 'crew_member',
+                                suggestedHours: hours,
+                                columnIndex: col.column_index,
+                                action: 'CREATE_CREW_MEMBER'
+                            });
+                            suggestions.requiresApproval = true;
+                            // Saltar este crew member - será manejado en el frontend
+                            continue;
+                        }
                         
                         // Asignar branch al crew member (nuevo o existente)
                         if (job.branch_id) {
@@ -1541,8 +1629,24 @@ class AutomationsController {
                 }
                 
                 if(regularShifts.length > 0) {
-                    console.log('✅ [processRow] Creando shifts regulares:', regularShifts.length);
-                    await Shift.bulkCreate(regularShifts, { transaction });
+                    console.log('✅ [processRow] Creando shifts regulares SUGERIDOS (pendientes de aprobación):', regularShifts.length);
+                    
+                    // Marcar todos los shifts como NO aprobados (sugeridos)
+                    const suggestedShifts = regularShifts.map(shift => ({
+                        ...shift,
+                        approved_shift: false // Marcar como sugerido, no aprobado
+                    }));
+                    
+                    await Shift.bulkCreate(suggestedShifts, { transaction });
+                    
+                    // Agregar shifts sugeridos a la respuesta
+                    suggestions.suggestedShifts = suggestedShifts.map(shift => ({
+                        crewMemberId: shift.crew_member_id,
+                        hours: shift.hours,
+                        isLeader: shift.is_leader || false,
+                        approved: false
+                    }));
+                    suggestions.requiresApproval = true;
                     
                     // Log detallado de todos los crew members procesados
                     console.log('📋 [processRow] Resumen de crew members procesados:');
@@ -1581,6 +1685,7 @@ class AutomationsController {
                         crew_member_id: crewLeader.id,
                         hours: crewLeaderHours,
                         is_leader: true,
+                        approved_shift: false, // Marcar como sugerido, no aprobado
                         date: new Date()
                     }, { transaction });
                     
@@ -1759,13 +1864,18 @@ class AutomationsController {
 
                 const response = {
                     success: true,
-                    message: `Fila ${row_number} procesada exitosamente. Job "${jobName}" ha sido ${job ? 'actualizado' : 'creado'}.`,
+                    message: suggestions.requiresApproval 
+                        ? `Fila ${row_number} procesada con sugerencias pendientes de aprobación. Job "${jobName}" ha sido ${job ? 'actualizado' : 'creado'}.`
+                        : `Fila ${row_number} procesada exitosamente. Job "${jobName}" ha sido ${job ? 'actualizado' : 'creado'}.`,
                     jobId: job.id,
                     jobName: job.name,
                     branchTelegramId: branchTelegramId, // Nuevo campo para notificaciones en vivo
                     notificationPayload, // Se añade el payload aquí
                     sheet_name,
                     row_number,
+                    // Información de sugerencias y aprobaciones pendientes
+                    suggestions: suggestions,
+                    requiresApproval: suggestions.requiresApproval,
                     crewLeader: crewLeader ? {
                         id: crewLeader.id,
                         name: crewLeader.name
@@ -2010,22 +2120,6 @@ class AutomationsController {
         }
     }
 
-    async cleanDuplicateSalesPersons(req, res) {
-        try {
-            // Script removed during cleanup - function temporarily disabled
-            res.status(503).json({
-                success: false,
-                message: 'Cleanup function temporarily unavailable - script was removed during cleanup'
-            });
-        } catch (error) {
-            console.error('❌ Error in cleanDuplicateSalesPersons:', error);
-            res.status(500).json({
-                success: false,
-                message: 'Error executing cleanup script',
-                error: error.message
-            });
-        }
-    }
 
     async debugColumnMapping(req, res) {
         try {

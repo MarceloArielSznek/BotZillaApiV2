@@ -28,6 +28,12 @@ JobSpecialShift.init({
   },
   hours: {
     type: DataTypes.DECIMAL(10, 2)
+  },
+  approved_shift: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Indica si el special shift ha sido aprobado manualmente por un usuario'
   }
 }, {
   sequelize,

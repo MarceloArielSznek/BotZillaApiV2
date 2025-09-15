@@ -21,7 +21,7 @@ const sequelize = new Sequelize({
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     schema: process.env.DB_SCHEMA,
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: process.env.NODE_ENV === 'development' && process.env.DB_LOGGING === 'true' ? console.log : false,
     define: {
         timestamps: true,
         underscored: true,
@@ -34,10 +34,12 @@ const sequelize = new Sequelize({
         } : false
     },
     pool: {
-        max: 5,
-        min: 0,
-        acquire: 30000,
-        idle: 10000
+        max: 10, // Aumentar conexiones máximas para operaciones concurrentes
+        min: 2,  // Mantener mínimo de conexiones activas
+        acquire: 60000, // Tiempo más largo para adquirir conexión
+        idle: 30000,    // Tiempo más largo antes de cerrar conexión inactiva
+        evict: 1000,    // Intervalo para verificar conexiones
+        handleDisconnects: true
     }
 });
 

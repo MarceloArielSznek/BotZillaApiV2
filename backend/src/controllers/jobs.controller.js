@@ -1,8 +1,9 @@
-const { Job, Estimate, Branch, SalesPerson, CrewMember, Shift, SpecialShift, JobSpecialShift } = require('../models');
+const { Job, Estimate, Branch, SalesPerson, CrewMember, Shift, SpecialShift, JobSpecialShift, JobStatus } = require('../models');
 const { logger } = require('../utils/logger');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 const { calculateJobPerformance } = require('../services/performance.service');
+const jobCreationService = require('../services/jobCreationService');
 
 class JobsController {
     async getAllJobs(req, res) {
@@ -50,6 +51,11 @@ class JobsController {
                     {
                         model: CrewMember,
                         as: 'crewLeader',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: JobStatus,
+                        as: 'status',
                         attributes: ['id', 'name']
                     }
                 ],
@@ -195,25 +201,64 @@ class JobsController {
     async updateJob(req, res) {
         try {
             const { id } = req.params;
-            const { name, closing_date, estimate_id, crew_leader_id, branch_id, note, review, crew_leader_hours } = req.body;
+            const { name, closing_date, estimate_id, crew_leader_id, branch_id, note, review, crew_leader_hours, status_id } = req.body;
 
             const job = await Job.findByPk(id);
             if (!job) {
                 return res.status(404).json({ success: false, message: 'Job not found.' });
             }
 
-            await job.update({
-                name,
-                closing_date,
-                estimate_id,
-                crew_leader_id,
-                branch_id,
-                note,
-                review,
-                crew_leader_hours
+            // Construir objeto de actualización solo con campos válidos
+            const updateData = {};
+            
+            if (name !== undefined) updateData.name = name;
+            if (estimate_id !== undefined) updateData.estimate_id = estimate_id;
+            if (crew_leader_id !== undefined) updateData.crew_leader_id = crew_leader_id;
+            if (branch_id !== undefined) updateData.branch_id = branch_id;
+            if (note !== undefined) updateData.note = note;
+            if (review !== undefined) updateData.review = review;
+            if (crew_leader_hours !== undefined) updateData.crew_leader_hours = crew_leader_hours;
+            if (status_id !== undefined) updateData.status_id = status_id;
+            
+            // Validar closing_date solo si se proporciona y es válida
+            if (closing_date !== undefined && closing_date !== null && closing_date !== '') {
+                const parsedDate = new Date(closing_date);
+                if (!isNaN(parsedDate.getTime())) {
+                    updateData.closing_date = parsedDate;
+                } else {
+                    logger.warn(`Invalid closing_date provided: ${closing_date}`);
+                }
+            }
+
+            await job.update(updateData);
+
+            // Recargar el job con las asociaciones para devolver datos completos
+            const updatedJob = await Job.findByPk(id, {
+                include: [
+                    {
+                        model: Estimate,
+                        as: 'estimate',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: Branch,
+                        as: 'branch',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: CrewMember,
+                        as: 'crewLeader',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: JobStatus,
+                        as: 'status',
+                        attributes: ['id', 'name']
+                    }
+                ]
             });
 
-            res.status(200).json({ success: true, data: job, message: 'Job updated successfully.' });
+            res.status(200).json({ success: true, data: updatedJob, message: 'Job updated successfully.' });
         } catch (error) {
             logger.error(`Error updating job with id ${req.params.id}:`, error);
             res.status(500).json({ success: false, message: 'Server error updating job.' });
@@ -280,67 +325,79 @@ class JobsController {
         }
     }
 
-    async fixJobsWithoutCrewLeader(req, res) {
+    /**
+     * Crear jobs automáticamente desde estimates "Sold"
+     */
+    async createJobsFromSoldEstimates(req, res) {
         try {
-            console.log('🔧 Iniciando reparación de jobs sin crew leader...');
+            logger.info('🚀 Iniciando creación automática de jobs desde estimates Sold...');
             
-            // Buscar jobs que no tienen crew leader asignado
-            const jobsWithoutCrewLeader = await Job.findAll({
-                where: {
-                    crew_leader_id: null
-                },
-                include: [{
-                    model: Estimate,
-                    as: 'estimate',
-                    attributes: ['id', 'name']
-                }]
-            });
-
-            console.log(`🔧 Encontrados ${jobsWithoutCrewLeader.length} jobs sin crew leader`);
-
-            let fixedCount = 0;
-            for (const job of jobsWithoutCrewLeader) {
-                // Buscar el crew leader en los shifts del job
-                const crewLeaderShift = await Shift.findOne({
-                    where: {
-                        job_id: job.id,
-                        is_leader: true
-                    },
-                    include: [{
-                        model: CrewMember,
-                        as: 'crewMember',
-                        attributes: ['id', 'name']
-                    }]
-                });
-
-                if (crewLeaderShift && crewLeaderShift.crewMember) {
-                    // Actualizar el job con el crew leader encontrado
-                    await job.update({
-                        crew_leader_id: crewLeaderShift.crewMember.id
-                    });
-                    
-                    console.log(`✅ Job ${job.name} actualizado con crew leader: ${crewLeaderShift.crewMember.name}`);
-                    fixedCount++;
-                } else {
-                    console.log(`⚠️ Job ${job.name} no tiene shifts con crew leader`);
-                }
-            }
-
+            const result = await jobCreationService.createJobsFromSoldEstimates();
+            
             res.status(200).json({
                 success: true,
-                message: `Reparación completada. ${fixedCount} jobs actualizados.`,
-                totalJobsWithoutCrewLeader: jobsWithoutCrewLeader.length,
-                fixedJobs: fixedCount
+                message: result.message,
+                created: result.created,
+                jobs: result.jobs || []
             });
 
         } catch (error) {
-            logger.error('Error fixing jobs without crew leader:', error);
-            res.status(500).json({ 
-                success: false, 
-                message: 'Server error fixing jobs without crew leader.' 
+            logger.error('❌ Error en createJobsFromSoldEstimates:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error creating jobs from sold estimates',
+                error: error.message
             });
         }
     }
+
+    /**
+     * Marcar un job como "Done"
+     */
+    async markJobAsDone(req, res) {
+        try {
+            const { id } = req.params;
+            
+            const job = await jobCreationService.markJobAsDone(id);
+            
+            res.status(200).json({
+                success: true,
+                message: `Job ${job.name} marked as Done`,
+                job: job
+            });
+
+        } catch (error) {
+            logger.error(`❌ Error marcando job ${req.params.id} como Done:`, error);
+            const statusCode = error.message.includes('not found') ? 404 : 500;
+            res.status(statusCode).json({
+                success: false,
+                message: error.message
+            });
+        }
+    }
+
+    /**
+     * Obtener estadísticas de jobs por status
+     */
+    async getJobStatusStats(req, res) {
+        try {
+            const stats = await jobCreationService.getJobStatusStats();
+            
+            res.status(200).json({
+                success: true,
+                data: stats
+            });
+
+        } catch (error) {
+            logger.error('❌ Error obteniendo estadísticas de job status:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Error fetching job status statistics',
+                error: error.message
+            });
+        }
+    }
+
 }
 
 module.exports = new JobsController(); 

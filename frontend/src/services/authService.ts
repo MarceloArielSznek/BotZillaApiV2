@@ -70,12 +70,26 @@ const authService = {
 
     try {
       const response = await api.get('/auth/verify');
+      // Verificar si es una respuesta cancelada
+      if (response && typeof response === 'object' && 'canceled' in response) {
+        return true; // Asumir válido si fue cancelado
+      }
       return response.status === 200;
-    } catch (error) {
-      // Token inválido, limpiar localStorage
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      return false;
+    } catch (error: any) {
+      // Si es un error de cancelación, asumir que el token es válido
+      if (error.message && error.message.includes('canceled')) {
+        return true;
+      }
+      
+      // Solo limpiar localStorage para errores reales de autenticación
+      if (error.response && error.response.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        return false;
+      }
+      
+      // Para otros errores (red, etc), asumir válido temporalmente
+      return true;
     }
   }
 };

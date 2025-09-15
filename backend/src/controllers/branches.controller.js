@@ -109,9 +109,9 @@ exports.getBranchById = async (req, res) => {
                 },
                 {
                     model: Estimate,
-                    attributes: ['id', 'name', 'price', 'created_date'],
+                    attributes: ['id', 'name', 'price', 'at_created_date'],
                     limit: 10,
-                    order: [['created_date', 'DESC']]
+                    order: [['at_created_date', 'DESC']]
                 }
             ]
         });

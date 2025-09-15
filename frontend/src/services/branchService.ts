@@ -48,10 +48,68 @@ const branchService = {
   getBranches: async (params: BranchListParams = {}): Promise<BranchListResponse> => {
     try {
       const response = await api.get('/branches', { params });
-      return response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response?.data;
+      
+      // Si la respuesta es null o undefined
+      if (!data) {
+        console.warn('Branches response is null or undefined');
+        return {
+          branches: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 1,
+            totalCount: 0,
+            hasNextPage: false,
+            hasPrevPage: false,
+          }
+        };
+      }
+      
+      if (data && typeof data === 'object') {
+        // Si ya tiene la estructura esperada
+        if (data.branches && Array.isArray(data.branches)) {
+          return data;
+        }
+        // Si es un array directo
+        if (Array.isArray(data)) {
+          return {
+            branches: data,
+            pagination: {
+              currentPage: 1,
+              totalPages: 1,
+              totalCount: data.length,
+              hasNextPage: false,
+              hasPrevPage: false,
+            }
+          };
+        }
+      }
+      
+      console.warn('Unexpected branches response structure:', data);
+      return {
+        branches: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 1,
+          totalCount: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        }
+      };
     } catch (error: any) {
       console.error('Error fetching branches:', error.response?.data || error.message);
-      throw error;
+      return {
+        branches: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 1,
+          totalCount: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        }
+      };
     }
   },
 

@@ -18,10 +18,12 @@ import {
   Button,
   Tooltip,
 } from '@mui/material';
+import { useRouteChange } from '../hooks/useRouteChange';
 import {
   Assessment as EstimatesIcon,
   Work as JobsIcon,
   People as EmployeesIcon,
+  PersonAdd as EmployeeRegistrationIcon,
   Notifications as NotificationsIcon,
   Settings as SettingsIcon,
   AccountCircle as AccountIcon,
@@ -42,6 +44,9 @@ const DashboardLayout = () => {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Cancelar requests pendientes cuando cambie la ruta
+  useRouteChange();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -71,6 +76,7 @@ const DashboardLayout = () => {
     { text: 'Estimates', icon: <EstimatesIcon />, path: '/dashboard/estimates' },
     { text: 'Jobs', icon: <JobsIcon />, path: '/dashboard/jobs' },
     { text: 'Employees', icon: <EmployeesIcon />, path: '/dashboard/employees' },
+    { text: 'Employee Registration', icon: <EmployeeRegistrationIcon />, path: '/dashboard/employee-registration' },
     { text: 'Notifications', icon: <NotificationsIcon />, path: '/dashboard/notifications' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/dashboard/settings' },
   ];

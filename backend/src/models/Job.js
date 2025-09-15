@@ -59,6 +59,14 @@ Job.init({
     type: DataTypes.BOOLEAN,
     defaultValue: false,
     allowNull: false
+  },
+  status_id: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: 'job_status',
+      key: 'id'
+    },
+    allowNull: true
   }
 }, {
   sequelize,

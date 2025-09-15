@@ -5,12 +5,15 @@ const { logger } = require('../utils/logger');
 exports.login = async (req, res) => {
     try {
         const { email, password } = req.body;
+        console.log('[LOGIN] 🔐 Intento de login para:', email);
+        
         logger.authEvent('Login Attempt', { email }, {
             ip: req.ip,
             userAgent: req.get('User-Agent')
         });
 
         // Buscar usuario
+        console.log('[LOGIN] 🔍 Buscando usuario en DB...');
         const user = await User.findOne({
             where: { email },
             include: [{
@@ -20,6 +23,7 @@ exports.login = async (req, res) => {
         });
 
         if (!user) {
+            console.log('[LOGIN] ❌ Usuario no encontrado:', email);
             logger.authEvent('Login Failed - User Not Found', { email }, {
                 ip: req.ip,
                 userAgent: req.get('User-Agent')
@@ -27,30 +31,53 @@ exports.login = async (req, res) => {
             return res.status(404).json({ message: 'Usuario no encontrado' });
         }
 
-        logger.debug('User found for login', {
-            userId: user.id,
-            email: user.email,
-            role: user.rol?.name,
-            hasPassword: !!user.password
-        });
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[LOGIN] ✅ Usuario encontrado:', {
+                userId: user.id,
+                email: user.email,
+                role: user.rol?.name,
+                hasPassword: !!user.password
+            });
+        }
 
         // Validar contraseña
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[LOGIN] 🔑 Validando contraseña...');
+        }
         const isValidPassword = await user.validatePassword(password);
-        console.log('[LOGIN] Resultado de validación de contraseña:', isValidPassword);
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[LOGIN] Resultado de validación de contraseña:', isValidPassword);
+        }
 
         if (!isValidPassword) {
-            console.log('[LOGIN] Contraseña inválida para usuario:', email);
+            console.log('[LOGIN] ❌ Contraseña inválida para usuario:', email);
+            logger.authEvent('Login Failed - Invalid Password', { email }, {
+                ip: req.ip,
+                userAgent: req.get('User-Agent')
+            });
             return res.status(401).json({ message: 'Contraseña inválida' });
         }
 
         // Generar token
+        console.log('[LOGIN] 🎫 Generando token JWT...');
         const token = jwt.sign(
             { id: user.id, email: user.email, role: user.rol.name },
             process.env.JWT_SECRET,
             { expiresIn: process.env.JWT_EXPIRES_IN }
         );
 
-        console.log('[LOGIN] Login exitoso para:', email);
+        if (process.env.NODE_ENV === 'development') {
+            console.log('[LOGIN] ✅ Login exitoso para:', email, '- Token generado');
+        }
+
+        logger.authEvent('Login Success', { 
+            email, 
+            userId: user.id, 
+            role: user.rol.name 
+        }, {
+            ip: req.ip,
+            userAgent: req.get('User-Agent')
+        });
 
         res.json({
             id: user.id,
@@ -59,7 +86,12 @@ exports.login = async (req, res) => {
             token
         });
     } catch (error) {
-        console.error('[LOGIN] Error de login:', error);
+        console.error('[LOGIN] 💥 Error crítico de login:', error);
+        logger.authEvent('Login Error', { email: req.body?.email }, {
+            ip: req.ip,
+            userAgent: req.get('User-Agent'),
+            error: error.message
+        });
         res.status(500).json({ message: 'Error durante el proceso de login' });
     }
 };

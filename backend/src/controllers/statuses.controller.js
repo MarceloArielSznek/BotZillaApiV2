@@ -27,7 +27,7 @@ exports.getAllStatuses = async (req, res) => {
         if (includeStats === 'true') {
             includeOptions.push({
                 model: Estimate,
-                attributes: ['id', 'price', 'created_date'],
+                attributes: ['id', 'price', 'at_created_date'],
                 required: false
             });
         }
@@ -47,7 +47,7 @@ exports.getAllStatuses = async (req, res) => {
                 const estimatesCount = status.Estimates?.length || 0;
                 const totalRevenue = status.Estimates?.reduce((sum, est) => sum + (est.price || 0), 0) || 0;
                 const recentEstimates = status.Estimates?.filter(est => 
-                    new Date(est.created_date) >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+                    new Date(est.at_created_date) >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
                 ).length || 0;
                 
                 return {
@@ -93,13 +93,13 @@ exports.getStatusById = async (req, res) => {
         const status = await EstimateStatus.findByPk(id, {
             include: [{
                 model: Estimate,
-                attributes: ['id', 'name', 'price', 'created_date'],
+                attributes: ['id', 'name', 'price', 'at_created_date'],
                 include: [
                     { model: require('../models').SalesPerson, attributes: ['name'] },
                     { model: require('../models').Branch, attributes: ['name'] }
                 ],
                 limit: 20,
-                order: [['created_date', 'DESC']]
+                order: [['at_created_date', 'DESC']]
             }]
         });
 
@@ -117,8 +117,8 @@ exports.getStatusById = async (req, res) => {
         
         const stats = {
             totalEstimates: estimates.length,
-            recentEstimates: estimates.filter(est => new Date(est.created_date) >= thirtyDaysAgo).length,
-            weeklyEstimates: estimates.filter(est => new Date(est.created_date) >= sevenDaysAgo).length,
+            recentEstimates: estimates.filter(est => new Date(est.at_created_date) >= thirtyDaysAgo).length,
+            weeklyEstimates: estimates.filter(est => new Date(est.at_created_date) >= sevenDaysAgo).length,
             totalRevenue: estimates.reduce((sum, est) => sum + (est.price || 0), 0),
             averageValue: estimates.length > 0 ? estimates.reduce((sum, est) => sum + (est.price || 0), 0) / estimates.length : 0
         };
@@ -303,15 +303,15 @@ exports.getStatusAnalytics = async (req, res) => {
         const whereConditions = {};
         
         if (startDate && endDate) {
-            whereConditions.created_date = {
+            whereConditions.at_created_date = {
                 [Op.between]: [new Date(startDate), new Date(endDate)]
             };
         } else if (startDate) {
-            whereConditions.created_date = {
+            whereConditions.at_created_date = {
                 [Op.gte]: new Date(startDate)
             };
         } else if (endDate) {
-            whereConditions.created_date = {
+            whereConditions.at_created_date = {
                 [Op.lte]: new Date(endDate)
             };
         }
@@ -319,7 +319,7 @@ exports.getStatusAnalytics = async (req, res) => {
         const statuses = await EstimateStatus.findAll({
             include: [{
                 model: Estimate,
-                attributes: ['id', 'price', 'created_date'],
+                attributes: ['id', 'price', 'at_created_date'],
                 where: Object.keys(whereConditions).length > 0 ? whereConditions : undefined,
                 required: false
             }],

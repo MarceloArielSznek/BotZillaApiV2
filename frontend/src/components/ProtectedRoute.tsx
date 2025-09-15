@@ -13,43 +13,62 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
   const [isValidating, setIsValidating] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   
-  const user = authService.getCurrentUser();
+  // Obtener datos de autenticación de forma consistente
   const token = authService.getToken();
-
-  // Verificación inicial inmediata - si no hay token, no mostrar nada
-  if (!token) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
+  const user = authService.getCurrentUser();
 
   useEffect(() => {
+    let isMounted = true; // Para evitar actualizaciones de estado en componentes desmontados
+
     const validateAuth = async () => {
       // Si no hay token, redirigir inmediatamente
       if (!token) {
-        setIsAuthenticated(false);
-        setIsValidating(false);
+        if (isMounted) {
+          setIsAuthenticated(false);
+          setIsValidating(false);
+        }
         return;
       }
 
       // Si hay token, validar con el servidor
       try {
         const isValid = await authService.validateToken();
-        setIsAuthenticated(isValid);
         
-        // Si el token es inválido, limpiar y redirigir
-        if (!isValid) {
-          authService.logout();
+        if (isMounted) {
+          setIsAuthenticated(isValid);
+          
+          // Si el token es inválido, limpiar y redirigir
+          if (!isValid) {
+            authService.logout();
+          }
         }
       } catch (error) {
-        console.error('Error validating token:', error);
-        setIsAuthenticated(false);
-        authService.logout();
+        if (import.meta.env.MODE === 'development') {
+          console.error('Error validating token:', error);
+        }
+        
+        if (isMounted) {
+          setIsAuthenticated(false);
+        }
       } finally {
-        setIsValidating(false);
+        if (isMounted) {
+          setIsValidating(false);
+        }
       }
     };
 
     validateAuth();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
   }, [token]);
+
+  // Verificación inicial inmediata - si no hay token, redirigir
+  if (!token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
 
   // Mostrar loading mientras valida
   if (isValidating) {
@@ -67,7 +86,7 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children, allowedRoles 
 
   // Verificar roles si es necesario
   if (allowedRoles.length > 0 && user && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard/estimates" replace />;
+    return <Navigate to="/dashboard/main" replace />;
   }
 
   return <>{children}</>;

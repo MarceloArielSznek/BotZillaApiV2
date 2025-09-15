@@ -355,7 +355,7 @@ const CrewMembersTab = () => {
                 label="Filter by Branch"
               >
                 <MenuItem value="">All Branches</MenuItem>
-                {branches.map((branch) => (
+                {branches && branches.map((branch) => (
                   <MenuItem key={branch.id} value={branch.id.toString()}>
                     {branch.name}
                   </MenuItem>

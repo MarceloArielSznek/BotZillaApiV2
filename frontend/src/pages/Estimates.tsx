@@ -33,7 +33,10 @@ import {
 import {
   Sync as SyncIcon,
   FilterList as FilterIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Search as SearchIcon,
+  Edit as EditIcon,
+  Delete as DeleteIcon
 } from '@mui/icons-material';
 import estimateService, {
   type Estimate,
@@ -49,6 +52,7 @@ import { format } from 'date-fns'; // Usaremos date-fns para un formateo robusto
 import EstimateDetailsModal from '../components/estimates/EstimateDetailsModal';
 import JobDetailsModal from '../components/jobs/JobDetailsModal';
 import { getJobById } from '../services/jobService';
+import EstimateFormModal from '../components/estimates/EstimateFormModal';
 
 const Estimates: React.FC = () => {
   // Estados principales
@@ -63,6 +67,13 @@ const Estimates: React.FC = () => {
   const [selectedEstimateId, setSelectedEstimateId] = useState<number | null>(null);
   const [jobModalOpen, setJobModalOpen] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<number | null>(null);
+  
+  // Estados para edición y eliminación
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [estimateToEdit, setEstimateToEdit] = useState<Estimate | null>(null);
+  const [estimateToDelete, setEstimateToDelete] = useState<Estimate | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
 
   // Estados de paginación
   const [page, setPage] = useState(0);
@@ -77,12 +88,12 @@ const Estimates: React.FC = () => {
   const [filters, setFilters] = useState<FetchEstimatesParams>({
     page: 1,
     limit: 10,
-    branch: undefined, // <--- Cambio aquí
-    salesperson: undefined, // <--- Cambio aquí
-    status: undefined, // <--- Cambio aquí
+    branch: undefined,
+    salesperson: undefined,
+    status: undefined,
     startDate: '',
     endDate: '',
-    has_job: undefined
+    search: '' // Nuevo campo de búsqueda
   });
 
   // Estados del modal de sync
@@ -112,7 +123,7 @@ const Estimates: React.FC = () => {
         const salesPersonsData = await estimateService.getSalesPersons(
           filters.branch ? { branchId: filters.branch } : {}
         );
-        setSalesPersons(salesPersonsData);
+        setSalesPersons(Array.isArray(salesPersonsData) ? salesPersonsData : []);
       } catch (error: any) {
         setError('Error loading salespersons: ' + (error.response?.data?.message || error.message));
       } finally {
@@ -139,9 +150,10 @@ const Estimates: React.FC = () => {
         estimateService.getEstimateStatuses()
       ]);
       
-      setBranches(branchesData);
-      setSalesPersons(salesPersonsData);
-      setStatuses(statusesData);
+      // Manejo defensivo de los datos iniciales
+      setBranches(Array.isArray(branchesData) ? branchesData : []);
+      setSalesPersons(Array.isArray(salesPersonsData) ? salesPersonsData : []);
+      setStatuses(Array.isArray(statusesData) ? statusesData : []);
     } catch (error: any) {
       setError('Error loading initial data: ' + (error.response?.data?.message || error.message));
     } finally {
@@ -163,8 +175,16 @@ const Estimates: React.FC = () => {
       };
 
       const response: FetchEstimatesResponse = await estimateService.fetchEstimates(params);
-      setEstimates(response.data);
-      setTotalCount(response.total);
+      
+      // Manejo defensivo de la respuesta
+      if (response && typeof response === 'object') {
+        setEstimates(response.data || []);
+        setTotalCount(response.total || 0);
+      } else {
+        console.warn('Unexpected response from fetchEstimates:', response);
+        setEstimates([]);
+        setTotalCount(0);
+      }
     } catch (error: any) {
       setError('Error loading estimates: ' + (error.response?.data?.message || error.message));
       setEstimates([]);
@@ -233,11 +253,12 @@ const Estimates: React.FC = () => {
     setFilters({
       page: 1,
       limit: rowsPerPage,
-      branch: undefined, // <--- Cambio aquí
-      salesperson: undefined, // <--- Cambio aquí
-      status: undefined, // <--- Cambio aquí
+      branch: undefined,
+      salesperson: undefined,
+      status: undefined,
       startDate: '',
-      endDate: ''
+      endDate: '',
+      search: ''
     });
     setPage(0);
   };
@@ -273,6 +294,59 @@ const Estimates: React.FC = () => {
       return format(new Date(dateString), 'MM/dd/yyyy');
     } catch {
       return 'Invalid Date';
+    }
+  };
+
+  // Funciones para manejar acciones
+  const handleEditEstimate = (estimate: Estimate) => {
+    setEstimateToEdit(estimate);
+    setEditModalOpen(true);
+  };
+
+  const handleUpdateEstimate = async (estimateData: Partial<Estimate>) => {
+    if (!estimateToEdit) return;
+    
+    try {
+      setEditLoading(true);
+      await estimateService.updateEstimate(estimateToEdit.id, estimateData);
+      
+      // Recargar la lista de estimates
+      await loadEstimates();
+      
+      // Cerrar el modal
+      setEditModalOpen(false);
+      setEstimateToEdit(null);
+      
+      setSuccessMessage('Estimate updated successfully');
+    } catch (error: any) {
+      setError('Error updating estimate: ' + (error.response?.data?.message || error.message));
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleDeleteEstimate = (estimate: Estimate) => {
+    setEstimateToDelete(estimate);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteEstimate = async () => {
+    if (!estimateToDelete) return;
+    
+    try {
+      setLoading(true);
+      await estimateService.deleteEstimate(estimateToDelete.id);
+      setNotification({ message: 'Estimate deleted successfully', severity: 'success' });
+      loadEstimates(); // Recargar la lista
+      setDeleteDialogOpen(false);
+      setEstimateToDelete(null);
+    } catch (error: any) {
+      setNotification({ 
+        message: 'Error deleting estimate: ' + (error.response?.data?.message || error.message), 
+        severity: 'error' 
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -322,10 +396,9 @@ const Estimates: React.FC = () => {
       )}
 
       {/* Filtros */}
-      <Card sx={{ mb: 3 }} className="card-dark">
+      <Card sx={{ mb: 3 }}>
         <CardContent>
           <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <FilterIcon sx={{ mr: 1 }} />
             <Typography variant="h6">Filters</Typography>
             <Button
               size="small"
@@ -336,102 +409,93 @@ const Estimates: React.FC = () => {
             </Button>
           </Box>
           <Divider sx={{ mb: 2 }} />
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
-            <Box sx={{ minWidth: 200, flex: 1 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Branch</InputLabel>
-                <Select
-                  value={filters.branch || ''}
-                  onChange={(e) => handleFilterChange('branch', e.target.value)}
-                  label="Branch"
-                >
-                  <MenuItem value="">Todas</MenuItem>
-                  {branches.map((branch) => (
-                    <MenuItem key={branch.id} value={branch.id}>
-                      {branch.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box sx={{ minWidth: 200, flex: 1 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Salesperson</InputLabel>
-                <Select
-                  value={filters.salesperson || ''}
-                  onChange={(e) => handleFilterChange('salesperson', e.target.value)}
-                  label="Salesperson"
-                >
-                  <MenuItem value="">All</MenuItem>
-                  {salesPersons.map((person) => (
-                    <MenuItem key={person.id} value={person.id}>
-                      {person.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box sx={{ minWidth: 200, flex: 1 }}>
-              <FormControl fullWidth size="small">
-                              <InputLabel>Status</InputLabel>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+            <TextField
+              sx={{ flex: '1 1 200px' }}
+              label="Search estimates..."
+              value={filters.search || ''}
+              onChange={(e) => handleFilterChange('search', e.target.value)}
+              size="small"
+              InputProps={{
+                startAdornment: <SearchIcon sx={{ color: 'text.secondary', mr: 1 }} />
+              }}
+              placeholder="Search by name, salesperson, or branch"
+            />
+            <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+              <InputLabel>Branch</InputLabel>
+              <Select
+                value={filters.branch || ''}
+                onChange={(e) => handleFilterChange('branch', e.target.value)}
+                label="Branch"
+              >
+                <MenuItem value=""><em>All Branches</em></MenuItem>
+                {branches && branches.map((branch) => (
+                  <MenuItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+              <InputLabel>Salesperson</InputLabel>
+              <Select
+                value={filters.salesperson || ''}
+                onChange={(e) => handleFilterChange('salesperson', e.target.value)}
+                label="Salesperson"
+              >
+                <MenuItem value=""><em>All Salespersons</em></MenuItem>
+                {salesPersons && salesPersons.map((person) => (
+                  <MenuItem key={person.id} value={person.id}>
+                    {person.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+            <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+              <InputLabel>Status</InputLabel>
               <Select
                 value={filters.status || ''}
                 onChange={(e) => handleFilterChange('status', e.target.value)}
                 label="Status"
-                >
-                  <MenuItem value="">All</MenuItem>
-                  {statuses.map((status) => (
-                    <MenuItem key={status.id} value={status.id}>
-                      {status.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Box>
-            <Box sx={{ minWidth: 200, flex: 1 }}>
-              <TextField
-                fullWidth
-                size="small"
-                type="date"
-                label="From date"
-                value={filters.startDate}
-                onChange={(e) => handleFilterChange('startDate', e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Box>
-            <Box sx={{ minWidth: 200, flex: 1 }}>
-              <TextField
-                fullWidth
-                size="small"
-                type="date"
-                label="To date"
-                value={filters.endDate}
-                onChange={(e) => handleFilterChange('endDate', e.target.value)}
-                InputLabelProps={{ shrink: true }}
-              />
-            </Box>
-            <Box sx={{ minWidth: 200, flex: 1 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Has Job</InputLabel>
-                <Select
-                  value={typeof filters.has_job === 'boolean' ? String(filters.has_job) : ''}
-                  onChange={(e) => handleFilterChange('has_job', e.target.value === '' ? undefined : e.target.value === 'true')}
-                  label="Has Job"
-                >
-                  <MenuItem value="">
-                    <em>All</em>
+              >
+                <MenuItem value=""><em>All Statuses</em></MenuItem>
+                {statuses && statuses.map((status) => (
+                  <MenuItem key={status.id} value={status.id}>
+                    {status.name}
                   </MenuItem>
-                  <MenuItem value="true">With Job</MenuItem>
-                  <MenuItem value="false">Without Job</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
+                ))}
+              </Select>
+            </FormControl>
+            <TextField 
+              sx={{ flex: '1 1 150px' }} 
+              type="date" 
+              value={filters.startDate} 
+              onChange={(e) => handleFilterChange('startDate', e.target.value)} 
+              InputLabelProps={{ shrink: true }} 
+              label="From Date" 
+              size="small" 
+            />
+            <TextField 
+              sx={{ flex: '1 1 150px' }} 
+              type="date" 
+              value={filters.endDate} 
+              onChange={(e) => handleFilterChange('endDate', e.target.value)} 
+              InputLabelProps={{ shrink: true }} 
+              label="To Date" 
+              size="small" 
+            />
+            <Button 
+              variant="outlined" 
+              onClick={clearFilters}
+            >
+              Clear
+            </Button>
           </Box>
         </CardContent>
       </Card>
 
       {/* Tabla */}
-      <Card className="card-dark">
+      <Card>
         <CardContent sx={{ p: 0 }}>
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
@@ -439,33 +503,36 @@ const Estimates: React.FC = () => {
             </Box>
           ) : (
             <>
-              <TableContainer component={Paper} className="table-container">
-                <Table>
+              <TableContainer component={Paper}>
+                <Table sx={{ minWidth: 650 }} aria-label="estimates table">
                   <TableHead>
                     <TableRow>
-                      {/* <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>ID</TableCell> */}
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Name</TableCell>
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Branch</TableCell>
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Salesperson</TableCell>
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Status</TableCell>
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Final Price</TableCell>
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Discount</TableCell>
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Hours</TableCell>
-                      <TableCell sx={{ color: 'text.primary', fontWeight: 'bold' }}>Dates</TableCell>
+                      {/* <TableCell sx={{ fontWeight: 'bold' }}>ID</TableCell> */}
+                      <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Branch</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Salesperson</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Final Price</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Discount</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Hours</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Dates</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {estimates.map((estimate) => (
-                      <TableRow key={estimate.id} hover>
+                      <TableRow 
+                        key={estimate.id} 
+                        hover
+                        onClick={() => { setSelectedEstimateId(estimate.id); setDetailsOpen(true); }}
+                        sx={{ 
+                          cursor: 'pointer',
+                          '&:last-child td, &:last-child th': { border: 0 }
+                        }}
+                      >
                         {/* <TableCell>{estimate.id}</TableCell> */}
-                        <TableCell>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 'medium', cursor: 'pointer', color: 'primary.main' }}
-                            onClick={() => { setSelectedEstimateId(estimate.id); setDetailsOpen(true); }}
-                          >
-                            {estimate.name}
-                          </Typography>
+                        <TableCell component="th" scope="row">
+                          {estimate.name}
                         </TableCell>
                         <TableCell>{renderCell(estimate.Branch?.name)}</TableCell>
                         <TableCell>{renderCell(estimate.SalesPerson?.name)}</TableCell>
@@ -480,7 +547,7 @@ const Estimates: React.FC = () => {
                           {estimate.final_price != null ? formatPrice(Number(estimate.final_price)) : 'N/A'}
                         </TableCell>
                         <TableCell>
-                          {estimate.discount != null ? `${parseFloat(String(estimate.discount)).toFixed(2)}%` : 'N/A'}
+                          {estimate.discount != null ? `${parseFloat(String(estimate.discount)).toFixed(2)}%` : '0.00%'}
                         </TableCell>
                         <TableCell>
                           {estimate.attic_tech_hours != null ? `${Number(estimate.attic_tech_hours).toFixed(2)}h` : 'N/A'}
@@ -493,12 +560,35 @@ const Estimates: React.FC = () => {
                                 AT Updated: {formatDate(estimate.at_updated_date)}
                             </Typography>
                         </TableCell>
-                        {/* Jump to Job column removido por estética */}
+                        <TableCell sx={{ textAlign: 'center' }}>
+                          <Tooltip title="Edit estimate">
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleEditEstimate(estimate);
+                              }}
+                              size="small"
+                            >
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete estimate">
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDeleteEstimate(estimate);
+                              }}
+                              size="small"
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {estimates.length === 0 && !loading && (
                       <TableRow>
-                        <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                        <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
                           <Typography variant="body1" color="text.secondary">
                             No estimates found with applied filters
                           </Typography>
@@ -552,7 +642,7 @@ const Estimates: React.FC = () => {
                   <MenuItem value="">
                     <em>All</em>
                   </MenuItem>
-                  {branches.map((branch) => (
+                  {branches && branches.map((branch) => (
                     <MenuItem key={branch.id} value={branch.id}>
                       {branch.name}
                     </MenuItem>
@@ -641,6 +731,54 @@ const Estimates: React.FC = () => {
         open={jobModalOpen}
         onClose={() => { setJobModalOpen(false); setSelectedJobId(null); }}
       />
+
+      {/* Edit Estimate Modal */}
+      <EstimateFormModal
+        open={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setEstimateToEdit(null);
+        }}
+        onSubmit={handleUpdateEstimate}
+        estimate={estimateToEdit || undefined}
+        loading={editLoading}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Confirm Delete
+        </DialogTitle>
+        <DialogContent>
+          <Typography>
+            Are you sure you want to delete the estimate "{estimateToDelete?.name}"? 
+            This action cannot be undone.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setDeleteDialogOpen(false)}
+            disabled={loading}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmDeleteEstimate}
+            color="error"
+            variant="contained"
+            disabled={loading}
+            startIcon={loading ? <CircularProgress size={20} /> : <DeleteIcon />}
+          >
+            {loading ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
 
     </Box>
   );

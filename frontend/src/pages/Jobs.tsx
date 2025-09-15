@@ -22,14 +22,16 @@ import {
     Divider,
     FormControl,
     InputLabel,
-    TablePagination
+    TablePagination,
+    Tabs,
+    Tab
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
-import AddIcon from '@mui/icons-material/Add';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { getJobs, deleteJob, createJob, updateJob, type CreateJobData, type UpdateJobData, addOrUpdateShifts, getJobById } from '../services/jobService';
 import branchService from '../services/branchService';
+import ShiftApproval from './ShiftApproval';
 import salespersonService from '../services/salespersonService';
 import crewService from '../services/crewService';
 import type { Job, Branch, SalesPerson, CrewMember, JobDetails } from '../interfaces';
@@ -37,6 +39,9 @@ import JobDetailsModal from '../components/jobs/JobDetailsModal';
 import JobFormModal from '../components/jobs/JobFormModal';
 
 const Jobs: React.FC = () => {
+    // Estado para las tabs
+    const [currentTab, setCurrentTab] = useState(0);
+    
     const [jobs, setJobs] = useState<Job[]>([]);
     const [loading, setLoading] = useState<boolean>(true);
     const [formLoading, setFormLoading] = useState<boolean>(false);
@@ -179,193 +184,180 @@ const Jobs: React.FC = () => {
         }
     };
 
-    const handleFixCrewLeaders = async () => {
-        try {
-            setLoading(true);
-            const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/jobs/fix-crew-leaders`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            
-            const result = await response.json();
-            
-            if (result.success) {
-                setError(null);
-                alert(`✅ ${result.message}`);
-                fetchJobs(); // Recargar jobs para ver los cambios
-            } else {
-                setError(result.message || 'Failed to fix crew leaders.');
-            }
-        } catch (err) {
-            setError('Failed to fix crew leaders.');
-            console.error(err);
-        } finally {
-            setLoading(false);
-        }
-    };
 
     return (
         <Box sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 4 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                    <Typography variant="h4" gutterBottom sx={{ m: 0, fontWeight: 'bold' }}>
-                        Jobs
-                    </Typography>
-                    <Tooltip title="Refresh Jobs">
-                        <IconButton onClick={fetchJobs} sx={{ ml: 1 }}>
-                            <RefreshIcon />
-                        </IconButton>
-                    </Tooltip>
-                </Box>
-                <Box sx={{ display: 'flex', gap: 2 }}>
-                    <Button 
-                        variant="outlined" 
-                        onClick={handleFixCrewLeaders}
-                        disabled={loading}
-                    >
-                        Fix Crew Leaders
-                    </Button>
-                    <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenFormModal(null)}>
-                        Create Job
-                    </Button>
-                </Box>
+            {/* Header */}
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                <Typography variant="h4" gutterBottom sx={{ m: 0, fontWeight: 'bold' }}>
+                    Jobs
+                </Typography>
             </Box>
 
-            {/* Filter Section */}
-            <Card sx={{ mb: 3 }}>
-                <CardContent>
-                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                        <Typography variant="h6">Filters</Typography>
-                        <Button
-                        size="small"
-                        onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', startDate: '', endDate: '' })}
-                        sx={{ ml: 'auto' }}
-                        >
-                        Clear filters
-                        </Button>
-                    </Box>
-                    <Divider sx={{ mb: 2 }} />
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
-                        <TextField
-                            sx={{ flex: '1 1 200px' }}
-                            label="Search by Job Name"
-                            name="search"
-                            value={filters.search}
-                            onChange={handleFilterChange}
-                            size="small"
-                        />
-                        <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
-                             <InputLabel>Branch</InputLabel>
-                            <Select value={filters.branchId} name="branchId" onChange={handleFilterChange} label="Branch">
-                                <MenuItem value=""><em>All Branches</em></MenuItem>
-                                {branches.map(branch => <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>)}
-                            </Select>
-                        </FormControl>
-                         <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
-                            <InputLabel>Estimator</InputLabel>
-                            <Select value={filters.salespersonId} name="salespersonId" onChange={handleFilterChange} label="Estimator">
-                                <MenuItem value=""><em>All Estimators</em></MenuItem>
-                                {salespersons.map(sp => <MenuItem key={sp.id} value={sp.id}>{sp.name}</MenuItem>)}
-                            </Select>
-                        </FormControl>
-                        <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
-                            <InputLabel>Crew Leader</InputLabel>
-                            <Select value={filters.crewLeaderId} name="crewLeaderId" onChange={handleFilterChange} label="Crew Leader">
-                                <MenuItem value=""><em>All Crew Leaders</em></MenuItem>
-                                {crewLeaders.map(cl => <MenuItem key={cl.id} value={cl.id}>{cl.name}</MenuItem>)}
-                            </Select>
-                        </FormControl>
-                        <TextField sx={{ flex: '1 1 150px' }} type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="From Date" size="small" />
-                        <TextField sx={{ flex: '1 1 150px' }} type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="To Date" size="small" />
-                        <Button variant="outlined" onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', startDate: '', endDate: '' })}>Clear</Button>
-                    </Box>
-                </CardContent>
-            </Card>
+            {/* Tabs */}
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                <Tabs 
+                    value={currentTab} 
+                    onChange={(_, newValue) => setCurrentTab(newValue)}
+                    aria-label="job tabs"
+                >
+                    <Tab label="Jobs List" />
+                    <Tab label="Shift Approval" />
+                </Tabs>
+            </Box>
 
-            {loading && (
-                <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-                    <CircularProgress />
-                </Box>
+            {/* Tab Content */}
+            {currentTab === 0 && (
+                <>
+                    {/* Refresh button para la tab de Jobs */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mb: 2 }}>
+                        <Tooltip title="Refresh Jobs">
+                            <IconButton onClick={fetchJobs}>
+                                <RefreshIcon />
+                            </IconButton>
+                        </Tooltip>
+                    </Box>
+
+                    {/* Filter Section */}
+                    <Card sx={{ mb: 3 }}>
+                        <CardContent>
+                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                                <Typography variant="h6">Filters</Typography>
+                                <Button
+                                size="small"
+                                onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', startDate: '', endDate: '' })}
+                                sx={{ ml: 'auto' }}
+                                >
+                                Clear filters
+                                </Button>
+                            </Box>
+                            <Divider sx={{ mb: 2 }} />
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
+                                <TextField
+                                    sx={{ flex: '1 1 200px' }}
+                                    label="Search by Job Name"
+                                    name="search"
+                                    value={filters.search}
+                                    onChange={handleFilterChange}
+                                    size="small"
+                                />
+                                <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+                                     <InputLabel>Branch</InputLabel>
+                                    <Select value={filters.branchId} name="branchId" onChange={handleFilterChange} label="Branch">
+                                        <MenuItem value=""><em>All Branches</em></MenuItem>
+                                        {branches && branches.map(branch => <MenuItem key={branch.id} value={branch.id}>{branch.name}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                                 <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+                                    <InputLabel>Estimator</InputLabel>
+                                    <Select value={filters.salespersonId} name="salespersonId" onChange={handleFilterChange} label="Estimator">
+                                        <MenuItem value=""><em>All Estimators</em></MenuItem>
+                                        {salespersons.map(sp => <MenuItem key={sp.id} value={sp.id}>{sp.name}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                                <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+                                    <InputLabel>Crew Leader</InputLabel>
+                                    <Select value={filters.crewLeaderId} name="crewLeaderId" onChange={handleFilterChange} label="Crew Leader">
+                                        <MenuItem value=""><em>All Crew Leaders</em></MenuItem>
+                                        {crewLeaders.map(cl => <MenuItem key={cl.id} value={cl.id}>{cl.name}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
+                                <TextField sx={{ flex: '1 1 150px' }} type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="From Date" size="small" />
+                                <TextField sx={{ flex: '1 1 150px' }} type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="To Date" size="small" />
+                                <Button variant="outlined" onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', startDate: '', endDate: '' })}>Clear</Button>
+                            </Box>
+                        </CardContent>
+                    </Card>
+
+                    {loading && (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+                            <CircularProgress />
+                        </Box>
+                    )}
+                    {error && <Alert severity="error">{error}</Alert>}
+                    {!loading && !error && (
+                    <Card>
+                        <CardContent sx={{ p: 0 }}>
+                            <TableContainer component={Paper}>
+                                <Table sx={{ minWidth: 650 }} aria-label="jobs table">
+                                    <TableHead>
+                                        <TableRow>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Job Name</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Branch</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Estimator</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Crew Leader</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Closing Date</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {jobs.map((job) => (
+                                            <TableRow
+                                                key={job.id}
+                                                hover
+                                                onClick={() => handleOpenDetailsModal(job)}
+                                                sx={{ 
+                                                    cursor: 'pointer',
+                                                    '&:last-child td, &:last-child th': { border: 0 }
+                                                }}
+                                            >
+                                                <TableCell component="th" scope="row">{job.name}</TableCell>
+                                                <TableCell>{job.branch?.name || 'N/A'}</TableCell>
+                                                <TableCell>{job.estimate?.salesperson?.name || 'N/A'}</TableCell>
+                                                <TableCell>{job.crewLeader?.name || 'N/A'}</TableCell>
+                                                <TableCell>{new Date(job.closing_date).toLocaleDateString()}</TableCell>
+                                                <TableCell sx={{ textAlign: 'center' }}>
+                                                    <Tooltip title="Edit Job">
+                                                        <IconButton
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleOpenFormModal(job);
+                                                            }}
+                                                            size="small"
+                                                        >
+                                                            <EditIcon />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                    <Tooltip title="Delete Job">
+                                                        <IconButton
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleDeleteJob(job.id, job.name);
+                                                            }}
+                                                            size="small"
+                                                        >
+                                                            <DeleteIcon />
+                                                        </IconButton>
+                                                    </Tooltip>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                            <TablePagination
+                                rowsPerPageOptions={[5, 10, 25, 50]}
+                                component="div"
+                                count={totalJobs}
+                                rowsPerPage={rowsPerPage}
+                                page={page}
+                                onPageChange={(e, newPage) => setPage(newPage)}
+                                onRowsPerPageChange={(e) => {
+                                    setRowsPerPage(parseInt(e.target.value, 10));
+                                    setPage(0);
+                                }}
+                            />
+                        </CardContent>
+                    </Card>
+                    )}
+                </>
             )}
-            {error && <Alert severity="error">{error}</Alert>}
-            {!loading && !error && (
-            <Card>
-                <CardContent sx={{ p: 0 }}>
-                    <TableContainer component={Paper}>
-                        <Table sx={{ minWidth: 650 }} aria-label="jobs table">
-                            <TableHead>
-                                <TableRow>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Job Name</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Branch</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Estimator</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Crew Leader</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold' }}>Closing Date</TableCell>
-                                    <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {jobs.map((job) => (
-                                    <TableRow
-                                        key={job.id}
-                                        hover
-                                        onClick={() => handleOpenDetailsModal(job)}
-                                        sx={{ 
-                                            cursor: 'pointer',
-                                            '&:last-child td, &:last-child th': { border: 0 }
-                                        }}
-                                    >
-                                        <TableCell component="th" scope="row">{job.name}</TableCell>
-                                        <TableCell>{job.branch?.name || 'N/A'}</TableCell>
-                                        <TableCell>{job.estimate?.salesperson?.name || 'N/A'}</TableCell>
-                                        <TableCell>{job.crewLeader?.name || 'N/A'}</TableCell>
-                                        <TableCell>{new Date(job.closing_date).toLocaleDateString()}</TableCell>
-                                        <TableCell sx={{ textAlign: 'center' }}>
-                                            <Tooltip title="Edit Job">
-                                                <IconButton
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleOpenFormModal(job);
-                                                    }}
-                                                    size="small"
-                                                >
-                                                    <EditIcon />
-                                                </IconButton>
-                                            </Tooltip>
-                                            <Tooltip title="Delete Job">
-                                                <IconButton
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteJob(job.id, job.name);
-                                                    }}
-                                                    size="small"
-                                                >
-                                                    <DeleteIcon />
-                                                </IconButton>
-                                            </Tooltip>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-                    <TablePagination
-                        rowsPerPageOptions={[5, 10, 25, 50]}
-                        component="div"
-                        count={totalJobs}
-                        rowsPerPage={rowsPerPage}
-                        page={page}
-                        onPageChange={(e, newPage) => setPage(newPage)}
-                        onRowsPerPageChange={(e) => {
-                            setRowsPerPage(parseInt(e.target.value, 10));
-                            setPage(0);
-                        }}
-                    />
-                </CardContent>
-            </Card>
+
+            {currentTab === 1 && (
+                <ShiftApproval />
             )}
+
+            {/* Modales (disponibles en ambas tabs) */}
             <JobDetailsModal
                 jobId={selectedJobDetails?.id || null}
                 open={isDetailsModalOpen}

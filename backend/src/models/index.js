@@ -20,7 +20,9 @@ const Job = require('./Job');
 const Shift = require('./Shift');
 const SpecialShift = require('./SpecialShift');
 const JobSpecialShift = require('./JobSpecialShift');
+const JobStatus = require('./JobStatus');
 const AutomationErrorLog = require('./AutomationErrorLog');
+const Employee = require('./Employee');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -201,6 +203,9 @@ CrewMember.hasMany(Job, { foreignKey: 'crew_leader_id', as: 'ledJobs' });
 Job.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
 Branch.hasMany(Job, { foreignKey: 'branch_id', as: 'jobs' });
 
+Job.belongsTo(JobStatus, { foreignKey: 'status_id', as: 'status' });
+JobStatus.hasMany(Job, { foreignKey: 'status_id', as: 'jobs' });
+
 // Asociaciones para Shift
 Shift.belongsTo(Job, { foreignKey: 'job_id', as: 'job', onDelete: 'CASCADE' });
 Job.hasMany(Shift, { foreignKey: 'job_id', as: 'shifts' });
@@ -229,6 +234,18 @@ Job.hasMany(JobSpecialShift, { foreignKey: 'job_id', as: 'jobSpecialShifts' });
 JobSpecialShift.belongsTo(SpecialShift, { foreignKey: 'special_shift_id', as: 'specialShift' });
 SpecialShift.hasMany(JobSpecialShift, { foreignKey: 'special_shift_id', as: 'jobSpecialShifts' });
 
+// Asociaciones para Employee
+Employee.belongsTo(User, {
+    foreignKey: 'approved_by',
+    as: 'approver',
+    constraints: false // Opcional, ya que puede ser null
+});
+
+User.hasMany(Employee, {
+    foreignKey: 'approved_by',
+    as: 'approvedEmployees'
+});
+
 
 module.exports = {
     User,
@@ -251,5 +268,7 @@ module.exports = {
     Shift,
     SpecialShift,
     JobSpecialShift,
-    AutomationErrorLog
+    JobStatus,
+    AutomationErrorLog,
+    Employee
 }; 

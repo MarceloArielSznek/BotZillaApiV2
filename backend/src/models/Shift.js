@@ -25,6 +25,12 @@ Shift.init({
   hours: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: false
+  },
+  approved_shift: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Indica si el shift ha sido aprobado manualmente por un usuario'
   }
 }, {
   sequelize,

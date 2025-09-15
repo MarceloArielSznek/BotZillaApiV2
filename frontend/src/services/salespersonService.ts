@@ -14,10 +14,52 @@ const salespersonService = {
   getSalesPersons: async (params: SalesPersonListParams = {}): Promise<SalesPersonListResponse> => {
     try {
       const response = await api.get('/salespersons', { params });
-      return response.data;
+      
+      // Manejo defensivo de la respuesta
+      const data = response.data;
+      if (data && typeof data === 'object') {
+        // Si ya tiene la estructura esperada
+        if (data.salespersons && Array.isArray(data.salespersons)) {
+          return data;
+        }
+        // Si es un array directo
+        if (Array.isArray(data)) {
+          return {
+            salespersons: data,
+            pagination: {
+              currentPage: 1,
+              totalPages: 1,
+              totalCount: data.length,
+              hasNextPage: false,
+              hasPrevPage: false,
+            }
+          };
+        }
+      }
+      
+      console.warn('Unexpected salespersons response structure:', data);
+      return {
+        salespersons: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 1,
+          totalCount: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        }
+      };
     } catch (error: any) {
       console.error('Error fetching salespersons:', error.response?.data || error.message);
-      throw error;
+      return {
+        salespersons: [],
+        pagination: {
+          currentPage: 1,
+          totalPages: 1,
+          totalCount: 0,
+          hasNextPage: false,
+          hasPrevPage: false,
+        }
+      };
     }
   },
 
@@ -28,10 +70,21 @@ const salespersonService = {
       const response = await api.get('/salespersons', {
         params: { limit: 1000 } // Un número grande para asegurar que traemos a todos
       });
-      return response.data.salespersons;
+      
+      // Manejo defensivo de la respuesta
+      const data = response.data;
+      if (Array.isArray(data)) {
+        return data;
+      }
+      if (data && Array.isArray(data.salespersons)) {
+        return data.salespersons;
+      }
+      
+      console.warn('Unexpected salespersons filter response structure:', data);
+      return []; // Devolver array vacío en lugar de null
     } catch (error: any) {
       console.error('Error fetching salespersons for filter:', error.response?.data || error.message);
-      throw error;
+      return []; // Devolver array vacío en caso de error
     }
   },
 
@@ -152,16 +205,6 @@ const salespersonService = {
     }
   },
 
-  // POST /api/automations/clean-duplicate-salespersons - Limpiar duplicados
-  cleanDuplicateSalesPersons: async (): Promise<{ success: boolean; message: string; totalDuplicates: number; totalDeactivated: number; logs: string[] }> => {
-    try {
-      const response = await api.post('/automations/clean-duplicate-salespersons', {});
-      return response.data;
-    } catch (error: any) {
-      console.error('Error cleaning duplicate salespersons:', error.response?.data || error.message);
-      throw error;
-    }
-  },
 };
 
 export default salespersonService;

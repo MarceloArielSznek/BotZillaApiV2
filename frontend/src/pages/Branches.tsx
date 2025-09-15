@@ -322,7 +322,7 @@ const Branches = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {branches.map((branch) => (
+                    {branches && branches.map((branch) => (
                       <TableRow key={branch.id} hover>
                         <TableCell>{branch.id}</TableCell>
                         <TableCell>

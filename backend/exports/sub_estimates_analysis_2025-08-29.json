@@ -1,0 +1,122 @@
+[
+  {
+    "name": "Andres Veronica -  MON",
+    "branch": "San Bernardino  ",
+    "trueCost": 6594.411354586333,
+    "subCost": 1897.5,
+    "baseCost": 4696.911354586333,
+    "finalPrice": 16351.416904270249,
+    "actualMultiplier": "2.48",
+    "baseMultiplier": "3.48"
+  },
+  {
+    "name": "Len Lucarelli - RED",
+    "branch": "Everett -WA",
+    "trueCost": 6886.221582100001,
+    "subCost": 1137.5,
+    "baseCost": 5748.721582100001,
+    "finalPrice": 15024.134623479626,
+    "actualMultiplier": "2.18",
+    "baseMultiplier": "2.61"
+  },
+  {
+    "name": "Benjamin Iaderosa - SEA",
+    "branch": "Kent -WA ",
+    "trueCost": 3433.7611143099994,
+    "subCost": 133,
+    "baseCost": 3300.7611143099994,
+    "finalPrice": 8173.515570165336,
+    "actualMultiplier": "2.38",
+    "baseMultiplier": "2.48"
+  },
+  {
+    "name": "Douglas Thomas - SUQ",
+    "branch": "Kent -WA ",
+    "trueCost": 5153.412566666666,
+    "subCost": 4000,
+    "baseCost": 1153.412566666666,
+    "finalPrice": 10757.566814937498,
+    "actualMultiplier": "2.09",
+    "baseMultiplier": "9.33"
+  },
+  {
+    "name": "Thomas Bratawira - PLA",
+    "branch": "Orange County",
+    "trueCost": 3676.017508483333,
+    "subCost": 1897.5,
+    "baseCost": 1778.5175084833331,
+    "finalPrice": 6832.836417645334,
+    "actualMultiplier": "1.86",
+    "baseMultiplier": "3.84"
+  },
+  {
+    "name": "Jackie Liles - WOO",
+    "branch": "Everett -WA",
+    "trueCost": 6955.300660888333,
+    "subCost": 1137.5,
+    "baseCost": 5817.800660888333,
+    "finalPrice": 13869.084613408302,
+    "actualMultiplier": "1.99",
+    "baseMultiplier": "2.38"
+  },
+  {
+    "name": "Tuan Nguyen - OCE",
+    "branch": "San Diego",
+    "trueCost": 4483.785430555556,
+    "subCost": 3762.5,
+    "baseCost": 721.2854305555556,
+    "finalPrice": 8882.949486305557,
+    "actualMultiplier": "1.98",
+    "baseMultiplier": "12.32"
+  },
+  {
+    "name": "Aaron Dotson - EDM",
+    "branch": "Everett -WA",
+    "trueCost": 4376.722700586666,
+    "subCost": 1137.5,
+    "baseCost": 3239.222700586666,
+    "finalPrice": 10131.79138818392,
+    "actualMultiplier": "2.31",
+    "baseMultiplier": "3.13"
+  },
+  {
+    "name": "Don Kleiss - SEA",
+    "branch": "Everett -WA",
+    "trueCost": 5455.623370833333,
+    "subCost": 5425,
+    "baseCost": 30.623370833332956,
+    "finalPrice": 12049.472224843747,
+    "actualMultiplier": "2.21",
+    "baseMultiplier": "393.47"
+  },
+  {
+    "name": "Michael Matsunaga - CC",
+    "branch": "Orange County",
+    "trueCost": 9041.497145266665,
+    "subCost": 4900,
+    "baseCost": 4141.497145266665,
+    "finalPrice": 15760.882655939202,
+    "actualMultiplier": "1.74",
+    "baseMultiplier": "3.81"
+  },
+  {
+    "name": "Lourdes Centeno - LAM",
+    "branch": "San Bernardino  ",
+    "trueCost": 6207.31206982111,
+    "subCost": 2012.5,
+    "baseCost": 4194.81206982111,
+    "finalPrice": 12798.892826436937,
+    "actualMultiplier": "2.06",
+    "baseMultiplier": "3.05"
+  },
+  {
+    "name": "Kevin Hearn - LS",
+    "branch": "Everett -WA",
+    "trueCost": 8088.145229670833,
+    "subCost": 1137.5,
+    "baseCost": 6950.645229670833,
+    "finalPrice": 17512.285566070837,
+    "actualMultiplier": "2.17",
+    "baseMultiplier": "2.52"
+  }
+]
