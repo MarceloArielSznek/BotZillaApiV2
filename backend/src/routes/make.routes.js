@@ -279,6 +279,10 @@ router.post('/salespersons/confirm-assignment', makeController.confirmTelegramId
  *                 type: string
  *                 description: The name of the salesperson to search for (supports fuzzy matching)
  *                 example: "Marcelo Ariel Sznek"
+ *               job_name:
+ *                 type: string
+ *                 description: Optional job name to search for customer contact information
+ *                 example: "Johnson House Insulation"
  *     responses:
  *       200:
  *         description: Search results with telegram_id if found
@@ -297,10 +301,17 @@ router.post('/salespersons/confirm-assignment', makeController.confirmTelegramId
  *                   type: integer
  *                 name:
  *                   type: string
+ *                 first_name:
+ *                   type: string
+ *                 last_name:
+ *                   type: string
  *                 telegram_id:
  *                   type: string
  *                 has_telegram:
  *                   type: boolean
+ *                 customer_info:
+ *                   type: object
+ *                   description: Customer contact information if job_name was provided and found
  *                 similarity_score:
  *                   type: number
  *                 branches:

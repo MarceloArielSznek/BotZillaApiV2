@@ -630,9 +630,14 @@ Busca el telegram_id de un vendedor utilizando su nombre con soporte para búsqu
 - **Body**:
   ```json
   {
-      "name": "Marcelo Ariel Sznek"
+      "name": "Marcelo Ariel Sznek",
+      "job_name": "Johnson House Insulation"
   }
   ```
+  
+**Parámetros:**
+- **name** (requerido): Nombre del vendedor a buscar
+- **job_name** (opcional): Nombre del job para obtener información de contacto del cliente
 
 **Casos de Uso:**
 - Nombre exacto: `"Marcelo Sznek"` → encuentra `"Marcelo Sznek"`
@@ -654,7 +659,22 @@ Busca el telegram_id de un vendedor utilizando su nombre con soporte para búsqu
     "branches": [
         {"id": 1, "name": "San Bernardino"},
         {"id": 3, "name": "Orange County"}
-    ]
+    ],
+    "job_found": true,
+    "customer_info": {
+        "job_id": 123,
+        "job_name": "Johnson House Insulation",
+        "closing_date": "2025-09-15T00:00:00.000Z",
+        "job_similarity_score": 0.95,
+        "estimate": {
+            "id": 456,
+            "name": "Johnson Estimate",
+            "customer_name": "John Johnson",
+            "customer_phone": "+1-555-123-4567",
+            "customer_email": "john@johnson.com",
+            "customer_address": "123 Main St, Anytown, CA"
+        }
+    }
 }
 ```
 
@@ -687,6 +707,28 @@ Busca el telegram_id de un vendedor utilizando su nombre con soporte para búsqu
             "branches": []
         }
     ]
+}
+```
+
+**Response - Job No Encontrado (200)**:
+```json
+{
+    "success": true,
+    "exact_match": true,
+    "salesperson_id": 42,
+    "name": "Marcelo Sznek",
+    "first_name": "Marcelo",
+    "last_name": "Sznek",
+    "telegram_id": "123456789",
+    "has_telegram": true,
+    "branches": [
+        {"id": 1, "name": "San Bernardino"}
+    ],
+    "job_found": false,
+    "customer_info": {
+        "message": "No job found matching \"Nonexistent Job\" for this salesperson",
+        "searched_job_name": "Nonexistent Job"
+    }
 }
 ```
 
@@ -742,5 +784,12 @@ Busca el telegram_id de un vendedor utilizando su nombre con soporte para búsqu
 - Si `similarity_score > 0.7`, se considera un match válido automáticamente
 - El campo `has_telegram` indica si el vendedor ya tiene telegram_id configurado
 - Se incluyen las branches asociadas al vendedor para contexto adicional
+- **NUEVA FUNCIONALIDAD**: Si se proporciona `job_name`, busca información del cliente:
+  - Busca jobs que coincidan con el nombre (fuzzy matching)
+  - Filtra por el vendedor encontrado para mayor precisión
+  - Devuelve `customer_phone` para que el vendedor pueda llamar directamente
+  - Incluye información completa del cliente (nombre, email, dirección)
+  - **Campo `job_found`**: `true` si encontró el job, `false` si no existe
+  - Si no encuentra el job, devuelve un mensaje explicativo
 
 --- 

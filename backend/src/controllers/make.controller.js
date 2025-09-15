@@ -1,4 +1,4 @@
-const { User, SalesPerson, CrewMember, Branch, Op } = require('../models');
+const { User, SalesPerson, CrewMember, Branch, Estimate, Job, Op } = require('../models');
 const { Op: SequelizeOp } = require('sequelize'); // Import Op from sequelize
 
 /**
@@ -392,12 +392,13 @@ const confirmTelegramIdAssignment = async (req, res) => {
 
 /**
  * @description Find a salesperson's telegram_id by their name using fuzzy matching.
+ * Optionally searches for job/estimate information to provide customer contact details.
  * This handles variations like "Marcelo Ariel Sznek" vs "Marcelo Sznek" or typos like "Marclo" vs "Marcelo".
  * @param {object} req - Express request object.
  * @param {object} res - Express response object.
  */
 const findTelegramIdByName = async (req, res) => {
-  const { name } = req.body;
+  const { name, job_name } = req.body;
 
   if (!name || typeof name !== 'string' || name.trim().length === 0) {
     return res.status(400).json({ 
@@ -407,6 +408,7 @@ const findTelegramIdByName = async (req, res) => {
   }
 
   const searchName = name.trim();
+  const searchJobName = job_name ? job_name.trim() : null;
 
   try {
     // 1. Búsqueda exacta primero
@@ -423,7 +425,11 @@ const findTelegramIdByName = async (req, res) => {
 
     if (salesperson) {
       const nameParts = splitName(salesperson.name);
-      return res.json({
+      
+      // Buscar información del cliente si se proporcionó job_name (sin filtrar por vendedor)
+      const customerInfo = await findCustomerInfoByJobName(searchJobName, null);
+      
+      const response = {
         success: true,
         exact_match: true,
         salesperson_id: salesperson.id,
@@ -433,7 +439,27 @@ const findTelegramIdByName = async (req, res) => {
         telegram_id: salesperson.telegram_id,
         has_telegram: !!salesperson.telegram_id,
         branches: salesperson.branches.map(b => ({ id: b.id, name: b.name }))
-      });
+      };
+
+      // Agregar información del cliente si se encontró
+      if (customerInfo) {
+        response.job_found = true;
+        response.customer_info = {
+          job_id: customerInfo.job_id,
+          job_name: customerInfo.job_name,
+          closing_date: customerInfo.closing_date,
+          job_similarity_score: customerInfo.similarity_score,
+          estimate: customerInfo.estimate
+        };
+      } else if (searchJobName) {
+        response.job_found = false;
+        response.customer_info = {
+          message: `No job found matching "${searchJobName}" for this salesperson`,
+          searched_job_name: searchJobName
+        };
+      }
+
+      return res.json(response);
     }
 
     // 2. Búsqueda fuzzy usando ILIKE con múltiples patrones
@@ -477,10 +503,14 @@ const findTelegramIdByName = async (req, res) => {
     }
 
     // 3. Si hay múltiples resultados, calcular similitud básica
-    const results = salespersons.map(sp => {
+    const results = await Promise.all(salespersons.map(async (sp) => {
       const similarity = calculateNameSimilarity(searchName, sp.name);
       const nameParts = splitName(sp.name);
-      return {
+      
+      // Buscar información del cliente si se proporcionó job_name (sin filtrar por vendedor)
+      const customerInfo = searchJobName ? await findCustomerInfoByJobName(searchJobName, null) : null;
+      
+      const result = {
         salesperson_id: sp.id,
         name: sp.name,
         first_name: nameParts.first_name,
@@ -490,7 +520,23 @@ const findTelegramIdByName = async (req, res) => {
         similarity_score: similarity,
         branches: sp.branches.map(b => ({ id: b.id, name: b.name }))
       };
-    });
+
+      // Agregar información del cliente si se encontró
+      if (customerInfo) {
+        result.job_found = true;
+        result.customer_info = {
+          job_id: customerInfo.job_id,
+          job_name: customerInfo.job_name,
+          closing_date: customerInfo.closing_date,
+          job_similarity_score: customerInfo.similarity_score,
+          estimate: customerInfo.estimate
+        };
+      } else if (searchJobName) {
+        result.job_found = false;
+      }
+
+      return result;
+    }));
 
     // Ordenar por similitud (mayor a menor)
     results.sort((a, b) => b.similarity_score - a.similarity_score);
@@ -526,6 +572,79 @@ const findTelegramIdByName = async (req, res) => {
 };
 
 /**
+ * Busca información del cliente basada en el nombre del job
+ * @param {string} jobName - Nombre del job a buscar
+ * @param {number} salespersonId - ID del vendedor (opcional para filtrar)
+ * @returns {object|null} Información del cliente o null si no se encuentra
+ */
+async function findCustomerInfoByJobName(jobName, salespersonId = null) {
+  if (!jobName) return null;
+
+  try {
+    // Buscar jobs que coincidan con el nombre (fuzzy search)
+    const jobSearchPatterns = [];
+    const words = jobName.split(/\s+/).filter(word => word.length > 2);
+    
+    words.forEach(word => {
+      jobSearchPatterns.push(`%${word}%`);
+    });
+    jobSearchPatterns.push(`%${words.join('%')}%`);
+
+    const whereConditions = jobSearchPatterns.map(pattern => ({
+      name: { [SequelizeOp.iLike]: pattern }
+    }));
+
+    // Incluir filtro por salesperson si se proporciona
+    const estimateWhere = salespersonId ? { sales_person_id: salespersonId } : {};
+
+    const estimates = await Estimate.findAll({
+      where: {
+        [SequelizeOp.or]: whereConditions,
+        ...estimateWhere
+      },
+      attributes: ['id', 'name', 'customer_name', 'customer_phone', 'customer_email', 'customer_address'],
+      limit: 20
+    });
+
+    if (estimates.length === 0) return null;
+
+    // Calcular similitud y ordenar
+    const jobResults = estimates.map(estimate => {
+      const similarity = calculateNameSimilarity(jobName, estimate.name);
+      return {
+        job_id: null, // No hay job_id porque buscamos directo en estimates
+        job_name: estimate.name,
+        closing_date: null, // Los estimates no tienen closing_date
+        similarity_score: similarity,
+        estimate: {
+          id: estimate.id,
+          name: estimate.name,
+          customer_name: estimate.customer_name,
+          customer_phone: estimate.customer_phone,
+          customer_email: estimate.customer_email,
+          customer_address: estimate.customer_address
+        }
+      };
+    });
+
+    // Ordenar por similitud y devolver el mejor match
+    jobResults.sort((a, b) => b.similarity_score - a.similarity_score);
+    
+    // Solo devolver resultado si tiene una similitud mínima aceptable
+    const bestMatch = jobResults[0];
+    if (bestMatch.similarity_score >= 0.7) {
+      return bestMatch;
+    }
+    
+    return null;
+    
+  } catch (error) {
+    console.error('Error finding customer info by job name:', error);
+    return null;
+  }
+}
+
+/**
  * Separa un nombre completo en first_name y last_name
  * @param {string} fullName - Nombre completo
  * @returns {object} { first_name, last_name }
@@ -556,28 +675,84 @@ function splitName(fullName) {
  * @returns {number} Puntuación entre 0 y 1
  */
 function calculateNameSimilarity(search, target) {
+  // Función para normalizar texto (quitar puntuación y espacios extra)
+  const normalizeText = (text) => {
+    return text
+      .toLowerCase()
+      .replace(/[^\w\s]/g, ' ')  // Reemplazar puntuación con espacios
+      .replace(/\s+/g, ' ')      // Múltiples espacios a uno solo
+      .trim();
+  };
+
   const searchLower = search.toLowerCase().trim();
   const targetLower = target.toLowerCase().trim();
   
-  // Si son iguales, puntuación perfecta
+  // Si son iguales exactamente, puntuación perfecta
   if (searchLower === targetLower) return 1.0;
   
-  // Dividir en palabras
-  const searchWords = searchLower.split(/\s+/);
-  const targetWords = targetLower.split(/\s+/);
+  // Normalizar ambos textos para comparación sin puntuación
+  const searchNormalized = normalizeText(search);
+  const targetNormalized = normalizeText(target);
+  
+  // Si son iguales después de normalizar, puntuación muy alta
+  if (searchNormalized === targetNormalized) return 0.95;
+  
+  // Lista de sufijos de ciudad a ignorar en la comparación
+  const citySuffixes = [
+    'riv', 'riverside', 'sd', 'san diego', 'oc', 'orange county', 
+    'la', 'los angeles', 'sb', 'san bernardino', 'kent', 'everett'
+  ];
+  
+  // Función para limpiar sufijos de ciudad
+  const cleanCitySuffixes = (text) => {
+    let cleaned = normalizeText(text);
+    citySuffixes.forEach(suffix => {
+      // Remover sufijos al final
+      const patterns = [
+        new RegExp(`\\s+${suffix}\\s*$`, 'i'),
+        new RegExp(`^${suffix}\\s+`, 'i')
+      ];
+      patterns.forEach(pattern => {
+        cleaned = cleaned.replace(pattern, '');
+      });
+    });
+    return cleaned.trim();
+  };
+  
+  // Limpiar ambos nombres de sufijos de ciudad usando textos normalizados
+  const searchCleaned = cleanCitySuffixes(searchNormalized);
+  const targetCleaned = cleanCitySuffixes(targetNormalized);
+  
+  // Si después de limpiar son iguales, puntuación perfecta
+  if (searchCleaned === targetCleaned) return 1.0;
+  
+  // Dividir en palabras (solo las palabras principales, sin sufijos de ciudad)
+  const searchWords = searchCleaned.split(/\s+/).filter(word => 
+    word.length > 1 && !citySuffixes.includes(word)
+  );
+  const targetWords = targetCleaned.split(/\s+/).filter(word => 
+    word.length > 1 && !citySuffixes.includes(word)
+  );
+  
+  // Si no hay palabras válidas después de limpiar, score muy bajo
+  if (searchWords.length === 0 || targetWords.length === 0) {
+    return 0.1;
+  }
   
   let matchingWords = 0;
   let totalWords = Math.max(searchWords.length, targetWords.length);
   
-  // Contar palabras que coinciden
+  // Contar palabras que coinciden (más estricto para nombres de persona)
   searchWords.forEach(searchWord => {
     const found = targetWords.some(targetWord => {
-      // Coincidencia exacta
+      // Coincidencia exacta (peso completo)
       if (searchWord === targetWord) return true;
       
-      // Coincidencia si una palabra contiene a la otra (para casos como "Marcelo" vs "Marclo")
-      if (searchWord.length >= 3 && targetWord.length >= 3) {
-        return searchWord.includes(targetWord) || targetWord.includes(searchWord);
+      // Coincidencia parcial solo para nombres largos (peso parcial)
+      if (searchWord.length >= 4 && targetWord.length >= 4) {
+        // Solo si uno contiene al otro al inicio (nombres típicos)
+        return (searchWord.startsWith(targetWord) || targetWord.startsWith(searchWord)) ||
+               (searchWord.includes(targetWord) || targetWord.includes(searchWord));
       }
       
       return false;
@@ -586,16 +761,18 @@ function calculateNameSimilarity(search, target) {
     if (found) matchingWords++;
   });
   
-  // Bonus si el target contiene todas las palabras del search
-  const allWordsFound = searchWords.every(searchWord => 
-    targetWords.some(targetWord => 
-      targetWord.includes(searchWord) || searchWord.includes(targetWord)
-    )
-  );
-  
+  // Calcular score base
   let score = matchingWords / totalWords;
-  if (allWordsFound && searchWords.length <= targetWords.length) {
-    score += 0.2; // Bonus por contener todas las palabras
+  
+  // Penalizar si hay muy pocas coincidencias de nombres reales
+  if (matchingWords === 0) {
+    return 0.0;
+  }
+  
+  // Bonus solo si la mayoría de palabras principales coinciden
+  const majorityMatch = matchingWords / searchWords.length >= 0.6;
+  if (majorityMatch && searchWords.length <= targetWords.length) {
+    score += 0.1; // Bonus más conservador
   }
   
   return Math.min(score, 1.0);
