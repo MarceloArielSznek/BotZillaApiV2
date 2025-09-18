@@ -48,19 +48,19 @@ export default defineConfig(({ mode }) => {
     server: serverConfig,
     // Configuración de build específica por entorno
     build: {
-    outDir: 'dist',
-    sourcemap: isDevelopment,
-    minify: isProduction,
-    rollupOptions: {
-      output: {
-        manualChunks: isProduction ? {
-          vendor: ['react', 'react-dom'],
-          mui: ['@mui/material', '@mui/icons-material'],
-        } : undefined,
-      },
-    },
+      outDir: 'dist',
+      sourcemap: isDevelopment,
+      minify: isProduction,
       // En desarrollo, builds más rápidos
       target: isDevelopment ? 'es2020' : 'es2015',
+      rollupOptions: {
+        output: {
+          manualChunks: isProduction ? {
+            vendor: ['react', 'react-dom'],
+            mui: ['@mui/material', '@mui/icons-material'],
+          } : undefined,
+        },
+      },
     },
     // Variables de entorno disponibles en el código
     define: {
@@ -68,4 +68,5 @@ export default defineConfig(({ mode }) => {
       __PROD__: isProduction,
       __MODE__: JSON.stringify(mode),
     },
-}))
+  }
+})
