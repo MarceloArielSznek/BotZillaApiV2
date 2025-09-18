@@ -1,6 +1,7 @@
 const { logger } = require('../utils/logger');
 const { Employee, User } = require('../models');
 const { Op } = require('sequelize');
+const makeWebhookService = require('../services/makeWebhook.service');
 
 /**
  * Controlador para registro de empleados
@@ -14,15 +15,21 @@ class EmployeeRegistrationController {
      */
     async registerEmployee(req, res) {
         try {
-            const { firstName, lastName, nickname, email, phoneNumber, telegramId } = req.body;
+            const { firstName, lastName, street, city, state, zip, dateOfBirth, email, phoneNumber, telegramId, branch, role } = req.body;
 
             logger.info('New employee registration received:', {
                 firstName,
                 lastName,
-                nickname: nickname || 'N/A',
+                street,
+                city,
+                state,
+                zip,
+                dateOfBirth,
                 email,
                 phoneNumber,
                 telegramId: telegramId ? '***' : 'N/A', // No loguear el ID completo por seguridad
+                branch,
+                role,
                 timestamp: new Date().toISOString(),
                 ip: req.ip,
                 userAgent: req.get('User-Agent')
@@ -54,10 +61,16 @@ class EmployeeRegistrationController {
             const newEmployee = await Employee.create({
                 first_name: firstName,
                 last_name: lastName,
-                nickname: nickname || null,
+                street: street,
+                city: city,
+                state: state,
+                zip: zip,
+                date_of_birth: dateOfBirth,
                 email: email.toLowerCase(),
                 phone_number: phoneNumber,
                 telegram_id: telegramId,
+                branch: branch,
+                role: role,
                 status: 'pending', // Estado inicial
                 notes: `Employee registered via self-registration form on ${new Date().toISOString()}`
             });
@@ -70,13 +83,36 @@ class EmployeeRegistrationController {
                 status: newEmployee.status
             });
 
+            // Enviar datos a Make.com (no bloquear la respuesta si falla)
+            makeWebhookService.sendEmployeeRegistration(newEmployee)
+                .then(success => {
+                    if (success) {
+                        logger.info('Employee registration sent to Make.com successfully', {
+                            employeeId: newEmployee.id,
+                            employeeCode: newEmployee.employee_code
+                        });
+                    } else {
+                        logger.warn('Failed to send employee registration to Make.com', {
+                            employeeId: newEmployee.id,
+                            employeeCode: newEmployee.employee_code
+                        });
+                    }
+                })
+                .catch(error => {
+                    logger.error('Error sending employee registration to Make.com:', {
+                        employeeId: newEmployee.id,
+                        employeeCode: newEmployee.employee_code,
+                        error: error.message
+                    });
+                });
+
             res.status(201).json({
                 success: true,
                 message: 'Employee registration submitted successfully. HR will review and contact you within 24 hours.',
                 data: {
                     registrationId: newEmployee.employee_code,
                     employeeId: newEmployee.id,
-                    fullName: newEmployee.getFullName(),
+                    fullName: `${newEmployee.first_name} ${newEmployee.last_name}`,
                     email: newEmployee.email,
                     status: newEmployee.status,
                     registrationDate: newEmployee.registration_date
@@ -269,6 +305,85 @@ class EmployeeRegistrationController {
                 success: false,
                 message: 'Error validating Telegram ID',
                 error: process.env.NODE_ENV === 'development' ? error.message : undefined
+            });
+        }
+    }
+
+    /**
+     * Probar webhook de Make.com
+     * POST /api/employee-registration/test-webhook
+     */
+    async testMakeWebhook(req, res) {
+        try {
+            logger.info('Make.com webhook test requested', {
+                requestedBy: req.user?.id || 'anonymous',
+                ip: req.ip
+            });
+
+            const isAvailable = await makeWebhookService.testWebhook();
+
+            if (isAvailable) {
+                res.json({
+                    success: true,
+                    message: 'Make.com webhook is configured and responding',
+                    data: {
+                        webhookStatus: 'available',
+                        testResult: 'success'
+                    }
+                });
+            } else {
+                res.status(503).json({
+                    success: false,
+                    message: 'Make.com webhook is not available or not configured',
+                    data: {
+                        webhookStatus: 'unavailable',
+                        testResult: 'failed'
+                    }
+                });
+            }
+
+        } catch (error) {
+            logger.error('Error testing Make.com webhook:', {
+                error: error.message,
+                stack: error.stack
+            });
+
+            res.status(500).json({
+                success: false,
+                message: 'Error testing Make.com webhook',
+                error: 'INTERNAL_SERVER_ERROR'
+            });
+        }
+    }
+
+    /**
+     * Obtener estado del webhook de Make.com
+     * GET /api/employee-registration/webhook-status
+     */
+    async getWebhookStatus(req, res) {
+        try {
+            const isConfigured = !!process.env.MAKE_WEBHOOK_URL;
+            
+            res.json({
+                success: true,
+                data: {
+                    webhookConfigured: isConfigured,
+                    webhookUrl: isConfigured ? 
+                        process.env.MAKE_WEBHOOK_URL.substring(0, 50) + '...' : 
+                        null,
+                    environment: process.env.NODE_ENV || 'production'
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error getting webhook status:', {
+                error: error.message
+            });
+
+            res.status(500).json({
+                success: false,
+                message: 'Error getting webhook status',
+                error: 'INTERNAL_SERVER_ERROR'
             });
         }
     }

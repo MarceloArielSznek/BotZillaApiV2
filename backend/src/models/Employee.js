@@ -147,6 +147,119 @@ Employee.init({
       }
     }
   },
+  street: {
+    type: DataTypes.STRING(200),
+    allowNull: false,
+    validate: {
+      notEmpty: {
+        msg: 'Street address cannot be empty'
+      },
+      len: {
+        args: [5, 200],
+        msg: 'Street address must be between 5 and 200 characters'
+      }
+    }
+  },
+  city: {
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    validate: {
+      notEmpty: {
+        msg: 'City cannot be empty'
+      },
+      len: {
+        args: [2, 100],
+        msg: 'City must be between 2 and 100 characters'
+      },
+      is: {
+        args: /^[a-zA-ZÀ-ÿ\u00f1\u00d1\s'-]+$/,
+        msg: 'City can only contain letters, spaces, hyphens and apostrophes'
+      }
+    }
+  },
+  state: {
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    validate: {
+      notEmpty: {
+        msg: 'State cannot be empty'
+      },
+      len: {
+        args: [2, 50],
+        msg: 'State must be between 2 and 50 characters'
+      }
+    }
+  },
+  zip: {
+    type: DataTypes.STRING(20),
+    allowNull: false,
+    validate: {
+      notEmpty: {
+        msg: 'Zip code cannot be empty'
+      },
+      len: {
+        args: [3, 20],
+        msg: 'Zip code must be between 3 and 20 characters'
+      },
+      is: {
+        args: /^[0-9A-Za-z\s-]+$/,
+        msg: 'Zip code can only contain letters, numbers, spaces and hyphens'
+      }
+    }
+  },
+  date_of_birth: {
+    type: DataTypes.DATEONLY,
+    allowNull: false,
+    validate: {
+      notEmpty: {
+        msg: 'Date of birth cannot be empty'
+      },
+      isDate: {
+        msg: 'Please provide a valid date of birth'
+      },
+      isBefore: {
+        args: new Date().toISOString().split('T')[0],
+        msg: 'Date of birth must be in the past'
+      },
+      isAdult(value) {
+        const today = new Date();
+        const birthDate = new Date(value);
+        const age = today.getFullYear() - birthDate.getFullYear();
+        const monthDiff = today.getMonth() - birthDate.getMonth();
+        
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+          age--;
+        }
+        
+        if (age < 16) {
+          throw new Error('Employee must be at least 16 years old');
+        }
+      }
+    }
+  },
+  branch: {
+    type: DataTypes.STRING(50),
+    allowNull: false,
+    validate: {
+      notEmpty: {
+        msg: 'Branch selection is required'
+      },
+      isIn: {
+        args: [['San Diego', 'Orange County', 'San Bernardino', 'Los Angeles', 'Everett (North Seattle)', 'Kent (South Seattle)']],
+        msg: 'Branch must be one of the available locations'
+      }
+    }
+  },
+  role: {
+    type: DataTypes.ENUM('crew_member', 'crew_leader', 'salesperson'),
+    allowNull: false,
+    validate: {
+      isIn: {
+        args: [['crew_member', 'crew_leader', 'salesperson']],
+        msg: 'Role must be one of: crew_member, crew_leader, salesperson'
+      }
+    }
+  },
   status: {
     type: DataTypes.ENUM('pending', 'active', 'inactive', 'rejected'),
     allowNull: false,

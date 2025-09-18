@@ -4,11 +4,29 @@ import { api } from '../config/api';
 export interface EmployeeRegistrationData {
   firstName: string;
   lastName: string;
-  nickname?: string;
+  street: string;
+  city: string;
+  state: string;
+  zip: string;
+  dateOfBirth: string;
   email: string;
   phoneNumber: string;
   telegramId: string;
+  branch: string;
+  role: 'crew_member' | 'crew_leader' | 'salesperson' | '';
 }
+
+// Fixed list of available branches
+export const AVAILABLE_BRANCHES = [
+  'San Diego',
+  'Orange County', 
+  'San Bernardino',
+  'Los Angeles',
+  'Everett (North Seattle)',
+  'Kent (South Seattle)'
+] as const;
+
+export type BranchType = typeof AVAILABLE_BRANCHES[number];
 
 export interface RegistrationResponse {
   success: boolean;
@@ -67,6 +85,26 @@ const employeeRegistrationService = {
         throw new Error('Last name is required');
       }
       
+      if (!employeeData.street?.trim()) {
+        throw new Error('Street address is required');
+      }
+      
+      if (!employeeData.city?.trim()) {
+        throw new Error('City is required');
+      }
+      
+      if (!employeeData.state?.trim()) {
+        throw new Error('State is required');
+      }
+      
+      if (!employeeData.zip?.trim()) {
+        throw new Error('Zip code is required');
+      }
+      
+      if (!employeeData.dateOfBirth?.trim()) {
+        throw new Error('Date of birth is required');
+      }
+      
       if (!employeeData.email?.trim()) {
         throw new Error('Email is required');
       }
@@ -78,15 +116,29 @@ const employeeRegistrationService = {
       if (!employeeData.telegramId?.trim()) {
         throw new Error('Telegram ID is required');
       }
+      
+      if (!employeeData.branch) {
+        throw new Error('Branch selection is required');
+      }
+      
+      if (!employeeData.role) {
+        throw new Error('Role selection is required');
+      }
 
       // Limpiar datos antes del envío
       const cleanData = {
         firstName: employeeData.firstName.trim(),
         lastName: employeeData.lastName.trim(),
-        nickname: employeeData.nickname?.trim() || '',
+        street: employeeData.street.trim(),
+        city: employeeData.city.trim(),
+        state: employeeData.state.trim(),
+        zip: employeeData.zip.trim(),
+        dateOfBirth: employeeData.dateOfBirth.trim(),
         email: employeeData.email.trim().toLowerCase(),
         phoneNumber: employeeData.phoneNumber.trim(),
-        telegramId: employeeData.telegramId?.trim() || ''
+        telegramId: employeeData.telegramId?.trim() || '',
+        branch: employeeData.branch,
+        role: employeeData.role
       };
 
       console.log('Submitting employee registration:', {
@@ -207,13 +259,6 @@ const employeeRegistrationService = {
     return phoneRegex.test(cleanPhone);
   },
 
-  /**
-   * Formatear nombre para display
-   */
-  formatFullName: (firstName: string, lastName: string, nickname?: string): string => {
-    const fullName = `${firstName.trim()} ${lastName.trim()}`;
-    return nickname?.trim() ? `${fullName} (${nickname.trim()})` : fullName;
-  },
 
   /**
    * Generar URL del bot de Telegram (configurable)
@@ -230,9 +275,16 @@ const employeeRegistrationService = {
     return !!(
       data.firstName?.trim() &&
       data.lastName?.trim() &&
+      data.street?.trim() &&
+      data.city?.trim() &&
+      data.state?.trim() &&
+      data.zip?.trim() &&
+      data.dateOfBirth?.trim() &&
       data.email?.trim() &&
       data.phoneNumber?.trim() &&
-      data.telegramId?.trim()
+      data.telegramId?.trim() &&
+      data.branch &&
+      data.role
     );
   },
 
@@ -240,29 +292,49 @@ const employeeRegistrationService = {
    * Obtener progreso del formulario (porcentaje)
    */
   getFormProgress: (data: EmployeeRegistrationData): number => {
-    const requiredFields = ['firstName', 'lastName', 'email', 'phoneNumber', 'telegramId'];
-    const optionalFields = ['nickname'];
+    const requiredFields = ['firstName', 'lastName', 'street', 'city', 'state', 'zip', 'dateOfBirth', 'email', 'phoneNumber', 'telegramId', 'branch', 'role'];
     
     let filledRequired = 0;
-    let filledOptional = 0;
     
     requiredFields.forEach(field => {
-      if (data[field as keyof EmployeeRegistrationData]?.trim()) {
+      const value = data[field as keyof EmployeeRegistrationData];
+      if (field === 'branch' || field === 'role') {
+        if (value) filledRequired++;
+      } else if (typeof value === 'string' && value.trim()) {
         filledRequired++;
       }
     });
     
-    optionalFields.forEach(field => {
-      if (data[field as keyof EmployeeRegistrationData]?.trim()) {
-        filledOptional++;
-      }
-    });
+    return Math.round((filledRequired / requiredFields.length) * 100);
+  },
+
+
+  /**
+   * Formatear nombre completo
+   */
+  formatFullName: (firstName: string, lastName: string): string => {
+    return `${firstName.trim()} ${lastName.trim()}`;
+  },
+
+  /**
+   * Validar fecha de nacimiento (debe ser mayor de 16 años)
+   */
+  validateDateOfBirth: (dateOfBirth: string): boolean => {
+    if (!dateOfBirth) return false;
     
-    // 80% por campos requeridos, 20% por opcionales
-    const requiredProgress = (filledRequired / requiredFields.length) * 80;
-    const optionalProgress = (filledOptional / optionalFields.length) * 20;
+    const today = new Date();
+    const birthDate = new Date(dateOfBirth);
     
-    return Math.round(requiredProgress + optionalProgress);
+    if (birthDate >= today) return false;
+    
+    const age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    
+    const actualAge = monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate()) 
+      ? age - 1 
+      : age;
+    
+    return actualAge >= 16;
   }
 };
 
