@@ -1,12 +1,14 @@
 import axios from 'axios';
 
-// Configuración flexible de API
+// Configuración flexible de API con proxy
 const getApiBaseUrl = () => {
-    // Si estás usando ngrok, descomenta la línea de abajo y reemplaza con tu URL
-    // return 'https://tu-dominio-ngrok.ngrok-free.app/api';
+    // En desarrollo, usar proxy (sin localhost:3000)
+    if (import.meta.env.DEV) {
+        return '/api'; // Proxy manejará la redirección
+    }
     
-    // Para desarrollo local
-    return import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+    // En producción, usar la URL del entorno
+    return import.meta.env.VITE_API_BASE_URL || '/api';
 };
 
 export const API_BASE_URL = getApiBaseUrl();
