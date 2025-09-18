@@ -52,6 +52,78 @@ app.set('trust proxy', [
     '131.0.72.0/22'
 ]);
 
+// CORS debe ir lo más arriba posible
+// Configuración CORS específica para desarrollo
+const corsOptions = {
+    origin: function (origin, callback) {
+        console.log('🔍 CORS Origin check:', origin);
+        
+        // En desarrollo, permitir localhost en cualquier puerto
+        if (!origin || 
+            (typeof origin === 'string' && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) ||
+            process.env.NODE_ENV === 'development') {
+            console.log('✅ CORS: Origen permitido');
+            callback(null, true);
+        } else if (process.env.NODE_ENV === 'production') {
+            // En producción, usar lista de orígenes permitidos
+            const allowedOrigins = [
+                process.env.FRONTEND_URL,
+                'https://yallaprojects.com'
+            ].filter(Boolean);
+            
+            if (allowedOrigins.includes(origin)) {
+                callback(null, true);
+            } else {
+                callback(new Error('Not allowed by CORS'));
+            }
+        } else {
+            console.log('✅ CORS: Permitiendo por defecto');
+            callback(null, true);
+        }
+    },
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    optionsSuccessStatus: 204
+};
+
+// Preflight y CORS: garantizar respuestas correctas ANTES de otros middlewares
+app.use((req, res, next) => {
+    const origin = req.get('origin');
+    if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+        if (origin) {
+            res.header('Access-Control-Allow-Origin', origin);
+        } else {
+            res.header('Access-Control-Allow-Origin', '*');
+        }
+        res.header('Access-Control-Allow-Credentials', 'true');
+        res.header('Vary', 'Origin');
+    }
+
+    if (req.method === 'OPTIONS') {
+        const requestHeaders = req.get('Access-Control-Request-Headers');
+        // Asegurar Allow-Origin también en preflight
+        if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+            if (origin) {
+                res.header('Access-Control-Allow-Origin', origin);
+            } else {
+                res.header('Access-Control-Allow-Origin', '*');
+            }
+            res.header('Access-Control-Allow-Credentials', 'true');
+            res.header('Vary', 'Origin');
+        }
+        res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
+        if (requestHeaders) {
+            res.header('Access-Control-Allow-Headers', requestHeaders);
+        } else {
+            res.header('Access-Control-Allow-Headers', 'Authorization,Content-Type,Accept,Origin');
+        }
+        res.header('Access-Control-Max-Age', '86400');
+        return res.status(204).end();
+    }
+    next();
+});
+app.use(cors(corsOptions));
+
 // Middlewares de logging (antes que todo)
 app.use(requestLogger);
 
@@ -84,46 +156,7 @@ const authLimiter = rateLimit({
     skipSuccessfulRequests: true,
 });
 
-// Configuración CORS simplificada para desarrollo
-const corsOptions = {
-    origin: true, // En desarrollo, permitir cualquier origin
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-    optionsSuccessStatus: 204
-};
-
-// Middleware EXPLÍCITO para manejar preflight requests ANTES de CORS
-app.options('*', (req, res) => {
-    const origin = req.get('origin');
-    
-    if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
-        console.log(`[PREFLIGHT] OPTIONS ${req.path} from origin: ${origin}`);
-        // En desarrollo, permitir cualquier origin
-        res.header('Access-Control-Allow-Origin', origin || '*');
-    } else {
-        // En producción, usar lógica más estricta
-        const allowedOrigins = [
-            process.env.FRONTEND_URL,
-            'https://tudominio.com',
-            'https://www.tudominio.com',
-            'https://app.tudominio.com'
-        ].filter(Boolean);
-        
-        if (!origin || allowedOrigins.includes(origin)) {
-            res.header('Access-Control-Allow-Origin', origin || '*');
-        }
-    }
-    
-    res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,PATCH,OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Origin,X-Requested-With,Content-Type,Accept,Authorization');
-    res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Max-Age', '86400'); // Cache preflight for 24 hours
-    
-    return res.status(204).end();
-});
-
-app.use(cors(corsOptions));
+// Quitamos el preflight manual (lo maneja cors) y dejamos solo uno
 
 // Middleware adicional para logging
 app.use((req, res, next) => {
