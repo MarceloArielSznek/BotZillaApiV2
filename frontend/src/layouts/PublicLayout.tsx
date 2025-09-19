@@ -6,9 +6,9 @@ import {
   Typography,
   Button,
   Container,
-  useTheme,
   Paper
 } from '@mui/material';
+import { useTheme } from '@mui/material/styles';
 import { useNavigate } from 'react-router-dom';
 import { Login as LoginIcon, Home as HomeIcon } from '@mui/icons-material';
 
