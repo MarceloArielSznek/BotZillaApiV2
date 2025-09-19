@@ -15,15 +15,15 @@ export default defineConfig(({ mode }) => {
     // 🚀 PROXY para eliminar problemas de CORS en desarrollo
     proxy: {
       '/api': {
-        target: 'http://localhost:3333',
+        target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
-          console.log('🔗 Proxy configurado: /api -> http://localhost:3333')
+          console.log('🔗 Proxy configurado: /api -> http://localhost:3000')
         }
       },
       '/health': {
-        target: 'http://localhost:3333',
+        target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
       }

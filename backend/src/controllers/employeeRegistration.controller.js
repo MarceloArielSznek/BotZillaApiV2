@@ -95,13 +95,92 @@ class EmployeeRegistrationController {
                 })) : undefined
             });
 
-            // Manejar errores de validación de Sequelize de forma genérica
+            // Manejar errores de validación de Sequelize con mensajes claros
             if (error.name === 'SequelizeValidationError') {
-                 return res.status(400).json({
-                     success: false,
-                     message: 'Database validation failed',
-                     errors: error.errors.map(err => ({ field: err.path, message: err.message }))
-                 });
+                const friendlyErrors = error.errors.map(err => {
+                    let friendlyMessage = err.message;
+                    
+                    // Mensajes más amigables para el usuario
+                    switch (err.path) {
+                        case 'first_name':
+                            if (err.message.includes('between 2 and 50')) {
+                                friendlyMessage = 'El nombre debe tener entre 2 y 50 caracteres';
+                            } else if (err.message.includes('letters')) {
+                                friendlyMessage = 'El nombre solo puede contener letras, espacios, guiones y apostrofes';
+                            }
+                            break;
+                        case 'last_name':
+                            if (err.message.includes('between 2 and 50')) {
+                                friendlyMessage = 'El apellido debe tener entre 2 y 50 caracteres';
+                            } else if (err.message.includes('letters')) {
+                                friendlyMessage = 'El apellido solo puede contener letras, espacios, guiones y apostrofes';
+                            }
+                            break;
+                        case 'email':
+                            if (err.message.includes('valid email')) {
+                                friendlyMessage = 'Por favor proporciona una dirección de email válida';
+                            } else if (err.message.includes('between 5 and 100')) {
+                                friendlyMessage = 'El email debe tener entre 5 y 100 caracteres';
+                            }
+                            break;
+                        case 'phone_number':
+                            if (err.message.includes('between 10 and 20')) {
+                                friendlyMessage = 'El número de teléfono debe tener entre 10 y 20 caracteres';
+                            }
+                            break;
+                        case 'street':
+                            if (err.message.includes('between 5 and 100')) {
+                                friendlyMessage = 'La dirección debe tener al menos 5 caracteres';
+                            }
+                            break;
+                        case 'city':
+                            if (err.message.includes('between 2 and 50')) {
+                                friendlyMessage = 'La ciudad debe tener entre 2 y 50 caracteres';
+                            }
+                            break;
+                        case 'state':
+                            if (err.message.includes('between 2 and 50')) {
+                                friendlyMessage = 'El estado debe tener entre 2 y 50 caracteres';
+                            }
+                            break;
+                        case 'zip':
+                            if (err.message.includes('between 3 and 20')) {
+                                friendlyMessage = 'El código postal debe tener entre 3 y 20 caracteres';
+                            }
+                            break;
+                        case 'date_of_birth':
+                            if (err.message.includes('at least 16 years old')) {
+                                friendlyMessage = 'Debes tener al menos 16 años para registrarte';
+                            } else if (err.message.includes('valid date')) {
+                                friendlyMessage = 'Por favor proporciona una fecha de nacimiento válida';
+                            } else if (err.message.includes('past')) {
+                                friendlyMessage = 'La fecha de nacimiento debe ser anterior a hoy';
+                            }
+                            break;
+                        case 'branch':
+                            if (err.message.includes('Branch selection is required')) {
+                                friendlyMessage = 'Debes seleccionar una sucursal';
+                            } else if (err.message.includes('available locations')) {
+                                friendlyMessage = 'Debes seleccionar una sucursal válida de la lista';
+                            }
+                            break;
+                        case 'role':
+                            friendlyMessage = 'Debes seleccionar un rol válido';
+                            break;
+                    }
+                    
+                    return {
+                        field: err.path,
+                        message: friendlyMessage,
+                        value: err.value
+                    };
+                });
+
+                return res.status(400).json({
+                    success: false,
+                    message: 'Por favor corrige los siguientes errores:',
+                    errors: friendlyErrors
+                });
             }
             
             res.status(500).json({

@@ -224,7 +224,7 @@ Employee.init({
       isAdult(value) {
         const today = new Date();
         const birthDate = new Date(value);
-        const age = today.getFullYear() - birthDate.getFullYear();
+        let age = today.getFullYear() - birthDate.getFullYear();
         const monthDiff = today.getMonth() - birthDate.getMonth();
         
         if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
@@ -239,14 +239,22 @@ Employee.init({
   },
   branch: {
     type: DataTypes.STRING(50),
-    allowNull: false,
+    allowNull: true, // Permitir null para roles corporativos
     validate: {
-      notEmpty: {
-        msg: 'Branch selection is required'
+      // Validación condicional: solo requerido si no es role 'corporate'
+      branchRequired(value) {
+        if (this.role !== 'corporate' && (!value || value.trim() === '')) {
+          throw new Error('Branch selection is required for non-corporate roles');
+        }
       },
-      isIn: {
-        args: [['San Diego', 'Orange County', 'San Bernardino', 'Los Angeles', 'Everett (North Seattle)', 'Kent (South Seattle)']],
-        msg: 'Branch must be one of the available locations'
+      // Validación condicional: solo validar valores si no es corporate y hay valor
+      branchValid(value) {
+        if (this.role !== 'corporate' && value && value.trim() !== '') {
+          const validBranches = ['San Diego', 'Orange County', 'San Bernardino', 'Los Angeles', 'Everett (North Seattle)', 'Kent (South Seattle)', 'Corporate'];
+          if (!validBranches.includes(value)) {
+            throw new Error('Branch must be one of the available locations');
+          }
+        }
       }
     }
   },
