@@ -13,7 +13,7 @@ export interface EmployeeRegistrationData {
   phoneNumber: string;
   telegramId: string;
   branch: string;
-  role: 'crew_member' | 'crew_leader' | 'salesperson' | '';
+  role: 'crew_member' | 'crew_leader' | 'salesperson' | 'corporate' | '';
 }
 
 // Fixed list of available branches
@@ -23,7 +23,8 @@ export const AVAILABLE_BRANCHES = [
   'San Bernardino',
   'Los Angeles',
   'Everett (North Seattle)',
-  'Kent (South Seattle)'
+  'Kent (South Seattle)',
+  'Corporate'
 ] as const;
 
 export type BranchType = typeof AVAILABLE_BRANCHES[number];
@@ -141,7 +142,8 @@ const employeeRegistrationService = {
         role: employeeData.role
       };
 
-      console.log('Submitting employee registration:', {
+      console.log('🔍 Raw form data received:', employeeData);
+      console.log('🧹 Cleaned data to send:', {
         ...cleanData,
         telegramId: cleanData.telegramId ? '***' : '' // No loguear el ID completo por seguridad
       });

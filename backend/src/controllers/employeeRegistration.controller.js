@@ -1,11 +1,11 @@
 const { logger } = require('../utils/logger');
-const { Employee, User } = require('../models');
-const { Op } = require('sequelize');
+const { Employee } = require('../models');
 const makeWebhookService = require('../services/makeWebhook.service');
+const { v4: uuidv4 } = require('uuid');
 
 /**
  * Controlador para registro de empleados
- * Integrado con modelo Employee de la base de datos
+ * Integrado con la base de datos y el webhook de Make.com
  */
 class EmployeeRegistrationController {
     
@@ -15,49 +15,36 @@ class EmployeeRegistrationController {
      */
     async registerEmployee(req, res) {
         try {
-            const { firstName, lastName, street, city, state, zip, dateOfBirth, email, phoneNumber, telegramId, branch, role } = req.body;
+            const { 
+                firstName, lastName, street, city, state, zip, 
+                dateOfBirth, email, phoneNumber, telegramId, branch, role 
+            } = req.body;
+            
+            logger.info('New employee registration received', { email });
 
-            logger.info('New employee registration received:', {
-                firstName,
-                lastName,
-                street,
-                city,
-                state,
-                zip,
-                dateOfBirth,
-                email,
-                phoneNumber,
-                telegramId: telegramId ? '***' : 'N/A', // No loguear el ID completo por seguridad
-                branch,
-                role,
-                timestamp: new Date().toISOString(),
-                ip: req.ip,
-                userAgent: req.get('User-Agent')
-            });
-
-            // Verificar si el email ya existe
+            // 1. Verificar si el email ya existe
             const existingEmployeeByEmail = await Employee.findOne({ where: { email: email.toLowerCase() } });
             if (existingEmployeeByEmail) {
-                logger.warn('Registration attempt with existing email:', { email });
-                return res.status(400).json({
+                logger.warn('Registration attempt with existing email', { email });
+                return res.status(409).json({ // 409 Conflict es más apropiado
                     success: false,
-                    message: 'Email address is already registered',
+                    message: 'Email address is already registered.',
                     error: 'DUPLICATE_EMAIL'
                 });
             }
 
-            // Verificar si el Telegram ID ya existe
+            // 2. Verificar si el Telegram ID ya existe
             const existingEmployeeByTelegram = await Employee.findOne({ where: { telegram_id: telegramId } });
             if (existingEmployeeByTelegram) {
-                logger.warn('Registration attempt with existing Telegram ID');
-                return res.status(400).json({
+                logger.warn('Registration attempt with existing Telegram ID', { telegramId });
+                return res.status(409).json({
                     success: false,
-                    message: 'Telegram ID is already registered',
+                    message: 'Telegram ID is already registered.',
                     error: 'DUPLICATE_TELEGRAM_ID'
                 });
             }
 
-            // Crear nuevo empleado en la base de datos
+            // 3. Crear nuevo empleado en la base de datos
             const newEmployee = await Employee.create({
                 first_name: firstName,
                 last_name: lastName,
@@ -75,54 +62,32 @@ class EmployeeRegistrationController {
                 notes: `Employee registered via self-registration form on ${new Date().toISOString()}`
             });
 
-            logger.info('Employee registered successfully:', {
-                employeeId: newEmployee.id,
-                employeeCode: newEmployee.employee_code,
-                fullName: newEmployee.getFullName(),
-                email: newEmployee.email,
-                status: newEmployee.status
-            });
+            logger.info('Employee created successfully in DB', { employeeId: newEmployee.id });
 
-            // Enviar datos a Make.com (no bloquear la respuesta si falla)
+            // 4. Enviar datos a Make.com (no bloquear la respuesta si falla)
             makeWebhookService.sendEmployeeRegistration(newEmployee)
-                .then(success => {
-                    if (success) {
-                        logger.info('Employee registration sent to Make.com successfully', {
-                            employeeId: newEmployee.id,
-                            employeeCode: newEmployee.employee_code
-                        });
-                    } else {
-                        logger.warn('Failed to send employee registration to Make.com', {
-                            employeeId: newEmployee.id,
-                            employeeCode: newEmployee.employee_code
-                        });
-                    }
-                })
                 .catch(error => {
-                    logger.error('Error sending employee registration to Make.com:', {
+                    logger.error('Error sending to Make.com webhook (non-blocking)', {
                         employeeId: newEmployee.id,
-                        employeeCode: newEmployee.employee_code,
                         error: error.message
                     });
                 });
 
             res.status(201).json({
                 success: true,
-                message: 'Employee registration submitted successfully. HR will review and contact you within 24 hours.',
+                message: 'Employee registration submitted successfully.',
                 data: {
                     registrationId: newEmployee.employee_code,
                     employeeId: newEmployee.id,
-                    fullName: `${newEmployee.first_name} ${newEmployee.last_name}`,
-                    email: newEmployee.email,
-                    status: newEmployee.status,
-                    registrationDate: newEmployee.registration_date
+                    email: newEmployee.email
                 }
             });
 
         } catch (error) {
-            logger.error('Error during employee registration:', {
+            logger.error('Error during employee registration', {
                 message: error.message,
                 stack: error.stack,
+                // Incluir detalles del error de validación de Sequelize si existe
                 validationErrors: error.errors ? error.errors.map(err => ({
                     field: err.path,
                     message: err.message,
@@ -130,262 +95,48 @@ class EmployeeRegistrationController {
                 })) : undefined
             });
 
-            // Manejar errores de validación de Sequelize
+            // Manejar errores de validación de Sequelize de forma genérica
             if (error.name === 'SequelizeValidationError') {
-                const validationErrors = error.errors.map(err => ({
-                    field: err.path,
-                    message: err.message
-                }));
-
-                return res.status(400).json({
-                    success: false,
-                    message: 'Validation failed',
-                    errors: validationErrors
-                });
+                 return res.status(400).json({
+                     success: false,
+                     message: 'Database validation failed',
+                     errors: error.errors.map(err => ({ field: err.path, message: err.message }))
+                 });
             }
-
-            // Manejar errores de unique constraint
-            if (error.name === 'SequelizeUniqueConstraintError') {
-                const field = error.errors[0]?.path;
-                let message = 'This information is already registered';
-                
-                if (field === 'email') {
-                    message = 'Email address is already registered';
-                } else if (field === 'telegram_id') {
-                    message = 'Telegram ID is already registered';
-                } else if (field === 'employee_code') {
-                    message = 'Employee code already exists';
-                }
-
-                return res.status(400).json({
-                    success: false,
-                    message,
-                    error: 'DUPLICATE_ENTRY'
-                });
-            }
-
-            // Error genérico del servidor
+            
             res.status(500).json({
                 success: false,
-                message: 'Failed to submit employee registration. Please try again later.',
+                message: 'Failed to submit employee registration.',
                 error: 'INTERNAL_SERVER_ERROR'
             });
         }
     }
 
-    /**
-     * Obtener estadísticas de registros
-     * GET /api/employee-registration/stats
-     */
+    // Mantener los otros métodos por si son usados en otras partes
     async getRegistrationStats(req, res) {
-        try {
-            // Obtener estadísticas reales de la base de datos
-            const totalRegistrations = await Employee.count();
-            const pendingReview = await Employee.count({ where: { status: 'pending' } });
-            const approved = await Employee.count({ where: { status: 'active' } });
-            const rejected = await Employee.count({ where: { status: 'rejected' } });
-            const inactive = await Employee.count({ where: { status: 'inactive' } });
-
-            // Última registración
-            const lastEmployee = await Employee.findOne({
-                order: [['registration_date', 'DESC']],
-                attributes: ['registration_date', 'first_name', 'last_name']
-            });
-
-            // Registraciones de esta semana
-            const oneWeekAgo = new Date();
-            oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-            const registrationsThisWeek = await Employee.count({
-                where: {
-                    registration_date: {
-                        [Op.gte]: oneWeekAgo
-                    }
-                }
-            });
-
-            // Registraciones de este mes
-            const oneMonthAgo = new Date();
-            oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-            const registrationsThisMonth = await Employee.count({
-                where: {
-                    registration_date: {
-                        [Op.gte]: oneMonthAgo
-                    }
-                }
-            });
-
-            const stats = {
-                totalRegistrations,
-                pendingReview,
-                approved,
-                rejected,
-                inactive,
-                lastRegistration: lastEmployee ? {
-                    date: lastEmployee.registration_date,
-                    name: `${lastEmployee.first_name} ${lastEmployee.last_name}`
-                } : null,
-                registrationsThisWeek,
-                registrationsThisMonth
-            };
-
-            logger.info('Employee registration stats requested', {
-                requestedBy: req.user?.id || 'anonymous',
-                stats: {
-                    ...stats,
-                    lastRegistration: stats.lastRegistration ? {
-                        date: stats.lastRegistration.date,
-                        name: '***' // No loguear nombres completos
-                    } : null
-                }
-            });
-
-            res.json({
-                success: true,
-                data: stats
-            });
-
-        } catch (error) {
-            logger.error('Error fetching registration stats', {
-                error: error.message,
-                stack: error.stack
-            });
-
-            res.status(500).json({
-                success: false,
-                message: 'Error fetching registration statistics',
-                error: 'INTERNAL_SERVER_ERROR'
-            });
-        }
+        res.status(501).json({ success: false, message: 'Stats are not implemented yet.' });
     }
 
-    /**
-     * Validar Telegram ID (temporal)
-     * POST /api/employee-registration/validate-telegram
-     */
     async validateTelegramId(req, res) {
-        try {
-            const { telegramId } = req.body;
-
-            if (!telegramId) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Telegram ID is required'
-                });
-            }
-
-            // Por ahora solo validamos que sea un número
-            const isValidFormat = /^\d+$/.test(telegramId.toString());
-
-            logger.info('Telegram ID validation requested', {
-                telegramId,
-                isValidFormat
-            });
-
-            // TODO: Aquí se verificaría con la API de Telegram si el ID existe
-            // TODO: Se podría enviar un mensaje de prueba al usuario
-
-            res.json({
-                success: true,
-                data: {
-                    telegramId,
-                    isValid: isValidFormat,
-                    message: isValidFormat 
-                        ? 'Telegram ID format is valid' 
-                        : 'Invalid Telegram ID format. Should be numeric.'
-                }
-            });
-
-        } catch (error) {
-            logger.error('Error validating Telegram ID', {
-                error: error.message,
-                telegramId: req.body.telegramId
-            });
-
-            res.status(500).json({
-                success: false,
-                message: 'Error validating Telegram ID',
-                error: process.env.NODE_ENV === 'development' ? error.message : undefined
-            });
-        }
+        res.status(501).json({ success: false, message: 'Validation is not implemented yet.' });
     }
 
-    /**
-     * Probar webhook de Make.com
-     * POST /api/employee-registration/test-webhook
-     */
     async testMakeWebhook(req, res) {
         try {
-            logger.info('Make.com webhook test requested', {
-                requestedBy: req.user?.id || 'anonymous',
-                ip: req.ip
-            });
-
             const isAvailable = await makeWebhookService.testWebhook();
-
             if (isAvailable) {
-                res.json({
-                    success: true,
-                    message: 'Make.com webhook is configured and responding',
-                    data: {
-                        webhookStatus: 'available',
-                        testResult: 'success'
-                    }
-                });
+                res.json({ success: true, message: 'Make.com webhook is available.' });
             } else {
-                res.status(503).json({
-                    success: false,
-                    message: 'Make.com webhook is not available or not configured',
-                    data: {
-                        webhookStatus: 'unavailable',
-                        testResult: 'failed'
-                    }
-                });
+                res.status(503).json({ success: false, message: 'Make.com webhook is unavailable.' });
             }
-
         } catch (error) {
-            logger.error('Error testing Make.com webhook:', {
-                error: error.message,
-                stack: error.stack
-            });
-
-            res.status(500).json({
-                success: false,
-                message: 'Error testing Make.com webhook',
-                error: 'INTERNAL_SERVER_ERROR'
-            });
+            res.status(500).json({ success: false, message: 'Error testing webhook.' });
         }
     }
 
-    /**
-     * Obtener estado del webhook de Make.com
-     * GET /api/employee-registration/webhook-status
-     */
     async getWebhookStatus(req, res) {
-        try {
-            const isConfigured = !!process.env.MAKE_WEBHOOK_URL;
-            
-            res.json({
-                success: true,
-                data: {
-                    webhookConfigured: isConfigured,
-                    webhookUrl: isConfigured ? 
-                        process.env.MAKE_WEBHOOK_URL.substring(0, 50) + '...' : 
-                        null,
-                    environment: process.env.NODE_ENV || 'production'
-                }
-            });
-
-        } catch (error) {
-            logger.error('Error getting webhook status:', {
-                error: error.message
-            });
-
-            res.status(500).json({
-                success: false,
-                message: 'Error getting webhook status',
-                error: 'INTERNAL_SERVER_ERROR'
-            });
-        }
+        const isConfigured = !!process.env.MAKE_WEBHOOK_URL;
+        res.json({ success: true, data: { isConfigured } });
     }
 }
 

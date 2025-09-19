@@ -66,6 +66,21 @@ const EmployeeRegistration: React.FC = () => {
   const [registrationData, setRegistrationData] = useState<any>(null);
   const [redirectCountdown, setRedirectCountdown] = useState(10);
 
+  // Efecto para manejar la lógica de Branch/Role
+  useEffect(() => {
+    if (formData.branch === 'Corporate') {
+      // Si la rama es Corporate y el rol no está ya seteado, lo seteamos
+      if (formData.role !== 'corporate') {
+        setFormData(prev => ({ ...prev, role: 'corporate' }));
+      }
+    } else {
+      // Si se cambia de Corporate a otra rama, y el rol era 'corporate', lo limpiamos
+      if (formData.role === 'corporate') {
+        setFormData(prev => ({ ...prev, role: '' }));
+      }
+    }
+  }, [formData.branch, formData.role]);
+
   // Countdown y redirección automática
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -439,11 +454,13 @@ const EmployeeRegistration: React.FC = () => {
                 </FormControl>
                 
                 <FormControl fullWidth required size="medium">
-                  <InputLabel>Role</InputLabel>
+                  <InputLabel id="role-select-label">Role *</InputLabel>
                   <Select
+                    labelId="role-select-label"
                     value={formData.role}
                     label="Role"
-                    onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as 'crew_member' | 'crew_leader' | 'salesperson' }))}
+                    onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as 'crew_member' | 'crew_leader' | 'salesperson' | 'corporate' }))}
+                    disabled={formData.branch === 'Corporate'}
                     sx={{ borderRadius: 2 }}
                   >
                     <MenuItem value="crew_member">Crew Member</MenuItem>

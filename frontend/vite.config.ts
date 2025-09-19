@@ -15,15 +15,15 @@ export default defineConfig(({ mode }) => {
     // 🚀 PROXY para eliminar problemas de CORS en desarrollo
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3333',
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
-          console.log('🔗 Proxy configurado: /api -> http://localhost:3000')
+          console.log('🔗 Proxy configurado: /api -> http://localhost:3333')
         }
       },
       '/health': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3333',
         changeOrigin: true,
         secure: false,
       }
@@ -48,19 +48,19 @@ export default defineConfig(({ mode }) => {
     server: serverConfig,
     // Configuración de build específica por entorno
     build: {
-    outDir: 'dist',
-    sourcemap: isDevelopment,
-    minify: isProduction,
-    rollupOptions: {
-      output: {
-        manualChunks: isProduction ? {
-          vendor: ['react', 'react-dom'],
-          mui: ['@mui/material', '@mui/icons-material'],
-        } : undefined,
-      },
-    },
+      outDir: 'dist',
+      sourcemap: isDevelopment,
+      minify: isProduction,
       // En desarrollo, builds más rápidos
       target: isDevelopment ? 'es2020' : 'es2015',
+      rollupOptions: {
+        output: {
+          manualChunks: isProduction ? {
+            vendor: ['react', 'react-dom'],
+            mui: ['@mui/material', '@mui/icons-material'],
+          } : undefined,
+        },
+      },
     },
     // Variables de entorno disponibles en el código
     define: {
@@ -68,4 +68,5 @@ export default defineConfig(({ mode }) => {
       __PROD__: isProduction,
       __MODE__: JSON.stringify(mode),
     },
-}))
+  }
+})

@@ -223,10 +223,16 @@ const validateEstimate = {
     params: createValidationMiddleware(idParamSchema, 'params')
 };
 
+// Helper para limpiar strings
+const cleanString = Joi.string().trim().custom((value, helpers) => {
+    // Limpiar caracteres invisibles y de control
+    return value.replace(/[\u200B-\u200D\u2060\uFEFF\u202A-\u202E\u2066-\u2069]/g, '');
+}, 'stringSanitizer');
+
+
 // Schema para registro de empleados
 const employeeRegistrationSchema = Joi.object({
-    firstName: Joi.string()
-        .trim()
+    firstName: cleanString
         .min(2)
         .max(50)
         .pattern(/^[a-zA-ZÀ-ÿ\u00f1\u00d1\s'-]+$/)
@@ -236,8 +242,7 @@ const employeeRegistrationSchema = Joi.object({
             'string.min': 'First name must be at least 2 characters long',
             'string.max': 'First name cannot exceed 50 characters'
         }),
-    lastName: Joi.string()
-        .trim()
+    lastName: cleanString
         .min(2)
         .max(50)
         .pattern(/^[a-zA-ZÀ-ÿ\u00f1\u00d1\s'-]+$/)
@@ -247,18 +252,13 @@ const employeeRegistrationSchema = Joi.object({
             'string.min': 'Last name must be at least 2 characters long',
             'string.max': 'Last name cannot exceed 50 characters'
         }),
-    nickname: Joi.string()
-        .trim()
-        .min(2)
-        .max(30)
-        .pattern(/^[a-zA-ZÀ-ÿ\u00f1\u00d1\s'-]+$/)
-        .allow('')
-        .optional()
-        .messages({
-            'string.pattern.base': 'Nickname can only contain letters, spaces, hyphens and apostrophes',
-            'string.min': 'Nickname must be at least 2 characters long',
-            'string.max': 'Nickname cannot exceed 30 characters'
-        }),
+    street: cleanString.max(200).required(),
+    city: cleanString.max(100).required(),
+    state: cleanString.max(50).required(),
+    zip: cleanString.max(20).required(),
+    dateOfBirth: Joi.string().isoDate().required().messages({
+        'string.isoDate': 'Please provide a valid date in YYYY-MM-DD format'
+    }),
     email: Joi.string()
         .email({ tlds: { allow: false } })
         .trim()
@@ -269,8 +269,7 @@ const employeeRegistrationSchema = Joi.object({
             'string.email': 'Please provide a valid email address',
             'string.max': 'Email cannot exceed 100 characters'
         }),
-    phoneNumber: Joi.string()
-        .trim()
+    phoneNumber: cleanString
         .min(10)
         .max(20)
         .pattern(/^[\+]?[1-9][\d\s\-\(\)]{9,19}$/)
@@ -280,18 +279,19 @@ const employeeRegistrationSchema = Joi.object({
             'string.min': 'Phone number must be at least 10 characters long',
             'string.max': 'Phone number cannot exceed 20 characters'
         }),
-        telegramId: Joi.string()
-            .trim()
-            .pattern(/^\d+$/)
-            .min(5)
-            .max(20)
-            .required()
-            .messages({
-                'string.pattern.base': 'Telegram ID must contain only numbers',
-                'string.min': 'Telegram ID must be at least 5 digits long',
-                'string.max': 'Telegram ID cannot exceed 20 digits',
-                'any.required': 'Telegram ID is required'
-            })
+    telegramId: cleanString
+        .pattern(/^\d+$/)
+        .min(5)
+        .max(20)
+        .required()
+        .messages({
+            'string.pattern.base': 'Telegram ID must contain only numbers',
+            'string.min': 'Telegram ID must be at least 5 digits long',
+            'string.max': 'Telegram ID cannot exceed 20 digits',
+            'any.required': 'Telegram ID is required'
+        }),
+    branch: cleanString.required(),
+    role: cleanString.required().valid('crew_member', 'crew_leader', 'salesperson', 'corporate'),
 });
 
 const validateEmployeeRegistration = createValidationMiddleware(employeeRegistrationSchema);

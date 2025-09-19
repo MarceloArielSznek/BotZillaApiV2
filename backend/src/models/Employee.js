@@ -251,12 +251,12 @@ Employee.init({
     }
   },
   role: {
-    type: DataTypes.ENUM('crew_member', 'crew_leader', 'salesperson'),
+    type: DataTypes.ENUM('crew_member', 'crew_leader', 'salesperson', 'corporate'),
     allowNull: false,
     validate: {
       isIn: {
-        args: [['crew_member', 'crew_leader', 'salesperson']],
-        msg: 'Role must be one of: crew_member, crew_leader, salesperson'
+        args: [['crew_member', 'crew_leader', 'salesperson', 'corporate']],
+        msg: 'Role must be one of: crew_member, crew_leader, salesperson, corporate'
       }
     }
   },

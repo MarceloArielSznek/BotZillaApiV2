@@ -6,6 +6,7 @@ import theme from './theme/theme';
 import { AuthProvider } from './context/AuthContext';
 import Login from './pages/Login';
 import DashboardLayout from './layouts/DashboardLayout';
+import PublicLayout from './layouts/PublicLayout';
 import Dashboard from './pages/Dashboard';
 import Estimates from './pages/Estimates';
 import Jobs from './pages/Jobs';
@@ -59,7 +60,11 @@ function App() {
                 </ProtectedRoute>
               } />
               {/* Ruta pública para registro de empleados */}
-              <Route path="/employee-registration" element={<EmployeeRegistration />} />
+              <Route path="/employee-registration" element={
+                <PublicLayout title="Employee Registration" showLoginButton={true}>
+                  <EmployeeRegistration />
+                </PublicLayout>
+              } />
               {/* Ruta catch-all para prevenir acceso no autorizado */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
