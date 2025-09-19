@@ -84,7 +84,7 @@ class NotificationsController {
                     continue;
                 }
 
-                if (activeLeadsCount >= 12) {
+                if (activeLeadsCount >= 17) {
                     const todayStart = new Date();
                     todayStart.setHours(0, 0, 0, 0);
 
@@ -139,7 +139,7 @@ class NotificationsController {
                         });
                         warningsIssued++;
                     }
-                } else if (activeLeadsCount < 12 && warning_count > 0) {
+                } else if (activeLeadsCount < 17 && warning_count > 0) {
                     const templateInfo = templates['congratulations_reset'];
                     if (!templateInfo) {
                         console.warn(`[WARN] Notification template "congratulations_reset" not found. Skipping congratulations notification for ${name}.`);
@@ -265,7 +265,7 @@ class NotificationsController {
                 SELECT COUNT(*)
                 FROM "botzilla"."estimate" AS "e"
                 WHERE "e"."sales_person_id" = "SalesPerson"."id" AND "e"."status_id" IN (${activeStatusIds.join(',')})
-            ) >= 12`)
+            ) >= 17`)
         });
 
         return salespersons.map(sp => sp.get({ plain: true }));
@@ -541,7 +541,7 @@ class NotificationsController {
                 having: literal(`(
                     SELECT COUNT(*) FROM "botzilla"."estimate" AS "e"
                     WHERE "e"."sales_person_id" = "SalesPerson"."id" AND "e"."status_id" IN (${activeStatusIds.join(',')})
-                ) >= 12`),
+                ) >= 17`),
                 group: ['SalesPerson.id'],
                 order: [[literal('"activeLeadsCount"'), 'DESC']]
             });
