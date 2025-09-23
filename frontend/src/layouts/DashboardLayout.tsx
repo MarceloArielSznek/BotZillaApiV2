@@ -76,7 +76,6 @@ const DashboardLayout = () => {
     { text: 'Estimates', icon: <EstimatesIcon />, path: '/dashboard/estimates' },
     { text: 'Jobs', icon: <JobsIcon />, path: '/dashboard/jobs' },
     { text: 'Employees', icon: <EmployeesIcon />, path: '/dashboard/employees' },
-    { text: 'Employee Registration', icon: <EmployeeRegistrationIcon />, path: '/dashboard/employee-registration' },
     { text: 'Notifications', icon: <NotificationsIcon />, path: '/dashboard/notifications' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/dashboard/settings' },
   ];

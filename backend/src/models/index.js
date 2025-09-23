@@ -23,6 +23,10 @@ const JobSpecialShift = require('./JobSpecialShift');
 const JobStatus = require('./JobStatus');
 const AutomationErrorLog = require('./AutomationErrorLog');
 const Employee = require('./Employee');
+const TelegramGroup = require('./TelegramGroup');
+const GroupMembershipStatus = require('./GroupMembershipStatus');
+const EmployeeTelegramGroup = require('./EmployeeTelegramGroup');
+const TelegramGroupCategory = require('./TelegramGroupCategory'); // Importar nuevo modelo
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -246,6 +250,51 @@ User.hasMany(Employee, {
     as: 'approvedEmployees'
 });
 
+// === NUEVAS ASOCIACIONES PARA ONBOARDING ===
+
+// TelegramGroup <-> Branch (Uno a Muchos)
+Branch.hasMany(TelegramGroup, {
+    foreignKey: 'branch_id',
+    as: 'telegramGroups'
+});
+TelegramGroup.belongsTo(Branch, {
+    foreignKey: 'branch_id',
+    as: 'branch'
+});
+
+// Asociaciones para Categorías de Grupos de Telegram
+TelegramGroupCategory.hasMany(TelegramGroup, {
+    foreignKey: 'category_id',
+    as: 'groups'
+});
+TelegramGroup.belongsTo(TelegramGroupCategory, {
+    foreignKey: 'category_id',
+    as: 'category'
+});
+
+// Employee <-> TelegramGroup (Muchos a Muchos a través de EmployeeTelegramGroup)
+Employee.belongsToMany(TelegramGroup, {
+    through: EmployeeTelegramGroup,
+    foreignKey: 'employee_id',
+    otherKey: 'telegram_group_id',
+    as: 'telegramGroups'
+});
+TelegramGroup.belongsToMany(Employee, {
+    through: EmployeeTelegramGroup,
+    foreignKey: 'telegram_group_id',
+    otherKey: 'employee_id',
+    as: 'employees'
+});
+
+// Asociaciones directas en la tabla intermedia
+EmployeeTelegramGroup.belongsTo(Employee, { foreignKey: 'employee_id' });
+EmployeeTelegramGroup.belongsTo(TelegramGroup, { foreignKey: 'telegram_group_id' });
+EmployeeTelegramGroup.belongsTo(GroupMembershipStatus, { foreignKey: 'status_id', as: 'status' });
+
+GroupMembershipStatus.hasMany(EmployeeTelegramGroup, { foreignKey: 'status_id' });
+Employee.hasMany(EmployeeTelegramGroup, { foreignKey: 'employee_id' });
+TelegramGroup.hasMany(EmployeeTelegramGroup, { foreignKey: 'telegram_group_id' });
+
 
 module.exports = {
     User,
@@ -270,5 +319,9 @@ module.exports = {
     JobSpecialShift,
     JobStatus,
     AutomationErrorLog,
-    Employee
+    Employee,
+    TelegramGroup,
+    GroupMembershipStatus,
+    EmployeeTelegramGroup,
+    TelegramGroupCategory // Exportar nuevo modelo
 }; 

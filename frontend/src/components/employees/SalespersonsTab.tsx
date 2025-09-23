@@ -82,10 +82,16 @@ const SalespersonsTab: React.FC = () => {
 
     const fetchBranches = useCallback(async () => {
         try {
-            const data = await branchService.getBranches({ limit: 1000 }); // Fetch all branches
-            setBranches(data.branches);
-        } catch (err: any) {
-            enqueueSnackbar('Error fetching branches: ' + err.message, { variant: 'error' });
+            const response = await branchService.getBranches({ limit: 1000 });
+            // Corrección: Añadir una comprobación para asegurar que la respuesta y los datos existen
+            if (response && response.branches) {
+                setBranches(response.branches);
+            } else {
+                setBranches([]); // Asegurarse de que sea un array vacío si no hay datos
+            }
+        } catch (error) {
+            console.error('Failed to fetch branches:', error);
+            setBranches([]); // En caso de error, establecer un array vacío
         }
     }, [enqueueSnackbar]);
 

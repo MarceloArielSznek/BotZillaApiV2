@@ -313,9 +313,8 @@ Employee.init({
   }
 }, {
   sequelize,
-  modelName: 'Employee',
-  tableName: 'employee',
   schema: 'botzilla',
+  tableName: 'employee',
   timestamps: true,
   createdAt: 'created_at',
   updatedAt: 'updated_at',

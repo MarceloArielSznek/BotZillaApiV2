@@ -1,5 +1,11 @@
 const axios = require('axios');
 const { logger } = require('../utils/logger');
+const { v4: uuidv4 } = require('uuid');
+
+// Almacenamiento simple en memoria para el estado del webhook
+let isWebhookAvailable = null;
+let lastCheck = 0;
+const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutos
 
 /**
  * Servicio para integración con Make.com
@@ -235,6 +241,70 @@ class MakeWebhookService {
             });
 
             return false;
+        }
+    }
+
+    /**
+     * Envía una actualización de membresía de grupo a Make.com
+     * @param {object} payload
+     * @param {string} payload.employeeTelegramId - El ID de Telegram del empleado
+     * @param {string} payload.employeeName - El nombre completo del empleado
+     * @param {Array<object|string>} payload.groups - Para 'add', array de objetos {id, name}. Para 'remove', array de strings con IDs.
+     * @param {'add' | 'remove'} payload.action - La acción a realizar
+     */
+    async sendGroupMembershipUpdate({ employeeTelegramId, employeeName, groups, action }) {
+        const webhookUrl = process.env.MAKE_MEMBERSHIP_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.warn('MAKE_MEMBERSHIP_WEBHOOK_URL no está configurado. Saltando envío de webhook.');
+            return;
+        }
+
+        if (!employeeTelegramId || !groups || groups.length === 0) {
+            logger.info('No hay datos de membresía para enviar al webhook. Saltando.');
+            return;
+        }
+
+        let payloadBody;
+
+        if (action === 'add') {
+            // Formato para 'add': necesita nombres para los enlaces de invitación
+            payloadBody = {
+                employee_telegram_id: employeeTelegramId,
+                employee_name: employeeName, // Añadir nombre
+                groups_to_add: groups.map(group => ({
+                    telegram_id: group.telegram_id.toString(),
+                    // Acortar el nombre si excede los 32 caracteres
+                    invite_link_name: group.name.length > 32 ? group.name.substring(0, 32) : group.name
+                })),
+                action: 'add'
+            };
+        } else { // 'remove'
+            // Formato para 'remove': solo necesita los IDs de los grupos
+            payloadBody = {
+                employee_telegram_id: employeeTelegramId,
+                employee_name: employeeName, // Añadir nombre
+                group_telegram_ids: groups.map(group => group.telegram_id.toString()),
+                action: 'remove'
+            };
+        }
+
+        try {
+            logger.info(`Enviando webhook de membresía de grupo a Make.com`, { action, employeeName, count: groups.length });
+            await axios.post(webhookUrl, payloadBody, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': uuidv4() // Para trazabilidad
+                },
+                timeout: 10000 // 10 segundos de timeout
+            });
+            logger.info(`Webhook de membresía enviado exitosamente.`);
+        } catch (error) {
+            // Loguear el error pero no dejar que bloquee la operación principal
+            logger.error('Error enviando el webhook de membresía a Make.com', {
+                message: error.message,
+                responseData: error.response?.data
+            });
         }
     }
 }

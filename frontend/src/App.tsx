@@ -15,6 +15,7 @@ import EmployeeRegistration from './pages/EmployeeRegistration';
 import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import TelegramGroups from './pages/TelegramGroups'; // Importar nueva página
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -45,11 +46,15 @@ function App() {
                     <Employees />
                   </ProtectedRoute>
                 } />
-                <Route path="employee-registration" element={<EmployeeRegistration />} />
                 <Route path="notifications" element={<Notifications />} />
                 <Route path="settings" element={
                   <ProtectedRoute allowedRoles={['admin']}>
                     <Settings />
+                  </ProtectedRoute>
+                } />
+                <Route path="settings/telegram-groups" element={
+                  <ProtectedRoute allowedRoles={['admin']}>
+                    <TelegramGroups />
                   </ProtectedRoute>
                 } />
                 <Route path="profile" element={<Profile />} />

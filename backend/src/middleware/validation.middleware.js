@@ -305,6 +305,52 @@ const validateCompositeParams = createValidationMiddleware(
     'params'
 );
 
+// Schemas para Onboarding
+const onboardingSchemas = {
+    assignGroups: Joi.object({
+        employee_id: Joi.number().integer().positive().required(),
+        groups: Joi.array().items(Joi.number().integer().positive()).min(0).unique().required()
+            .messages({
+                'array.min': 'Groups must be an array, even if empty.',
+                'array.unique': 'Cannot assign duplicate groups.',
+                'any.required': 'Groups array is required.'
+            })
+    }),
+    blockGroup: Joi.object({
+        employee_id: Joi.number().integer().positive().required(),
+        group_id: Joi.number().integer().positive().required()
+    })
+};
+
+// Middlewares para Onboarding
+const validateGroupAssignment = createValidationMiddleware(onboardingSchemas.assignGroups);
+const validateGroupBlocking = createValidationMiddleware(onboardingSchemas.blockGroup);
+
+// Schemas para TelegramGroup CRUD
+const telegramGroupSchema = {
+    create: Joi.object({
+        name: Joi.string().trim().min(3).max(255).required(),
+        branch_id: Joi.number().integer().positive().allow(null),
+        category_id: Joi.number().integer().positive().allow(null), // Validación añadida
+        telegram_id: Joi.number().required(),
+        description: Joi.string().trim().allow('').optional(),
+        is_default: Joi.boolean().optional() // Validación añadida
+    }),
+    update: Joi.object({
+        name: Joi.string().trim().min(3).max(255).required(),
+        branch_id: Joi.number().integer().positive().allow(null),
+        category_id: Joi.number().integer().positive().allow(null), // Validación añadida
+        telegram_id: Joi.number().required(),
+        description: Joi.string().trim().allow('').optional(),
+        is_default: Joi.boolean().optional() // Validación añadida
+    })
+};
+
+const validateTelegramGroup = {
+    create: createValidationMiddleware(telegramGroupSchema.create),
+    update: createValidationMiddleware(telegramGroupSchema.update)
+};
+
 module.exports = {
     validateBranch,
     validateSalesPerson,
@@ -312,5 +358,8 @@ module.exports = {
     validateEstimate,
     validateEmployeeRegistration,
     validateCompositeParams,
-    createValidationMiddleware // Para casos especiales
+    createValidationMiddleware, // Para casos especiales
+    validateGroupAssignment, // Nueva validación
+    validateGroupBlocking,    // Nueva validación
+    validateTelegramGroup // Exportar nueva validación
 };

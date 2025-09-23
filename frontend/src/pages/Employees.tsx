@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { Box, Typography, Tabs, Tab, Paper } from '@mui/material';
-import { People as SalesIcon, Construction as CrewIcon } from '@mui/icons-material';
+import { People as SalesIcon, Construction as CrewIcon, HowToReg as OnboardingIcon, PeopleOutline as GroupMembershipsIcon } from '@mui/icons-material';
 import SalespersonsTab from '../components/employees/SalespersonsTab';
 import CrewMembersTab from '../components/employees/CrewMembersTab';
+import OnboardingTab from '../components/employees/OnboardingTab';
+import GroupMembershipsTab from '../components/employees/GroupMembershipsTab'; // Importar nuevo componente
+import { useAuth } from '../context/AuthContext';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -35,6 +38,7 @@ const a11yProps = (index: number) => {
 
 const Employees = () => {
   const [value, setValue] = useState(0);
+  const { user } = useAuth(); // Obtener el usuario del contexto
 
   const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
     setValue(newValue);
@@ -80,6 +84,22 @@ const Employees = () => {
               label="Crew Members" 
               {...a11yProps(1)} 
             />
+            {user && (user.role === 'admin' || user.role === 'office_manager') && (
+              <Tab 
+                icon={<OnboardingIcon />} 
+                iconPosition="start" 
+                label="On-boarding" 
+                {...a11yProps(2)} 
+              />
+            )}
+            {user && (user.role === 'admin' || user.role === 'office_manager') && (
+              <Tab 
+                icon={<GroupMembershipsIcon />} // O el icono que prefieras
+                iconPosition="start" 
+                label="Group Memberships" 
+                {...a11yProps(3)} 
+              />
+            )}
           </Tabs>
         </Box>
 
@@ -89,6 +109,16 @@ const Employees = () => {
         <TabPanel value={value} index={1}>
           <CrewMembersTab />
         </TabPanel>
+        {user && (user.role === 'admin' || user.role === 'office_manager') && (
+          <TabPanel value={value} index={2}>
+            <OnboardingTab />
+          </TabPanel>
+        )}
+        {user && (user.role === 'admin' || user.role === 'office_manager') && (
+          <TabPanel value={value} index={3}>
+            <GroupMembershipsTab />
+          </TabPanel>
+        )}
       </Paper>
     </Box>
   );

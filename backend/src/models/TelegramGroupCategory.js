@@ -1,9 +1,8 @@
 'use strict';
-
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
-const Branch = sequelize.define('Branch', {
+const TelegramGroupCategory = sequelize.define('TelegramGroupCategory', {
     id: {
         type: DataTypes.INTEGER,
         primaryKey: true,
@@ -14,18 +13,17 @@ const Branch = sequelize.define('Branch', {
         allowNull: false,
         unique: true
     },
-    telegram_group_id: {
+    description: {
         type: DataTypes.TEXT,
         allowNull: true
-    },
-    address: {
-        type: DataTypes.TEXT
     }
 }, {
     sequelize,
-    tableName: 'branch',
+    tableName: 'telegram_group_category',
     schema: 'botzilla',
-    timestamps: false
+    timestamps: true,
+    createdAt: 'created_at',
+    updatedAt: 'updated_at'
 });
 
-module.exports = Branch; 
+module.exports = TelegramGroupCategory;

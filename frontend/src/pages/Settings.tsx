@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -12,7 +13,8 @@ import {
   AccountCircle as UserIcon,
   Settings as ConfigIcon,
   Notifications as NotificationsIcon,
-  TableChart as ColumnMapIcon
+  TableChart as ColumnMapIcon,
+  Telegram as TelegramIcon // Nuevo icono
 } from '@mui/icons-material';
 
 // Import tab components
@@ -58,9 +60,15 @@ function a11yProps(index: number) {
 
 const Settings = () => {
   const [value, setValue] = useState(0);
+  const navigate = useNavigate();
 
   const handleChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setValue(newValue);
+    // Si la pestaña es la de Telegram Groups, navegar. Si no, cambiar el estado.
+    if (tabs[newValue].navigate) {
+      navigate(tabs[newValue].navigate as string);
+    } else {
+      setValue(newValue);
+    }
   };
 
   const tabs = [
@@ -88,6 +96,11 @@ const Settings = () => {
       label: 'Notifications',
       icon: <NotificationsIcon />,
       component: <NotificationsTab />
+    },
+    {
+      label: 'Telegram Groups', // Nueva pestaña
+      icon: <TelegramIcon />,
+      navigate: '/dashboard/settings/telegram-groups'
     },
     {
       label: 'System',
@@ -136,9 +149,11 @@ const Settings = () => {
 
         {/* Tab Panels */}
         {tabs.map((tab, index) => (
-          <TabPanel key={index} value={value} index={index}>
-            {tab.component}
-          </TabPanel>
+          !tab.navigate && (
+            <TabPanel key={index} value={value} index={index}>
+              {tab.component}
+            </TabPanel>
+          )
         ))}
       </Paper>
     </Box>
