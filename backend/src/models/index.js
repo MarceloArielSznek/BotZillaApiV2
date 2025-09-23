@@ -295,6 +295,10 @@ GroupMembershipStatus.hasMany(EmployeeTelegramGroup, { foreignKey: 'status_id' }
 Employee.hasMany(EmployeeTelegramGroup, { foreignKey: 'employee_id' });
 TelegramGroup.hasMany(EmployeeTelegramGroup, { foreignKey: 'telegram_group_id' });
 
+// === NEW ASSOCIATIONS FOR ONBOARDING ===
+Branch.hasMany(Employee, { foreignKey: 'branch_id', as: 'employees' });
+Employee.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
+
 
 module.exports = {
     User,

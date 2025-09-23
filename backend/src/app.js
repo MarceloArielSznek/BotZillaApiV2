@@ -147,7 +147,7 @@ const limiter = rateLimit({
 });
 
 // Aplicar rate limiting a todas las rutas
-app.use(limiter);
+app.use(limiter); // Volver a habilitar el rate limiter
 
 // Rate limiting más estricto para autenticación
 const authLimiter = rateLimit({

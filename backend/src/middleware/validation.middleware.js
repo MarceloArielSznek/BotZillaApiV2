@@ -319,12 +319,16 @@ const onboardingSchemas = {
     blockGroup: Joi.object({
         employee_id: Joi.number().integer().positive().required(),
         group_id: Joi.number().integer().positive().required()
+    }),
+    kickFromAllGroups: Joi.object({
+        employee_id: Joi.number().integer().positive().required()
     })
 };
 
 // Middlewares para Onboarding
 const validateGroupAssignment = createValidationMiddleware(onboardingSchemas.assignGroups);
 const validateGroupBlocking = createValidationMiddleware(onboardingSchemas.blockGroup);
+const validateKickFromAllGroups = createValidationMiddleware(onboardingSchemas.kickFromAllGroups);
 
 // Schemas para TelegramGroup CRUD
 const telegramGroupSchema = {
@@ -361,5 +365,6 @@ module.exports = {
     createValidationMiddleware, // Para casos especiales
     validateGroupAssignment, // Nueva validación
     validateGroupBlocking,    // Nueva validación
+    validateKickFromAllGroups, // Nueva validación
     validateTelegramGroup // Exportar nueva validación
 };

@@ -111,7 +111,7 @@ const Employees = () => {
         </TabPanel>
         {user && (user.role === 'admin' || user.role === 'office_manager') && (
           <TabPanel value={value} index={2}>
-            <OnboardingTab />
+            <OnboardingTab active={value === 2} />
           </TabPanel>
         )}
         {user && (user.role === 'admin' || user.role === 'office_manager') && (

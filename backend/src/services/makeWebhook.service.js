@@ -279,13 +279,12 @@ class MakeWebhookService {
                 })),
                 action: 'add'
             };
-        } else { // 'remove'
-            // Formato para 'remove': solo necesita los IDs de los grupos
+        } else { // 'remove' o 'kick'
             payloadBody = {
                 employee_telegram_id: employeeTelegramId,
-                employee_name: employeeName, // Añadir nombre
+                employee_name: employeeName, 
                 group_telegram_ids: groups.map(group => group.telegram_id.toString()),
-                action: 'remove'
+                action: action // será 'remove' o 'kick'
             };
         }
 

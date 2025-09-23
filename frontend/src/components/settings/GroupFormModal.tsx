@@ -131,6 +131,9 @@ const GroupFormModal: React.FC<GroupFormModalProps> = ({ open, onClose, onSave, 
                         label="Category"
                         onChange={(e) => setCategoryId(e.target.value as string)}
                     >
+                        <MenuItem value="">
+                            <em>None (Universal Group)</em>
+                        </MenuItem>
                         {categories.map((category) => (
                             <MenuItem key={category.id} value={String(category.id)}>
                                 {category.name}

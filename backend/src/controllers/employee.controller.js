@@ -1,5 +1,6 @@
-const { Employee, TelegramGroup } = require('../models');
+const { Employee, TelegramGroup, Branch } = require('../models');
 const { logger } = require('../utils/logger');
+const { Op } = require('sequelize');
 
 class EmployeeController {
 
@@ -8,18 +9,58 @@ class EmployeeController {
      */
     async getAllEmployees(req, res) {
         try {
-            const { page = 1, limit = 20 } = req.query;
+            const { 
+                page = 1, 
+                limit = 20, 
+                sortBy = 'first_name', 
+                order = 'ASC',
+                name,
+                role,
+                branchId
+            } = req.query;
             const offset = (page - 1) * limit;
 
+            const orderDirection = order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+            const whereClause = {};
+            if (name) {
+                whereClause[Op.or] = [
+                    { first_name: { [Op.iLike]: `%${name}%` } },
+                    { last_name: { [Op.iLike]: `%${name}%` } }
+                ];
+            }
+            if (role) {
+                whereClause.role = role;
+            }
+            if (branchId) {
+                whereClause.branch_id = branchId;
+            }
+
+            const orderMap = {
+                name: [['first_name', orderDirection], ['last_name', orderDirection]],
+                role: [['role', orderDirection]],
+                branch: [[{ model: Branch, as: 'branch' }, 'name', orderDirection]]
+            };
+            const sortOrder = orderMap[sortBy] || orderMap.name;
+
+
             const { count, rows } = await Employee.findAndCountAll({
+                where: whereClause,
                 limit: parseInt(limit),
                 offset: parseInt(offset),
-                include: [{
-                    model: TelegramGroup,
-                    as: 'telegramGroups',
-                    through: { attributes: [] } // No incluir datos de la tabla intermedia
-                }],
-                order: [['first_name', 'ASC']]
+                include: [
+                    {
+                        model: TelegramGroup,
+                        as: 'telegramGroups',
+                        through: { attributes: [] }
+                    },
+                    {
+                        model: Branch,
+                        as: 'branch'
+                    }
+                ],
+                order: sortOrder,
+                distinct: true // Asegura que el conteo sea de empleados únicos
             });
 
             res.status(200).json({
@@ -46,6 +87,12 @@ class EmployeeController {
                 where: {
                     status: 'pending'
                 },
+                include: [
+                    {
+                        model: Branch,
+                        as: 'branch'
+                    }
+                ],
                 order: [
                     ['registration_date', 'ASC']
                 ]
@@ -71,7 +118,11 @@ class EmployeeController {
                 include: [{
                     model: TelegramGroup,
                     as: 'telegramGroups',
-                    through: { attributes: [] } // No incluir datos de la tabla intermedia
+                    through: { attributes: [] }
+                },
+                {
+                    model: Branch,
+                    as: 'branch'
                 }]
             });
 

@@ -1,5 +1,6 @@
 const { TelegramGroup, Branch, TelegramGroupCategory } = require('../models');
 const { logger } = require('../utils/logger');
+const { Op } = require('sequelize'); // Added Op import
 
 class TelegramGroupController {
     
@@ -8,20 +9,52 @@ class TelegramGroupController {
      */
     async getAllGroups(req, res) {
         try {
-            const { page = 1, limit = 10 } = req.query;
+            const { 
+                page = 1, 
+                limit = 10, 
+                sortBy = 'name', 
+                order = 'ASC', 
+                name,
+                branchId,
+                categoryId 
+            } = req.query;
             const offset = (page - 1) * limit;
 
+            // Validar dirección de ordenación para seguridad
+            const orderDirection = order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+
+            // Construir la cláusula 'where' para el filtrado
+            const whereClause = {};
+            if (name) {
+                whereClause.name = { [Op.iLike]: `%${name}%` };
+            }
+            if (branchId) {
+                whereClause.branch_id = branchId;
+            }
+            if (categoryId) {
+                whereClause.category_id = categoryId;
+            }
+
+            // Mapeo para ordenar por columnas de tablas asociadas
+            const orderMap = {
+                name: [['name', orderDirection]],
+                branch: [[{ model: Branch, as: 'branch' }, 'name', orderDirection]],
+                category: [[{ model: TelegramGroupCategory, as: 'category' }, 'name', orderDirection]],
+                telegram_id: [['telegram_id', orderDirection]]
+            };
+
+            const sortOrder = orderMap[sortBy] || orderMap.name;
+
             const { count, rows } = await TelegramGroup.findAndCountAll({
+                where: whereClause,
                 limit: parseInt(limit),
                 offset: parseInt(offset),
                 include: [
                     { model: Branch, as: 'branch' },
                     { model: TelegramGroupCategory, as: 'category' }
                 ],
-                order: [
-                    [{ model: TelegramGroupCategory, as: 'category' }, 'name', 'ASC'],
-                    ['name', 'ASC']
-                ]
+                order: sortOrder,
+                subQuery: false // Necesario para que el filtro en tablas asociadas funcione correctamente
             });
 
             res.status(200).json({

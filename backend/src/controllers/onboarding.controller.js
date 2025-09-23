@@ -181,6 +181,81 @@ class OnboardingController {
             });
         }
     }
+
+    /**
+     * Dispara un webhook para expulsar a un empleado de todos sus grupos de Telegram.
+     * POST /api/onboarding/kick-from-all-groups
+     */
+    async kickFromAllGroups(req, res) {
+        const { employee_id } = req.body;
+        const adminUserId = req.user.id;
+
+        try {
+            const result = await sequelize.transaction(async (t) => {
+                const employee = await Employee.findByPk(employee_id, {
+                    include: [{ model: TelegramGroup, as: 'telegramGroups' }],
+                    transaction: t
+                });
+
+                if (!employee) {
+                    logger.warn('Attempted to kick non-existent employee', { employee_id });
+                    const error = new Error('Employee not found.');
+                    error.statusCode = 404;
+                    throw error;
+                }
+
+                if (!employee.telegram_id) {
+                    logger.warn('Attempted to kick employee without telegram_id', { employee_id });
+                    const error = new Error('Employee does not have a Telegram ID.');
+                    error.statusCode = 400;
+                    throw error;
+                }
+                
+                const groupsToKickFrom = employee.telegramGroups;
+
+                if (groupsToKickFrom && groupsToKickFrom.length > 0) {
+                    // Disparar el webhook
+                    makeWebhookService.sendGroupMembershipUpdate({
+                        employeeTelegramId: employee.telegram_id,
+                        employeeName: `${employee.first_name} ${employee.last_name}`,
+                        groups: groupsToKickFrom,
+                        action: 'kick'
+                    });
+
+                    // Eliminar todas las membresías de la base de datos de BotZilla
+                    await EmployeeTelegramGroup.destroy({
+                        where: { employee_id: employee_id },
+                        transaction: t
+                    });
+                }
+
+                // Cambiar el estado del empleado a 'inactive'
+                employee.status = 'inactive';
+                // Opcional: registrar quién y cuándo realizó la acción
+                // employee.notes = `${employee.notes || ''}\nKicked by user ${adminUserId} on ${new Date().toISOString()}`;
+                await employee.save({ transaction: t });
+
+                logger.info('Kick process complete for employee', { employee_id, groupCount: groupsToKickFrom.length });
+                
+                return {
+                    success: true,
+                    message: 'Kick process initiated successfully. The user will be removed from all groups and their status set to inactive.'
+                };
+            });
+
+            res.status(200).json(result);
+
+        } catch (error) {
+            logger.error('Error kicking employee from all groups', {
+                employee_id,
+                error: error.message,
+                stack: error.stack
+            });
+            const statusCode = error.statusCode || 500;
+            const message = error.message || 'An internal server error occurred while initiating the kick process.';
+            res.status(statusCode).json({ success: false, message });
+        }
+    }
 }
 
 module.exports = new OnboardingController();

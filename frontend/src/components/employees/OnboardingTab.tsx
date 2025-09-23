@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box, Typography, FormGroup, FormControlLabel, Checkbox, Button,
     CircularProgress, Alert, Paper, Accordion, AccordionSummary, AccordionDetails
@@ -18,20 +18,26 @@ const getDynamicDefaultGroups = (employee: Employee, allGroups: TelegramGroup[])
     };
     
     const targetCategoryName = roleToCategoryMap[employee.role];
-    if (!targetCategoryName) {
-        return new Set(); // No hay categoría por defecto para este rol
-    }
 
-    // 2. Filtrar los grupos que son "default" Y...
+    // 2. Filtrar los grupos que cumplen las condiciones
     return new Set(allGroups
         .filter(g => {
-            const isDefault = g.is_default;
-            // ...coinciden con la categoría del rol
-            const categoryMatch = g.category?.name.toLowerCase() === targetCategoryName.toLowerCase();
-            // ...y (o son generales o el nombre de su branch coincide con la del empleado)
-            const branchMatch = g.branch_id === null || g.branch?.name === employee.branch;
+            // Condición 1: El grupo debe estar marcado como "default"
+            if (!g.is_default) {
+                return false;
+            }
+
+            // Condición 2: La sucursal debe coincidir (o ser un grupo general)
+            const branchMatch = g.branch_id === null || g.branch_id === employee.branch_id;
+            if (!branchMatch) {
+                return false;
+            }
+
+            // Condición 3: La categoría debe ser universal (sin categoría) o coincidir con el rol del empleado
+            const isUniversalGroup = !g.category_id;
+            const isRoleMatch = g.category && targetCategoryName && g.category.name.toLowerCase() === targetCategoryName.toLowerCase();
             
-            return isDefault && categoryMatch && branchMatch;
+            return isUniversalGroup || isRoleMatch;
         })
         .map(g => g.id)
     );
@@ -40,7 +46,7 @@ const getDynamicDefaultGroups = (employee: Employee, allGroups: TelegramGroup[])
 // Helper para agrupar por categoría
 const groupByCategory = (groups: TelegramGroup[]) => {
     return groups.reduce((acc, group) => {
-        const categoryName = group.category?.name || 'Uncategorized';
+        const categoryName = group.category?.name || 'Company General groups';
         if (!acc[categoryName]) {
             acc[categoryName] = [];
         }
@@ -49,7 +55,11 @@ const groupByCategory = (groups: TelegramGroup[]) => {
     }, {} as Record<string, TelegramGroup[]>);
 };
 
-const OnboardingTab = () => {
+interface OnboardingTabProps {
+    active: boolean;
+}
+
+const OnboardingTab: React.FC<OnboardingTabProps> = ({ active }) => {
     const [pendingEmployees, setPendingEmployees] = useState<Employee[]>([]);
     const [allGroups, setAllGroups] = useState<TelegramGroup[]>([]);
     const [selectedGroups, setSelectedGroups] = useState<{ [key: number]: Set<number> }>({});
@@ -59,34 +69,38 @@ const OnboardingTab = () => {
     const [success, setSuccess] = useState<string | null>(null);
     const [expandedEmployee, setExpandedEmployee] = useState<number | null>(null);
 
-    useEffect(() => {
-        const loadData = async () => {
-            setLoading(true);
-            setError(null);
+    const loadData = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            // 1. Cargar empleados primero
+            const employeesRes = await employeeService.getPending();
+            if (!employeesRes) throw new Error("Could not fetch employees.");
+            setPendingEmployees(employeesRes);
+
+            // 2. Cargar grupos después
             try {
-                // 1. Cargar empleados primero
-                const employeesRes = await employeeService.getPending();
-                if (!employeesRes) throw new Error("Could not fetch employees.");
-                setPendingEmployees(employeesRes);
-
-                // 2. Cargar grupos después
-                try {
-                    const groupsRes = await telegramGroupService.getAll(1, 1000);
-                    if (!groupsRes || !groupsRes.data) throw new Error("Could not fetch groups.");
-                    setAllGroups(groupsRes.data);
-                } catch (groupError) {
-                    // Si los grupos fallan, mostramos un error específico pero mantenemos la app funcional
-                    setError('Failed to load Telegram groups. Management is disabled.');
-                }
-
-            } catch (err) {
-                setError('Failed to load initial employee data. Please try again.');
-            } finally {
-                setLoading(false);
+                const groupsRes = await telegramGroupService.getAll({ limit: 1000 });
+                if (!groupsRes || !groupsRes.data) throw new Error("Could not fetch groups.");
+                setAllGroups(groupsRes.data);
+            } catch (groupError) {
+                // Si los grupos fallan, mostramos un error específico pero mantenemos la app funcional
+                setError('Failed to load Telegram groups. Management is disabled.');
             }
-        };
-        loadData();
+
+        } catch (err) {
+            setError('Failed to load initial employee data. Please try again.');
+        } finally {
+            setLoading(false);
+        }
     }, []);
+
+    useEffect(() => {
+        // Cargar los datos solo cuando la pestaña está activa
+        if (active) {
+            loadData();
+        }
+    }, [active, loadData]);
 
     const handleAccordionChange = (employeeId: number) => async (_event: React.SyntheticEvent, isExpanded: boolean) => {
         setExpandedEmployee(isExpanded ? employeeId : null);
@@ -147,9 +161,7 @@ const OnboardingTab = () => {
         }
     };
 
-    const groupedGroups = groupByCategory(allGroups);
-
-  return (
+    return (
     <Paper sx={{ p: 2 }}>
         <Typography variant="h6" gutterBottom>Pending Employees Onboarding</Typography>
         {loading && <CircularProgress />}
@@ -159,53 +171,72 @@ const OnboardingTab = () => {
             <Alert severity="info">No pending employees to onboard.</Alert>
         )}
         
-        {!loading && pendingEmployees.map((employee) => (
-            <Accordion 
-                key={employee.id} 
-                sx={{ mb: 1 }} 
-                expanded={expandedEmployee === employee.id}
-                onChange={handleAccordionChange(employee.id)}
-            >
-                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                    <Typography sx={{ fontWeight: 'bold' }}>{`${employee.first_name} ${employee.last_name}`}</Typography>
-                    <Typography sx={{ color: 'text.secondary', ml: 2 }}>{`(${employee.role.replace('_', ' ')})`}</Typography>
-                </AccordionSummary>
-                <AccordionDetails>
-                    <Typography variant="subtitle2" gutterBottom>Assign Telegram Groups:</Typography>
-                    {Object.entries(groupedGroups).map(([categoryName, groupsInCategory]) => (
-                        <Box key={categoryName} sx={{ mb: 2 }}>
-                            <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase' }}>
-                                {categoryName}
-                            </Typography>
-                            <FormGroup>
-                                {groupsInCategory.map(group => (
-                                    <FormControlLabel
-                                        key={group.id}
-                                        control={
-                                            <Checkbox
-                                                checked={(selectedGroups[employee.id] || new Set()).has(group.id)}
-                                                onChange={() => handleGroupToggle(employee.id, group.id)}
+        {!loading && pendingEmployees.map((employee) => {
+            // FILTRAR los grupos relevantes para este empleado específico
+            const relevantGroups = allGroups.filter(group => 
+                group.branch_id === null || group.branch_id === employee.branch_id
+            );
+            
+            // AGRUPAR solo los grupos filtrados
+            const groupedRelevantGroups = groupByCategory(relevantGroups);
+
+            return (
+                <Accordion 
+                    key={employee.id} 
+                    sx={{ mb: 1 }} 
+                    expanded={expandedEmployee === employee.id}
+                    onChange={handleAccordionChange(employee.id)}
+                >
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography sx={{ fontWeight: 'bold' }}>{`${employee.first_name} ${employee.last_name}`}</Typography>
+                        <Typography sx={{ color: 'text.secondary', ml: 2 }}>{`(${employee.role.replace('_', ' ')})`}</Typography>
+                        <Typography sx={{ color: 'text.secondary', ml: 'auto', pr: 2 }}>
+                            {employee.branch?.name || 'No Branch'}
+                        </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                        <Typography variant="subtitle2" gutterBottom>Assign Telegram Groups:</Typography>
+                        {Object.entries(groupedRelevantGroups).map(([categoryName, groupsInCategory]) => {
+                            const displayCategoryName = categoryName === 'General' 
+                                ? 'Branch General groups' 
+                                : categoryName;
+
+                            return (
+                                <Box key={categoryName} sx={{ mb: 2 }}>
+                                    <Typography variant="caption" sx={{ fontWeight: 'bold', textTransform: 'uppercase' }}>
+                                        {displayCategoryName}
+                                    </Typography>
+                                    <FormGroup>
+                                        {groupsInCategory.map(group => (
+                                            <FormControlLabel
+                                                key={group.id}
+                                                control={
+                                                    <Checkbox
+                                                        checked={(selectedGroups[employee.id] || new Set()).has(group.id)}
+                                                        onChange={() => handleGroupToggle(employee.id, group.id)}
+                                                    />
+                                                }
+                                                label={`${group.name} (${group.branch?.name || 'General'})`}
                                             />
-                                        }
-                                        label={`${group.name} (${group.branch?.name || 'General'})`}
-                                    />
-                                ))}
-                            </FormGroup>
+                                        ))}
+                                    </FormGroup>
+                                </Box>
+                            );
+                        })}
+                        <Box sx={{ mt: 2 }}>
+                            <Button 
+                                variant="contained" 
+                                onClick={() => handleSave(employee)} 
+                                disabled={saving === employee.id}
+                                size="small"
+                            >
+                                {saving === employee.id ? <CircularProgress size={24} /> : 'Assign Groups'}
+                            </Button>
                         </Box>
-                    ))}
-                    <Box sx={{ mt: 2 }}>
-                        <Button 
-                            variant="contained" 
-                            onClick={() => handleSave(employee)} 
-                            disabled={saving === employee.id}
-                            size="small"
-                        >
-                            {saving === employee.id ? <CircularProgress size={24} /> : 'Assign Groups'}
-                        </Button>
-                    </Box>
-                </AccordionDetails>
-            </Accordion>
-        ))}
+                    </AccordionDetails>
+                </Accordion>
+            );
+        })}
     </Paper>
   );
 };

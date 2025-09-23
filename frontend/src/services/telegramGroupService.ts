@@ -18,9 +18,30 @@ export interface TelegramGroup {
     category?: TelegramGroupCategory;
 }
 
+export interface GetGroupsParams {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    order?: 'ASC' | 'DESC';
+    name?: string;
+    branchId?: number | '';
+    categoryId?: number | '';
+}
+
 const telegramGroupService = {
-    getAll: async (page = 1, limit = 10): Promise<PagedResponse<TelegramGroup>> => {
-        const response = await api.get('/telegram-groups', { params: { page, limit } });
+    getAll: async (params: GetGroupsParams = {}): Promise<PagedResponse<TelegramGroup>> => {
+        // Clonar los parámetros para no modificar el objeto original
+        const queryParams = { ...params };
+        
+        // Eliminar claves vacías para no enviarlas en la URL (ej. branchId: '')
+        Object.keys(queryParams).forEach(key => {
+            const typedKey = key as keyof GetGroupsParams;
+            if (queryParams[typedKey] === '' || queryParams[typedKey] === null || queryParams[typedKey] === undefined) {
+                delete queryParams[typedKey];
+            }
+        });
+
+        const response = await api.get('/telegram-groups', { params: queryParams });
         return response.data;
     },
 

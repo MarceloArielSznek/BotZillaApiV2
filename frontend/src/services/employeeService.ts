@@ -2,22 +2,47 @@ import { api } from '../config/api';
 import { TelegramGroup } from './telegramGroupService'; // Importar la interfaz
 import { PagedResponse } from '../interfaces/PagedResponse';
 
-// La interfaz de Employee ya debe existir en otro lado, pero la definimos aquí
-// para claridad si fuera necesario. Asumimos que la obtendremos de un archivo centralizado.
+export interface Branch {
+    id: number;
+    name: string;
+}
+
 export interface Employee {
   id: number;
   first_name: string;
   last_name: string;
   email: string;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'active' | 'inactive' | 'rejected';
   role: 'crew_member' | 'crew_leader' | 'salesperson' | 'corporate';
-  // ... otros campos
+  branch_id: number | null;
+  branch?: Branch;
   telegramGroups?: TelegramGroup[];
 }
 
+export interface GetEmployeesParams {
+    page?: number;
+    limit?: number;
+    sortBy?: string;
+    order?: 'ASC' | 'DESC';
+    name?: string;
+    role?: string;
+    branchId?: number | '';
+}
+
 const employeeService = {
-    getAll: async (page = 1, limit = 20): Promise<PagedResponse<Employee>> => {
-        const response = await api.get('/employees', { params: { page, limit } });
+    getAll: async (params: GetEmployeesParams = {}): Promise<PagedResponse<Employee>> => {
+        // Clonar los parámetros para no modificar el objeto original
+        const queryParams = { ...params };
+        
+        // Eliminar claves vacías para no enviarlas en la URL
+        Object.keys(queryParams).forEach(key => {
+            const typedKey = key as keyof GetEmployeesParams;
+            if (queryParams[typedKey] === '' || queryParams[typedKey] === null || queryParams[typedKey] === undefined) {
+                delete queryParams[typedKey];
+            }
+        });
+
+        const response = await api.get('/employees', { params: queryParams });
         return response.data;
     },
 

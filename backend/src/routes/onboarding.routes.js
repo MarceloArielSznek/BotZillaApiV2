@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const onboardingController = require('../controllers/onboarding.controller');
 const { verifyToken } = require('../middleware/auth.middleware');
-const { validateGroupAssignment, validateGroupBlocking } = require('../middleware/validation.middleware');
+const { validateGroupAssignment, validateGroupBlocking, validateKickFromAllGroups } = require('../middleware/validation.middleware');
 
 /**
  * @route POST /api/onboarding/assign-groups
@@ -26,6 +26,13 @@ router.post(
     verifyToken,
     validateGroupBlocking,
     onboardingController.blockFromGroup
+);
+
+router.post(
+    '/kick-from-all-groups',
+    verifyToken,
+    validateKickFromAllGroups,
+    onboardingController.kickFromAllGroups
 );
 
 module.exports = router;

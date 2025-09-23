@@ -29,11 +29,20 @@ const ManageEmployeeGroupsModal: React.FC<ManageEmployeeGroupsModalProps> = ({ o
                 setError(null);
                 try {
                     const [groupsRes, assignedGroupsRes] = await Promise.all([
-                        telegramGroupService.getAll(1, 1000),
+                        telegramGroupService.getAll({ limit: 1000 }), // Pedir hasta 1000 grupos
                         employeeService.getAssignedGroups(employee.id) // Usar la función correcta
                     ]);
-                    if (groupsRes && groupsRes.data) setAllGroups(groupsRes.data);
+
+                    if (groupsRes && groupsRes.data) {
+                        // Filtrar los grupos aquí, antes de guardarlos en el estado
+                        const relevantGroups = groupsRes.data.filter(group => 
+                            group.branch_id === null || group.branch_id === employee.branch_id
+                        );
+                        setAllGroups(relevantGroups);
+                    }
+                    
                     if (assignedGroupsRes) setSelectedGroups(new Set(assignedGroupsRes.map(g => g.id)));
+
                 } catch (err) {
                     setError('Failed to load group data.');
                 } finally {
