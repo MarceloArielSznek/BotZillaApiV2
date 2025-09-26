@@ -285,4 +285,65 @@ router.post(
     automationsController.fixDuplicateColumnMapping
 );
 
+/**
+ * @swagger
+ * /api/automations/sync-inspection-reports:
+ *   post:
+ *     summary: Sincroniza los reportes de inspección desde Attic Tech y notifica sobre condiciones específicas.
+ *     tags: [Automations]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     responses:
+ *       200:
+ *         description: Sincronización completada exitosamente.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Sincronización completada. 2 notificaciones pendientes."
+ *                 notifications:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       type:
+ *                         type: string
+ *                         enum: [roof, hvac]
+ *                       report_id:
+ *                         type: integer
+ *                       estimate_id:
+ *                         type: integer
+ *                       estimate_name:
+ *                         type: string
+ *                       client_name:
+ *                         type: string
+ *                       salesperson_name:
+ *                         type: string
+ *                       salesperson_email:
+ *                         type: string
+ *                       branch_name:
+ *                         type: string
+ *                       estimate_link:
+ *                         type: string
+ *                       condition:
+ *                         type: string
+ *                       interested_in_inspection:
+ *                         type: boolean
+ *       401:
+ *         description: No autorizado - API Key faltante o inválida.
+ *       500:
+ *         description: Error del servidor durante la sincronización.
+ */
+router.post(
+    '/sync-inspection-reports',
+    validateApiKey,
+    automationsController.syncInspectionReports
+);
+
 module.exports = router; 

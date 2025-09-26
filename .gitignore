@@ -39,3 +39,5 @@ yarn-error.log*
 *.tmp
 *.swp
 *.swo 
+# Exported JSON files from scripts
+backend/exports/

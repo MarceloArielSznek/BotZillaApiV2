@@ -1,4 +1,5 @@
 const https = require('https');
+const { loginToAtticTech } = require('../utils/atticTechAuth');
 const {
     Op
 } = require('sequelize');
@@ -17,7 +18,8 @@ const {
     AutomationErrorLog,
     CrewMemberBranch,
     Notification,
-    NotificationTemplate
+    NotificationTemplate,
+    InspectionReport
 } = require('../models');
 const {
     logger
@@ -95,6 +97,21 @@ const parseValidDate = (dateString) => {
     return date;
 };
 
+/**
+ * Parsea de forma segura un valor a booleano.
+ * @param {*} value - El valor a parsear (puede ser booleano, string, null, o undefined).
+ * @returns {boolean} - El valor booleano resultante.
+ */
+const parseBoolean = (value) => {
+    if (typeof value === 'boolean') {
+        return value;
+    }
+    if (typeof value === 'string') {
+        return value.toLowerCase() === 'true';
+    }
+    // Devuelve false para null, undefined, 0, etc.
+    return !!value;
+};
 
 // --- Lógica de Sincronización (se ejecutará en segundo plano) ---
 
@@ -141,77 +158,6 @@ async function runSync() {
 
 
 // --- Funciones auxiliares para la sincronización con Attic Tech ---
-
-async function loginToAtticTech(logMessages = []) {
-    logMessages.push('🔑 Starting dynamic API login to Attic Tech...');
-    
-    const API_USER_EMAIL = process.env.ATTIC_TECH_EMAIL;
-    const API_USER_PASSWORD = process.env.ATTIC_TECH_PASSWORD;
-    
-    if (!API_USER_EMAIL || !API_USER_PASSWORD) {
-        const errorMsg = `ATTIC_TECH_EMAIL and ATTIC_TECH_PASSWORD must be set in environment variables`;
-        logMessages.push(`❌ ${errorMsg}`);
-        throw new Error(errorMsg);
-    }
-
-    const loginData = JSON.stringify({
-        email: API_USER_EMAIL,
-        password: API_USER_PASSWORD
-    });
-
-    const options = {
-        hostname: 'www.attic-tech.com',
-        path: '/api/users/login',
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Content-Length': Buffer.byteLength(loginData),
-            'User-Agent': 'BotZilla API v2.0'
-        }
-    };
-
-    try {
-        const response = await new Promise((resolve, reject) => {
-            const req = https.request(options, (res) => {
-                let data = '';
-                res.on('data', (chunk) => { data += chunk; });
-                res.on('end', () => {
-                    if (res.statusCode === 200 || res.statusCode === 201) {
-                        try { 
-                            resolve(JSON.parse(data)); 
-                        } catch (e) { 
-                            logMessages.push(`❌ Login JSON Parse Error: ${e.message}`);
-                            reject(e); 
-                        }
-                    } else {
-                        logMessages.push(`❌ Login API Error. Status: ${res.statusCode}, Data: ${data.substring(0, 200)}`);
-                        reject(new Error(`Login request failed: ${res.statusCode} - ${data}`));
-                    }
-                });
-            });
-            
-            req.on('error', (e) => { 
-                logMessages.push(`❌ Login Request Error: ${e.message}`);
-                reject(e); 
-            });
-            
-            req.write(loginData);
-            req.end();
-        });
-
-        if (response.token) {
-            logMessages.push('✅ Successfully logged in to Attic Tech');
-            logMessages.push(`👤 Logged in as: ${response.user?.email || 'Unknown'}`);
-            return response.token;
-        } else {
-            throw new Error('No token received in login response');
-        }
-    } catch (error) {
-        logMessages.push(`❌ Login to Attic Tech failed: ${error.message}`);
-        throw error;
-    }
-}
 
 async function fetchAllEstimatesFromAtticTech(apiKey, fechaInicio, fechaFin, logMessages = []) {
     let allLeads = [];
@@ -2261,6 +2207,227 @@ class AutomationsController {
             res.status(500).json({ 
                 success: false, 
                 message: 'Internal server error while fixing column mapping.' 
+            });
+        }
+    }
+
+    /**
+     * Sincroniza los reportes de inspección desde Attic Tech
+     * @param {Object} req - Express request object
+     * @param {Object} res - Express response object
+     */
+    async syncInspectionReports(req, res) {
+        try {
+            logger.info('Iniciando sincronización de reportes de inspección');
+
+            // 1. Obtener token de AT
+            const token = await loginToAtticTech();
+            if (!token) {
+                throw new Error('No se pudo obtener el token de Attic Tech');
+            }
+
+            // Obtener la fecha de inicio de HOY (00:00:00) para buscar solo los de hoy.
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayISO = today.toISOString();
+        
+            logger.info('Buscando reportes creados después de:', {
+                date: todayISO,
+                humanReadable: today.toString()
+            });
+
+            // 3. Hacer la petición a AT para obtener los reportes del día
+            const options = {
+                hostname: 'www.attic-tech.com',
+                path: `/api/inspection-reports?depth=2&limit=100&where[createdAt][greater_than]=${encodeURIComponent(todayISO)}`,
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                    'User-Agent': 'BotZilla Sync Script'
+                }
+            };
+
+            const reports = await new Promise((resolve, reject) => {
+                const req = https.request(options, (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => { data += chunk; });
+                    res.on('end', () => {
+                        if (res.statusCode === 200) {
+                            try {
+                                resolve(JSON.parse(data));
+                            } catch (e) {
+                                reject(new Error(`Error parseando la respuesta JSON: ${e.message}`));
+                            }
+                        } else {
+                            reject(new Error(`La solicitud falló: ${res.statusCode} - ${data}`));
+                        }
+                    });
+                });
+                req.on('error', (e) => reject(e));
+                req.end();
+            });
+
+            // Log detallado de la estructura de los reportes
+            logger.info('Estructura de reportes:', {
+                isArray: Array.isArray(reports),
+                hasData: !!reports?.data,
+                responseType: typeof reports,
+                responseKeys: reports ? Object.keys(reports) : [],
+                firstReport: reports?.docs?.[0] ? {
+                    id: reports.docs[0].id,
+                    fields: Object.keys(reports.docs[0]),
+                    jobEstimate: reports.docs[0].jobEstimate ? {
+                        id: reports.docs[0].jobEstimate.id,
+                        fields: Object.keys(reports.docs[0].jobEstimate)
+                    } : null,
+                    inspectionData: reports.docs[0].inspectionData ? {
+                        fields: Object.keys(reports.docs[0].inspectionData)
+                    } : null
+                } : null
+            });
+
+            // Asegurarnos de que reports sea un array
+            const reportsArray = Array.isArray(reports) ? reports : reports.docs || [];
+            
+            logger.info(`Encontrados ${reportsArray.length} reportes en la API de Attic Tech.`);
+
+            const notificationResults = [];
+
+            for (const report of reportsArray) {
+                // DEBUGGING ESPECÍFICO PARA KYLE CIEPLY
+                if (report.jobEstimate?.name === 'Kyle Cieply - LA') {
+                    logger.warn('--- DEBUGGING Kyle Cieply - LA ---');
+                    logger.warn('Raw Report Object from AT API:', {
+                        fullReportObject: JSON.stringify(report, null, 2) // Convertido a JSON para ver todo
+                    });
+                    logger.warn('------------------------------------');
+                }
+
+                try {
+                    // Paso 1: Guardar o encontrar el reporte en nuestra BD
+                    const [dbReport, created] = await InspectionReport.findOrCreate({
+                        where: { attic_tech_report_id: report.id },
+                        defaults: {
+                            attic_tech_report_id: report.id,
+                            attic_tech_estimate_id: report.jobEstimate?.id,
+                            estimate_name: report.jobEstimate?.name,
+                            salesperson_name: report.jobEstimate?.user?.name,
+                            salesperson_email: report.jobEstimate?.user?.email,
+                            client_name: report.jobEstimate?.client?.fullName,
+                            client_phone: report.jobEstimate?.client?.phone,
+                            client_email: report.jobEstimate?.client?.email,
+                            client_address: report.jobEstimate?.property?.address,
+                            branch_name: report.jobEstimate?.branch?.name,
+                            estimate_link: `https://www.attic-tech.com/calculator?jobId=${report.jobEstimate?.id}&page=viewInspectionReport`,
+                            roof_material: report.roofMaterial,
+                            decking_type: report.roofDeckingType,
+                            roof_age: report.roofAge,
+                            walkable_roof: report.roofWalkable,
+                            roof_condition: report.roofCondition,
+                            full_roof_inspection_interest: parseBoolean(report.roofInspectionInterest), // Usar valor parseado
+                            
+                            customer_comfort: report.hvacComfortLevel,
+                            hvac_age: report.hvacAge,
+                            system_condition: report.hvacSystemCondition,
+                            air_ducts_condition: report.airDuctCondition,
+                            full_hvac_furnace_inspection_interest: parseBoolean(report.hvacInspectionInterest), // Usar valor parseado
+                            
+                            attic_tech_created_at: report.createdAt
+                        }
+                    });
+
+                    if(created) {
+                        logger.info(`Nuevo reporte [ID: ${report.id}] guardado en la base de datos.`);
+                    }
+
+                    // Paso 2: Evaluar y generar notificaciones
+                    const baseNotificationPayload = {
+                        job_name: dbReport.estimate_name,
+                        cx_name: dbReport.client_name,
+                        cx_phone: dbReport.client_phone,
+                        job_address: dbReport.client_address,
+                        branch: dbReport.branch_name,
+                        salesperson_name: dbReport.salesperson_name,
+                        client_email: dbReport.client_email,
+                        estimate_link: dbReport.estimate_link,
+                    };
+        
+                    let changesMade = false;
+                    
+                    // --- Evaluar ROOFING de forma independiente ---
+                    let roofNotificationType = null;
+                    const hasRoofInterest = parseBoolean(report.roofInspectionInterest);
+                    if (hasRoofInterest) {
+                        roofNotificationType = 'New Roofing Inspection Request';
+                    } else if (report.roofCondition && ['needs_replacement'].includes(report.roofCondition)) {
+                        roofNotificationType = 'New Roofing Potential Lead';
+                    }
+
+                    if (roofNotificationType && !dbReport.roof_notification_sent) {
+                        notificationResults.push({
+                            ...baseNotificationPayload,
+                            service_type: 'Roofing',
+                            notification_type: roofNotificationType
+                        });
+                        dbReport.roof_notification_sent = true;
+                        changesMade = true;
+                        logger.info(`Reporte [ID: ${report.id}] marcado para notificación de ROOFING. Tipo: ${roofNotificationType}`);
+                    }
+
+                    // --- Evaluar HVAC de forma independiente ---
+                    let hvacNotificationType = null;
+                    const hasHvacInterest = parseBoolean(report.hvacInspectionInterest);
+                    if (hasHvacInterest) {
+                        hvacNotificationType = 'New HVAC Inspection Request';
+                    } else if (report.hvacSystemCondition && ['needs_replacement'].includes(report.hvacSystemCondition)) {
+                        hvacNotificationType = 'New HVAC Potential Lead';
+                    }
+                    
+                    if (hvacNotificationType && !dbReport.hvac_notification_sent) {
+                        notificationResults.push({
+                            ...baseNotificationPayload,
+                            service_type: 'HVAC',
+                            notification_type: hvacNotificationType
+                        });
+                        dbReport.hvac_notification_sent = true;
+                        changesMade = true;
+                        logger.info(`Reporte [ID: ${report.id}] marcado para notificación de HVAC. Tipo: ${hvacNotificationType}`);
+                    }
+                    
+                    // --- Guardar si se hizo algún cambio ---
+                    if (changesMade) {
+                        await dbReport.save();
+                    }
+        
+                } catch (error) {
+                    logger.error('Error procesando reporte individual:', {
+                        report_id: report.id,
+                        error: error.message,
+                        stack: error.stack
+                    });
+                }
+            }
+            
+            // 6. Enviar respuesta y registrar la finalización
+            const responseMessage = `Sincronización completada. ${notificationResults.length} notificaciones pendientes.`;
+            logger.info(responseMessage, { notificationCount: notificationResults.length });
+
+            res.status(200).json({
+                success: true,
+                message: responseMessage,
+                notifications: notificationResults
+            });
+        
+        } catch (error) {
+            logger.error('Error en sincronización de reportes', {
+                error: error.message,
+                stack: error.stack
+            });
+            res.status(500).json({
+                success: false,
+                message: 'Error durante la sincronización de reportes',
+                error: error.message
             });
         }
     }

@@ -27,6 +27,7 @@ const TelegramGroup = require('./TelegramGroup');
 const GroupMembershipStatus = require('./GroupMembershipStatus');
 const EmployeeTelegramGroup = require('./EmployeeTelegramGroup');
 const TelegramGroupCategory = require('./TelegramGroupCategory'); // Importar nuevo modelo
+const InspectionReport = require('./InspectionReport');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -327,5 +328,6 @@ module.exports = {
     TelegramGroup,
     GroupMembershipStatus,
     EmployeeTelegramGroup,
-    TelegramGroupCategory // Exportar nuevo modelo
+    TelegramGroupCategory,
+    InspectionReport
 }; 
