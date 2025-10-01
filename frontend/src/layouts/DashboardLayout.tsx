@@ -30,6 +30,7 @@ import {
   HelpOutline as HelpIcon,
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
+  Summarize as ReportsIcon, // Nuevo ícono
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -76,6 +77,7 @@ const DashboardLayout = () => {
     { text: 'Estimates', icon: <EstimatesIcon />, path: '/dashboard/estimates' },
     { text: 'Jobs', icon: <JobsIcon />, path: '/dashboard/jobs' },
     { text: 'Employees', icon: <EmployeesIcon />, path: '/dashboard/employees' },
+    { text: 'Inspection Reports', icon: <ReportsIcon />, path: '/dashboard/inspection-reports' }, // Nueva entrada
     { text: 'Notifications', icon: <NotificationsIcon />, path: '/dashboard/notifications' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/dashboard/settings' },
   ];

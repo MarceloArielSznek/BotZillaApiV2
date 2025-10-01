@@ -16,6 +16,7 @@ import Notifications from './pages/Notifications';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import TelegramGroups from './pages/TelegramGroups'; // Importar nueva página
+import InspectionReports from './pages/InspectionReports'; // Nueva página
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -42,8 +43,13 @@ function App() {
                 <Route path="estimates" element={<Estimates />} />
                 <Route path="jobs" element={<Jobs />} />
                 <Route path="employees" element={
-                  <ProtectedRoute allowedRoles={['admin']}>
+                  <ProtectedRoute allowedRoles={['admin', 'office_manager']}>
                     <Employees />
+                  </ProtectedRoute>
+                } />
+                <Route path="inspection-reports" element={
+                  <ProtectedRoute allowedRoles={['admin', 'office_manager']}>
+                    <InspectionReports />
                   </ProtectedRoute>
                 } />
                 <Route path="notifications" element={<Notifications />} />

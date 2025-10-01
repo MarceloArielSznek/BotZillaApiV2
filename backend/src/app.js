@@ -29,6 +29,7 @@ const onboardingRoutes = require('./routes/onboarding.routes'); // Nueva ruta
 const telegramGroupRoutes = require('./routes/telegramGroups.routes'); // Ruta para CRUD
 const employeeRoutes = require('./routes/employees.routes'); // Ruta para Empleados
 const telegramGroupCategoryRoutes = require('./routes/telegramGroupCategory.routes'); // Ruta para Categorías
+const inspectionReportsRoutes = require('./routes/inspectionReports.routes.js');
 // const botRoutes = require('./routes/bot.routes'); // No longer needed
 const { logger, requestLogger, errorLogger } = require('./utils/logger');
 const { caches } = require('./utils/cache');
@@ -219,6 +220,7 @@ app.use('/api/onboarding', onboardingRoutes); // Nueva ruta
 app.use('/api/telegram-groups', telegramGroupRoutes); // Ruta para CRUD
 app.use('/api/employees', employeeRoutes); // Ruta para Empleados
 app.use('/api/telegram-group-categories', telegramGroupCategoryRoutes); // Ruta para Categorías
+app.use('/api/inspection-reports', inspectionReportsRoutes);
 // app.use('/api/bot', botRoutes); // No longer needed
 
 // Health check endpoint
