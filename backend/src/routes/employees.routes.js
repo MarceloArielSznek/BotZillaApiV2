@@ -26,4 +26,20 @@ router.get(
     employeeController.getEmployeeGroups
 );
 
+// POST /api/employees/:id/activate - Activar un employee y crear crew_member o sales_person
+router.post(
+    '/:id/activate',
+    verifyToken,
+    isAdmin, // Solo admin y office_manager pueden activar
+    employeeController.activateEmployee
+);
+
+// POST /api/employees/:id/reject - Rechazar un employee
+router.post(
+    '/:id/reject',
+    verifyToken,
+    isAdmin, // Solo admin y office_manager pueden rechazar
+    employeeController.rejectEmployee
+);
+
 module.exports = router;

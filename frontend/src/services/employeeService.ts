@@ -1,6 +1,6 @@
 import { api } from '../config/api';
 import { TelegramGroup } from './telegramGroupService'; // Importar la interfaz
-import { PagedResponse } from '../interfaces/PagedResponse';
+import { PagedResponse } from '../interfaces';
 
 export interface Branch {
     id: number;
@@ -48,12 +48,28 @@ const employeeService = {
 
     getPending: async (): Promise<Employee[]> => {
         const response = await api.get('/employees/pending');
-        return response.data.data;
+        return response?.data?.data || [];
     },
 
     getAssignedGroups: async (employeeId: number): Promise<TelegramGroup[]> => {
         const response = await api.get(`/employees/${employeeId}/groups`);
         return response.data.data;
+    },
+
+    activate: async (employeeId: number, data: {
+        final_role: 'crew_member' | 'crew_leader' | 'sales_person';
+        branches: number[];
+        is_leader?: boolean;
+        animal?: string;
+        telegram_groups?: number[];
+    }): Promise<{ success: boolean; message: string; data: any }> => {
+        const response = await api.post(`/employees/${employeeId}/activate`, data);
+        return response.data;
+    },
+
+    reject: async (employeeId: number, reason?: string): Promise<{ success: boolean; message: string }> => {
+        const response = await api.post(`/employees/${employeeId}/reject`, { reason });
+        return response.data;
     }
 };
 
