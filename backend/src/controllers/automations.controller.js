@@ -289,7 +289,11 @@ function sanitizeEmail(raw) {
     return String(raw).trim().slice(0, 200) || null;
 }
 
-async function findOrCreateSalesPerson(name, branchId, logMessages = []) {
+/**
+ * SOLO busca SalesPerson existente - NUNCA crea uno nuevo
+ * Los empleados deben ser creados manualmente por administradores
+ */
+async function findSalesPerson(name, branchId, logMessages = []) {
     if (!name || !branchId) return null;
     const trimmedName = name.trim();
 
@@ -412,8 +416,8 @@ async function findOrCreateSalesPerson(name, branchId, logMessages = []) {
     });
     
     if (inactiveSalesPerson) {
-        logMessages.push(`⚠️ Found inactive salesperson: "${inactiveSalesPerson.name}" for "${trimmedName}" - NOT reactivating (creating new instead)`);
-        // NO reactivar - continuar con la lógica de similitud
+        logMessages.push(`⚠️ Found inactive salesperson: "${inactiveSalesPerson.name}" for "${trimmedName}" - NOT reactivating (will return null)`);
+        // NO reactivar - continuar con la lógica de similitud, pero finalmente retornar null
     }
 
     // 3. Buscar matches similares - SOLO entre activos
@@ -474,52 +478,18 @@ async function findOrCreateSalesPerson(name, branchId, logMessages = []) {
     }
 
     if (bestMatch) {
-        logMessages.push(`⚠️ Found similar inactive: "${trimmedName}" → "${bestMatch.name}" (similarity: ${bestSimilarity.toFixed(2)}) - NOT reactivating (creating new instead)`);
-        // NO reactivar - continuar para crear nuevo
+        logMessages.push(`⚠️ Found similar inactive: "${trimmedName}" → "${bestMatch.name}" (similarity: ${bestSimilarity.toFixed(2)}) - NOT reactivating (will return null)`);
+        // NO reactivar - retornar null
     }
 
-    // 5. Crear nuevo salesperson (no reactivar inactivos)
-    // Primero verificar si ya existe un salesperson inactivo con el mismo nombre
-    const existingInactive = await SalesPerson.findOne({
-        where: { 
-            name: { [Op.iLike]: trimmedName },
-            is_active: false
-        }
-    });
-
-    if (existingInactive) {
-        logMessages.push(`⚠️ Found existing inactive salesperson: ${trimmedName} - NOT reactivating (keeping inactive)`);
-        // NO reactivar - mantener inactivo
-        return null; // Retornar null para indicar que no se debe usar este salesperson
-    }
-
-    // Crear nuevo salesperson solo si no existe uno inactivo
-    const [finalSalesPerson, created] = await SalesPerson.findOrCreate({
-        where: { name: { [Op.iLike]: trimmedName } },
-        defaults: { name: trimmedName, warning_count: 0, is_active: true }
-    });
-
-    if (created) {
-        logMessages.push(`🌱 Created new salesperson: ${trimmedName}`);
-        // Asignar la primera branch al nuevo salesperson
-        await SalesPersonBranch.create({
-            sales_person_id: finalSalesPerson.id,
-            branch_id: branchId
-        });
-        logMessages.push(`   📍 Assigned first branch to new salesperson`);
-    } else {
-        // Si ya existe y está activo, NO asignar branch adicional
-        if (finalSalesPerson.is_active) {
-            logMessages.push(`✅ Found existing active salesperson: ${trimmedName} - NO additional branch assignment`);
-            // NO asignar branch adicional - mantener configuración original
-        }
-    }
-
-    return finalSalesPerson;
+    // 5. NO crear salespersons - Solo buscar
+    // Si no se encontró ningún match activo o similar, retornar null
+    logMessages.push(`❌ NO salesperson found for: "${trimmedName}" - Manual creation required`);
+    return null;
 }
 
 // Exportar la función para testing
-module.exports = { findOrCreateSalesPerson };
+module.exports = { findSalesPerson };
 
 async function findOrCreateBranch(name, logMessages = []) {
     if (!name) return null;
@@ -574,7 +544,7 @@ async function saveEstimatesToDb(estimatesData, logMessages = []) {
 
     for (const data of estimatesData) {
         const branch = await findOrCreateBranch(data.branchName, logMessages);
-        const salesPerson = await findOrCreateSalesPerson(data.salespersonName, branch ? branch.id : null, logMessages);
+        const salesPerson = await findSalesPerson(data.salespersonName, branch ? branch.id : null, logMessages);
         const status = await findOrCreateEstimateStatus(data.status, logMessages);
 
         logMessages.push(`Processing estimate: ${data.name} (AT ID: ${data.attic_tech_estimate_id}) with status: ${data.status}`);
@@ -1194,12 +1164,24 @@ class AutomationsController {
                             });
                         }
                         
-                        // Si la sucursal fue encontrada, procedemos a crear el estimate de respaldo.
-                        const [salesPerson] = await SalesPerson.findOrCreate({
-                            where: { name: estimatorName },
-                            defaults: { name: estimatorName },
+                        // Si la sucursal fue encontrada, procedemos a buscar el salesperson.
+                        // NO creamos salespersons automáticamente - deben existir previamente
+                        const salesPerson = await SalesPerson.findOne({
+                            where: { 
+                                name: { [Op.iLike]: estimatorName },
+                                is_active: true
+                            },
                             transaction
                         });
+                        
+                        if (!salesPerson) {
+                            logger.error(`❌ SalesPerson "${estimatorName}" not found in database`);
+                            await transaction.rollback();
+                            return res.status(404).json({
+                                success: false,
+                                message: `SalesPerson "${estimatorName}" not found. Please create the sales person manually before processing this job.`
+                            });
+                        }
                         
                         const [soldStatus] = await EstimateStatus.findOrCreate({
                             where: { name: 'Sold' },
@@ -2436,5 +2418,5 @@ class AutomationsController {
 // Exportar tanto la clase como la función helper
 module.exports = {
     AutomationsController: new AutomationsController(),
-    findOrCreateSalesPerson
+    findSalesPerson
 };

@@ -8,12 +8,13 @@ const jobCreationService = require('../services/jobCreationService');
 class JobsController {
     async getAllJobs(req, res) {
         try {
-            const { page = 1, limit = 10, branchId, salespersonId, crewLeaderId, startDate, endDate, search } = req.query;
+            const { page = 1, limit = 10, branchId, salespersonId, crewLeaderId, statusId, startDate, endDate, search } = req.query;
             const offset = (page - 1) * limit;
 
             const whereClause = {};
             if (branchId) whereClause.branch_id = branchId;
             if (crewLeaderId) whereClause.crew_leader_id = crewLeaderId;
+            if (statusId) whereClause.status_id = statusId;
             if (startDate && endDate) {
                 whereClause.closing_date = { [Op.between]: [new Date(startDate), new Date(endDate)] };
             }
@@ -218,9 +219,22 @@ class JobsController {
             if (note !== undefined) updateData.note = note;
             if (review !== undefined) updateData.review = review;
             if (crew_leader_hours !== undefined) updateData.crew_leader_hours = crew_leader_hours;
-            if (status_id !== undefined) updateData.status_id = status_id;
             
-            // Validar closing_date solo si se proporciona y es válida
+            // Lógica especial para status_id y closing_date
+            if (status_id !== undefined) {
+                updateData.status_id = status_id;
+                
+                // Si el status cambia a "Closed Job", setear closing_date automáticamente
+                if (status_id) {
+                    const newStatus = await JobStatus.findByPk(status_id);
+                    if (newStatus && newStatus.name === 'Closed Job' && !job.closing_date) {
+                        updateData.closing_date = new Date();
+                        logger.info(`Job ${id} status changed to "Closed Job". Setting closing_date automatically.`);
+                    }
+                }
+            }
+            
+            // Permitir override manual de closing_date solo si se proporciona explícitamente
             if (closing_date !== undefined && closing_date !== null && closing_date !== '') {
                 const parsedDate = new Date(closing_date);
                 if (!isNaN(parsedDate.getTime())) {

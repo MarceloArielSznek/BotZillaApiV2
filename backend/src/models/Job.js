@@ -67,6 +67,34 @@ Job.init({
       key: 'id'
     },
     allowNull: true
+  },
+  // Campos para sincronización con Attic Tech
+  attic_tech_job_id: {
+    type: DataTypes.INTEGER,
+    unique: true,
+    allowNull: true
+  },
+  attic_tech_estimate_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    comment: 'ID del estimate en Attic Tech'
+  },
+  last_known_status_id: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: 'job_status',
+      key: 'id'
+    },
+    allowNull: true,
+    comment: 'Estado anterior del job para detectar cambios'
+  },
+  last_synced_at: {
+    type: DataTypes.DATE,
+    allowNull: true
+  },
+  last_notification_sent_at: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 }, {
   sequelize,

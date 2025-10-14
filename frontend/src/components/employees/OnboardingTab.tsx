@@ -11,6 +11,8 @@ import employeeService, { Employee } from '@/services/employeeService';
 import telegramGroupService, { TelegramGroup } from '@/services/telegramGroupService';
 import branchService from '@/services/branchService';
 import ActivateEmployeeModal from './ActivateEmployeeModal';
+import OnboardingDashboard from './OnboardingDashboard';
+import AwaitingRegistrationTable from './AwaitingRegistrationTable';
 
 interface OnboardingTabProps {
     active: boolean;
@@ -131,6 +133,9 @@ const OnboardingTab: React.FC<OnboardingTabProps> = ({ active }) => {
 
     return (
         <Box>
+            {/* Dashboard de estadísticas y sincronización */}
+            <OnboardingDashboard onSyncComplete={loadData} />
+
             <Paper sx={{ p: 3, mb: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                     <Box>
@@ -255,6 +260,9 @@ const OnboardingTab: React.FC<OnboardingTabProps> = ({ active }) => {
                     </Box>
                 )}
             </Paper>
+
+            {/* Tabla de empleados esperando completar su registro */}
+            <AwaitingRegistrationTable active={active} />
 
             {/* Activate Employee Modal */}
             <ActivateEmployeeModal

@@ -112,11 +112,8 @@ Employee.init({
   },
   phone_number: {
     type: DataTypes.STRING(20),
-    allowNull: false,
+    allowNull: true, // Nullable para pending employees
     validate: {
-      notEmpty: {
-        msg: 'Phone number cannot be empty'
-      },
       len: {
         args: [10, 20],
         msg: 'Phone number must be between 10 and 20 characters'
@@ -129,15 +126,12 @@ Employee.init({
   },
   telegram_id: {
     type: DataTypes.STRING(20),
-    allowNull: false,
+    allowNull: true, // Nullable para pending employees
     unique: {
       name: 'unique_employee_telegram_id',
       msg: 'Telegram ID is already registered'
     },
     validate: {
-      notEmpty: {
-        msg: 'Telegram ID cannot be empty'
-      },
       len: {
         args: [5, 20],
         msg: 'Telegram ID must be between 5 and 20 characters'
@@ -149,11 +143,8 @@ Employee.init({
   },
   street: {
     type: DataTypes.STRING(200),
-    allowNull: false,
+    allowNull: true, // Nullable para pending employees
     validate: {
-      notEmpty: {
-        msg: 'Street address cannot be empty'
-      },
       len: {
         args: [5, 200],
         msg: 'Street address must be between 5 and 200 characters'
@@ -162,11 +153,8 @@ Employee.init({
   },
   city: {
     type: DataTypes.STRING(100),
-    allowNull: false,
+    allowNull: true, // Nullable para pending employees
     validate: {
-      notEmpty: {
-        msg: 'City cannot be empty'
-      },
       len: {
         args: [2, 100],
         msg: 'City must be between 2 and 100 characters'
@@ -179,11 +167,8 @@ Employee.init({
   },
   state: {
     type: DataTypes.STRING(50),
-    allowNull: false,
+    allowNull: true, // Nullable para pending employees
     validate: {
-      notEmpty: {
-        msg: 'State cannot be empty'
-      },
       len: {
         args: [2, 50],
         msg: 'State must be between 2 and 50 characters'
@@ -192,11 +177,8 @@ Employee.init({
   },
   zip: {
     type: DataTypes.STRING(20),
-    allowNull: false,
+    allowNull: true, // Nullable para pending employees
     validate: {
-      notEmpty: {
-        msg: 'Zip code cannot be empty'
-      },
       len: {
         args: [3, 20],
         msg: 'Zip code must be between 3 and 20 characters'
@@ -209,11 +191,8 @@ Employee.init({
   },
   date_of_birth: {
     type: DataTypes.DATEONLY,
-    allowNull: false,
+    allowNull: true, // Nullable para pending employees
     validate: {
-      notEmpty: {
-        msg: 'Date of birth cannot be empty'
-      },
       isDate: {
         msg: 'Please provide a valid date of birth'
       },
@@ -222,6 +201,8 @@ Employee.init({
         msg: 'Date of birth must be in the past'
       },
       isAdult(value) {
+        if (!value) return; // Skip validation if null (pending employee)
+        
         const today = new Date();
         const birthDate = new Date(value);
         let age = today.getFullYear() - birthDate.getFullYear();
@@ -297,6 +278,15 @@ Employee.init({
       msg: 'Employee code is already in use'
     },
     comment: 'Código único del empleado para identificación interna'
+  },
+  attic_tech_user_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    unique: {
+      name: 'unique_attic_tech_user_id',
+      msg: 'Attic Tech User ID is already in use'
+    },
+    comment: 'ID del usuario en Attic Tech (para sincronización)'
   }
 }, {
   sequelize,

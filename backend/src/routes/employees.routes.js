@@ -42,4 +42,39 @@ router.post(
     employeeController.rejectEmployee
 );
 
+/**
+ * @route GET /api/employees/awaiting-registration
+ * @description Obtener employees que esperan completar su registro (sin telegram_id)
+ * @access Private
+ */
+router.get(
+    '/awaiting-registration',
+    verifyToken,
+    employeeController.getAwaitingRegistration
+);
+
+/**
+ * @route POST /api/employees/sync-legacy
+ * @description Sincronizar registros antiguos de sales_person y crew_member con employee
+ * @access Private (Admin only)
+ */
+router.post(
+    '/sync-legacy',
+    verifyToken,
+    isAdmin,
+    employeeController.syncLegacyRecords
+);
+
+/**
+ * @route POST /api/employees/:id/send-reminder
+ * @description Enviar email recordatorio de registro a un employee
+ * @access Private (Admin only)
+ */
+router.post(
+    '/:id/send-reminder',
+    verifyToken,
+    isAdmin,
+    employeeController.sendRegistrationReminder
+);
+
 module.exports = router;

@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, CircularProgress, Typography, Box, Table, TableBody, TableCell, TableRow, Paper, Chip, Tabs, Tab, TableContainer, TableHead, Divider
 } from '@mui/material';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getJobById } from '../../services/jobService';
 import { getJobPerformance, type PerformanceData } from '../../services/jobService';
 import type { JobDetails } from '../../interfaces';
 import { generateOperationPost } from '../../services/systemService';
 import TextField from '@mui/material/TextField';
+import { useNavigate } from 'react-router-dom';
+import estimateService, { type Estimate } from '../../services/estimateService';
 
 interface JobDetailsModalProps {
     jobId: number | null;
@@ -15,14 +18,38 @@ interface JobDetailsModalProps {
 }
 
 const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose }) => {
+    const navigate = useNavigate();
     const [job, setJob] = useState<JobDetails | null>(null);
     const [performance, setPerformance] = useState<PerformanceData | null>(null);
+    const [estimate, setEstimate] = useState<Estimate | null>(null);
     const [loading, setLoading] = useState<boolean>(false);
+    const [loadingEstimate, setLoadingEstimate] = useState<boolean>(false);
     const [tab, setTab] = useState(0);
     const [generating, setGenerating] = useState(false);
     const [generatedPost, setGeneratedPost] = useState<string | null>(null);
     const [notes, setNotes] = useState<string>('');
     const MIN_SAVED_PERCENT = 0.15; // client rule; backend también valida
+    
+    const handleViewEstimate = () => {
+        if (job?.estimate_id) {
+            onClose();
+            navigate(`/dashboard/estimates?estimateId=${job.estimate_id}`);
+        }
+    };
+    
+    const loadEstimateDetails = async () => {
+        if (job?.estimate_id && !estimate) {
+            setLoadingEstimate(true);
+            try {
+                const estimateDetails = await estimateService.getEstimateDetails(job.estimate_id);
+                setEstimate(estimateDetails);
+            } catch (error) {
+                console.error('Error loading estimate:', error);
+            } finally {
+                setLoadingEstimate(false);
+            }
+        }
+    };
 
     useEffect(() => {
         if (jobId && open) {
@@ -41,6 +68,10 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
     
     const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
         setTab(newValue);
+        // Si se abre la tab de Estimate (tab 1), cargar detalles
+        if (newValue === 1 && job?.estimate_id) {
+            loadEstimateDetails();
+        }
     };
 
     const renderPerformanceValue = (value: number, isPercent = false, isCurrency = false) => {
@@ -65,6 +96,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
                             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
                                 <Tabs value={tab} onChange={handleTabChange}>
                                     <Tab label="Details" />
+                                    <Tab label="Estimate" disabled={!job.estimate_id} />
                                     <Tab label="Performance Summary" />
                                     <Tab label="Operation Command" />
                                 </Tabs>
@@ -79,10 +111,22 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
                                             <Typography variant="body2" color="textSecondary">{job.branch?.name} Branch</Typography>
                                         </Box>
                                         <Box sx={{ textAlign: { sm: 'right' } }}>
-                                            <Typography variant="subtitle1"><strong>Estimator:</strong> {job.estimate?.salesperson?.name || 'N/A'}</Typography>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: { sm: 'flex-end' } }}>
+                                                <Typography variant="subtitle1"><strong>Estimator:</strong> {job.estimate?.salesperson?.name || 'N/A'}</Typography>
+                                                {job.estimate_id && (
+                                                    <Button 
+                                                        size="small" 
+                                                        onClick={handleViewEstimate}
+                                                        endIcon={<OpenInNewIcon />}
+                                                        sx={{ minWidth: 'auto', textTransform: 'none' }}
+                                                    >
+                                                        View
+                                                    </Button>
+                                                )}
+                                            </Box>
                                             <Typography variant="subtitle1"><strong>Crew Leader:</strong> {job.crewLeader?.name || 'N/A'}</Typography>
                                             <Typography variant="body2" color="textSecondary">
-                                                Completed on: {new Date(job.closing_date).toLocaleDateString()}
+                                                Completed on: {job.closing_date ? new Date(job.closing_date).toLocaleDateString() : 'N/A'}
                                             </Typography>
                                         </Box>
                                     </Box>
@@ -141,7 +185,96 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
                                 </Box>
                             )}
                             
-                            {tab === 1 && performance && (
+                            {tab === 1 && (
+                                // Estimate Tab Content
+                                <Box>
+                                    {loadingEstimate ? (
+                                        <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                                            <CircularProgress />
+                                        </Box>
+                                    ) : estimate ? (
+                                        <Box>
+                                            <Typography variant="h6" gutterBottom>Estimate Details</Typography>
+                                            <TableContainer component={Paper}>
+                                                <Table size="small">
+                                                    <TableBody>
+                                                        <TableRow>
+                                                            <TableCell><strong>Estimate Name:</strong></TableCell>
+                                                            <TableCell>{estimate.name}</TableCell>
+                                                        </TableRow>
+                                                        <TableRow>
+                                                            <TableCell><strong>Customer:</strong></TableCell>
+                                                            <TableCell>{estimate.customer_name}</TableCell>
+                                                        </TableRow>
+                                                        <TableRow>
+                                                            <TableCell><strong>Status:</strong></TableCell>
+                                                            <TableCell>
+                                                                <Chip label={estimate.EstimateStatus?.name || 'N/A'} size="small" />
+                                                            </TableCell>
+                                                        </TableRow>
+                                                        <TableRow>
+                                                            <TableCell><strong>Branch:</strong></TableCell>
+                                                            <TableCell>{estimate.Branch?.name || 'N/A'}</TableCell>
+                                                        </TableRow>
+                                                        <TableRow>
+                                                            <TableCell><strong>Salesperson:</strong></TableCell>
+                                                            <TableCell>{estimate.SalesPerson?.name || 'N/A'}</TableCell>
+                                                        </TableRow>
+                                                        {estimate.customer_address && (
+                                                            <TableRow>
+                                                                <TableCell><strong>Address:</strong></TableCell>
+                                                                <TableCell>{estimate.customer_address}</TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                        {estimate.customer_phone && (
+                                                            <TableRow>
+                                                                <TableCell><strong>Phone:</strong></TableCell>
+                                                                <TableCell>{estimate.customer_phone}</TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                        {estimate.customer_email && (
+                                                            <TableRow>
+                                                                <TableCell><strong>Email:</strong></TableCell>
+                                                                <TableCell>{estimate.customer_email}</TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                        {estimate.attic_tech_hours && (
+                                                            <TableRow>
+                                                                <TableCell><strong>Attic Tech Hours:</strong></TableCell>
+                                                                <TableCell>{estimate.attic_tech_hours}</TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                        {estimate.price && (
+                                                            <TableRow>
+                                                                <TableCell><strong>Price:</strong></TableCell>
+                                                                <TableCell>${parseFloat(estimate.price.toString()).toLocaleString()}</TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                        {estimate.final_price && (
+                                                            <TableRow>
+                                                                <TableCell><strong>Final Price:</strong></TableCell>
+                                                                <TableCell>${parseFloat(estimate.final_price.toString()).toLocaleString()}</TableCell>
+                                                            </TableRow>
+                                                        )}
+                                                    </TableBody>
+                                                </Table>
+                                            </TableContainer>
+                                            {estimate.crew_notes && (
+                                                <Box sx={{ mt: 2 }}>
+                                                    <Typography variant="subtitle2" gutterBottom>Crew Notes:</Typography>
+                                                    <Paper sx={{ p: 2, bgcolor: 'action.hover' }}>
+                                                        <Typography variant="body2">{estimate.crew_notes}</Typography>
+                                                    </Paper>
+                                                </Box>
+                                            )}
+                                        </Box>
+                                    ) : (
+                                        <Typography>No estimate data available</Typography>
+                                    )}
+                                </Box>
+                            )}
+
+                            {tab === 2 && performance && (
                                 // Performance Summary Tab Content
                                 <TableContainer component={Paper}>
                                     <Table>
@@ -183,7 +316,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
                                 </TableContainer>
                             )}
 
-                            {tab === 2 && (
+                            {tab === 3 && (
                                 <Box>
                                     {!performance ? (
                                         <CircularProgress />

@@ -245,6 +245,61 @@ class MakeWebhookService {
     }
 
     /**
+     * Enviar recordatorio de registro a un employee
+     * @param {object} employeeData - Datos del empleado
+     */
+    async sendRegistrationReminder(employeeData) {
+        const webhookUrl = process.env.MAKE_REGISTRATION_REMINDER_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.warn('MAKE_REGISTRATION_REMINDER_WEBHOOK_URL not configured. Skipping reminder webhook.');
+            return false;
+        }
+
+        try {
+            const payload = {
+                event: 'registration_reminder',
+                timestamp: new Date().toISOString(),
+                employee: {
+                    id: employeeData.employeeId,
+                    first_name: employeeData.firstName,
+                    last_name: employeeData.lastName,
+                    full_name: `${employeeData.firstName} ${employeeData.lastName}`,
+                    email: employeeData.email,
+                    role: employeeData.role,
+                    branch: employeeData.branchName,
+                    registration_date: employeeData.registrationDate,
+                    registration_url: employeeData.registrationUrl
+                },
+                environment: process.env.NODE_ENV || 'production'
+            };
+
+            logger.info('Sending registration reminder webhook to Make.com', {
+                employeeId: employeeData.employeeId,
+                email: employeeData.email
+            });
+
+            await axios.post(webhookUrl, payload, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': uuidv4()
+                },
+                timeout: 10000
+            });
+
+            logger.info('Registration reminder webhook sent successfully');
+            return true;
+
+        } catch (error) {
+            logger.error('Error sending registration reminder webhook', {
+                message: error.message,
+                responseData: error.response?.data
+            });
+            throw error;
+        }
+    }
+
+    /**
      * Envía una actualización de membresía de grupo a Make.com
      * @param {object} payload
      * @param {string} payload.employeeTelegramId - El ID de Telegram del empleado

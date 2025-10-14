@@ -91,12 +91,16 @@ class EmployeeController {
     
     /**
      * Obtener una lista de todos los empleados con estado 'pending'
+     * SOLO los que tienen telegram_id (completaron su registro)
      */
     async getPendingEmployees(req, res) {
         try {
             const pendingEmployees = await Employee.findAll({
                 where: {
-                    status: 'pending'
+                    status: 'pending',
+                    telegram_id: {
+                        [Op.ne]: null  // Solo employees que completaron su registro
+                    }
                 },
                 include: [
                     {
@@ -330,6 +334,143 @@ class EmployeeController {
     }
 
     /**
+     * Obtener employees que esperan completar su registro
+     * (pending sin telegram_id Y que NO estén ya en crew_member o sales_person)
+     */
+    async getAwaitingRegistration(req, res) {
+        try {
+            // Obtener IDs de employees que YA están en crew_member o sales_person
+            const crewMemberEmployeeIds = await CrewMember.findAll({
+                attributes: ['employee_id'],
+                where: {
+                    employee_id: { [Op.ne]: null }
+                },
+                raw: true
+            }).then(results => results.map(r => r.employee_id));
+
+            const salesPersonEmployeeIds = await SalesPerson.findAll({
+                attributes: ['employee_id'],
+                where: {
+                    employee_id: { [Op.ne]: null }
+                },
+                raw: true
+            }).then(results => results.map(r => r.employee_id));
+
+            // Combinar ambos arrays
+            const alreadyOnboardedIds = [...new Set([...crewMemberEmployeeIds, ...salesPersonEmployeeIds])];
+
+            logger.info('Already onboarded employee IDs:', { count: alreadyOnboardedIds.length, ids: alreadyOnboardedIds });
+
+            // Buscar employees pending sin telegram_id y que NO estén ya onboarded
+            const awaitingEmployees = await Employee.findAll({
+                where: {
+                    status: 'pending',
+                    telegram_id: {
+                        [Op.is]: null  // Sin telegram_id = no completaron registro
+                    },
+                    ...(alreadyOnboardedIds.length > 0 && {
+                        id: {
+                            [Op.notIn]: alreadyOnboardedIds  // Excluir los que ya están en crew_member o sales_person
+                        }
+                    })
+                },
+                include: [
+                    {
+                        model: Branch,
+                        as: 'branch'
+                    }
+                ],
+                order: [
+                    ['registration_date', 'ASC']
+                ]
+            });
+
+            res.status(200).json({
+                success: true,
+                data: awaitingEmployees
+            });
+        } catch (error) {
+            logger.error('Error fetching awaiting registration employees', { error: error.message, stack: error.stack });
+            res.status(500).json({ success: false, message: 'Failed to fetch awaiting registration employees.' });
+        }
+    }
+
+    /**
+     * Enviar recordatorio de registro a un employee
+     */
+    async sendRegistrationReminder(req, res) {
+        try {
+            const { id } = req.params;
+            
+            const employee = await Employee.findByPk(id, {
+                include: [{
+                    model: Branch,
+                    as: 'branch'
+                }]
+            });
+
+            if (!employee) {
+                return res.status(404).json({ success: false, message: 'Employee not found.' });
+            }
+
+            if (employee.status !== 'pending') {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Employee is not pending registration.' 
+                });
+            }
+
+            if (employee.telegram_id) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'Employee already completed registration.' 
+                });
+            }
+
+            // Disparar webhook a Make.com (asíncrono)
+            makeWebhookService.sendRegistrationReminder({
+                employeeId: employee.id,
+                firstName: employee.first_name,
+                lastName: employee.last_name,
+                email: employee.email,
+                role: employee.role,
+                branchName: employee.branch?.name || 'N/A',
+                registrationDate: employee.registration_date,
+                registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`
+            }).catch(err => {
+                logger.error('Failed to send registration reminder webhook', {
+                    employeeId: employee.id,
+                    error: err.message
+                });
+            });
+
+            logger.info('Registration reminder sent', { 
+                employeeId: employee.id,
+                email: employee.email
+            });
+
+            res.status(200).json({
+                success: true,
+                message: `Registration reminder sent to ${employee.email}`,
+                data: {
+                    employee_id: employee.id,
+                    email: employee.email
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error sending registration reminder', { 
+                employeeId: req.params.id, 
+                error: error.message 
+            });
+            res.status(500).json({ 
+                success: false, 
+                message: 'Failed to send registration reminder.' 
+            });
+        }
+    }
+
+    /**
      * Rechazar un empleado
      */
     async rejectEmployee(req, res) {
@@ -377,6 +518,225 @@ class EmployeeController {
             res.status(500).json({ 
                 success: false, 
                 message: 'Failed to reject employee.' 
+            });
+        }
+    }
+
+    /**
+     * Sincronizar registros antiguos de sales_person y crew_member con employee
+     * (Para salespersons/crew que fueron creados ANTES de que existiera la tabla employee)
+     */
+    async syncLegacyRecords(req, res) {
+        const transaction = await sequelize.transaction();
+        
+        try {
+            logger.info('🔄 Starting legacy records synchronization...');
+
+            const results = {
+                salesPersons: {
+                    synced: 0,
+                    created: 0,
+                    telegram_id_copied: 0,
+                    errors: []
+                },
+                crewMembers: {
+                    synced: 0,
+                    created: 0,
+                    telegram_id_copied: 0,
+                    errors: []
+                }
+            };
+
+            // ==========================================
+            // PASO 1: Sincronizar SalesPersons
+            // ==========================================
+            const legacySalesPersons = await SalesPerson.findAll({
+                where: {
+                    employee_id: { [Op.is]: null },
+                    telegram_id: { [Op.ne]: null } // Solo los que tienen telegram_id (ya activados)
+                },
+                include: [{
+                    model: Branch,
+                    as: 'branches',
+                    through: { attributes: [] }
+                }]
+            });
+
+            logger.info(`📋 Found ${legacySalesPersons.length} legacy salespersons to sync`);
+
+            for (const sp of legacySalesPersons) {
+                try {
+                    const nameParts = sp.name.trim().split(' ');
+                    const firstName = nameParts[0] || sp.name;
+                    const lastName = nameParts.slice(1).join(' ') || '';
+
+                    // Buscar employee existente por nombre similar
+                    let employee = await Employee.findOne({
+                        where: {
+                            first_name: { [Op.iLike]: firstName },
+                            last_name: { [Op.iLike]: lastName }
+                        },
+                        transaction
+                    });
+
+                    // Si no existe, crear uno nuevo
+                    if (!employee) {
+                        const primaryBranch = sp.branches?.[0] || null;
+                        
+                        employee = await Employee.create({
+                            first_name: firstName,
+                            last_name: lastName,
+                            email: `${firstName.toLowerCase()}.${lastName.toLowerCase().replace(/\s+/g, '')}@legacy.botzilla.local`,
+                            role: 'salesperson',
+                            telegram_id: sp.telegram_id,
+                            phone: sp.phone,
+                            branch_id: primaryBranch?.id || null,
+                            status: 'active',
+                            registration_date: new Date(),
+                            approved_date: new Date(),
+                            approved_by: req.user?.id || null
+                        }, { transaction });
+
+                        results.salesPersons.created++;
+                        logger.info(`✅ Created new employee for salesperson: ${sp.name} (ID: ${employee.id})`);
+                    }
+
+                    // Actualizar sales_person con employee_id
+                    await SalesPerson.update(
+                        { employee_id: employee.id },
+                        { where: { id: sp.id }, transaction }
+                    );
+
+                    // Si el employee NO tiene telegram_id, copiar el del salesperson
+                    if (!employee.telegram_id && sp.telegram_id) {
+                        await Employee.update(
+                            { 
+                                telegram_id: sp.telegram_id,
+                                status: 'active' // Si ya tiene telegram_id, está listo para usar
+                            },
+                            { where: { id: employee.id }, transaction }
+                        );
+                        results.salesPersons.telegram_id_copied++;
+                        logger.info(`📋 Copied telegram_id from salesperson to employee ${employee.id}`);
+                    }
+
+                    results.salesPersons.synced++;
+                    logger.info(`🔗 Linked salesperson ${sp.name} to employee ${employee.id}`);
+
+                } catch (error) {
+                    logger.error(`❌ Error syncing salesperson ${sp.name}:`, error.message);
+                    results.salesPersons.errors.push({
+                        name: sp.name,
+                        id: sp.id,
+                        error: error.message
+                    });
+                }
+            }
+
+            // ==========================================
+            // PASO 2: Sincronizar CrewMembers
+            // ==========================================
+            const legacyCrewMembers = await CrewMember.findAll({
+                where: {
+                    employee_id: { [Op.is]: null },
+                    telegram_id: { [Op.ne]: null } // Solo los que tienen telegram_id (ya activados)
+                },
+                include: [{
+                    model: Branch,
+                    as: 'branches',
+                    through: { attributes: [] }
+                }]
+            });
+
+            logger.info(`📋 Found ${legacyCrewMembers.length} legacy crew members to sync`);
+
+            for (const cm of legacyCrewMembers) {
+                try {
+                    const nameParts = cm.name.trim().split(' ');
+                    const firstName = nameParts[0] || cm.name;
+                    const lastName = nameParts.slice(1).join(' ') || '';
+
+                    // Buscar employee existente por nombre similar
+                    let employee = await Employee.findOne({
+                        where: {
+                            first_name: { [Op.iLike]: firstName },
+                            last_name: { [Op.iLike]: lastName }
+                        },
+                        transaction
+                    });
+
+                    // Si no existe, crear uno nuevo
+                    if (!employee) {
+                        const primaryBranch = cm.branches?.[0] || null;
+                        const role = cm.is_leader ? 'crew_leader' : 'crew_member';
+                        
+                        employee = await Employee.create({
+                            first_name: firstName,
+                            last_name: lastName,
+                            email: `${firstName.toLowerCase()}.${lastName.toLowerCase().replace(/\s+/g, '')}@legacy.botzilla.local`,
+                            role: role,
+                            telegram_id: cm.telegram_id,
+                            phone: cm.phone,
+                            branch_id: primaryBranch?.id || null,
+                            status: 'active',
+                            registration_date: new Date(),
+                            approved_date: new Date(),
+                            approved_by: req.user?.id || null
+                        }, { transaction });
+
+                        results.crewMembers.created++;
+                        logger.info(`✅ Created new employee for crew member: ${cm.name} (ID: ${employee.id})`);
+                    }
+
+                    // Actualizar crew_member con employee_id
+                    await CrewMember.update(
+                        { employee_id: employee.id },
+                        { where: { id: cm.id }, transaction }
+                    );
+
+                    // Si el employee NO tiene telegram_id, copiar el del crew member
+                    if (!employee.telegram_id && cm.telegram_id) {
+                        await Employee.update(
+                            { 
+                                telegram_id: cm.telegram_id,
+                                status: 'active' // Si ya tiene telegram_id, está listo para usar
+                            },
+                            { where: { id: employee.id }, transaction }
+                        );
+                        results.crewMembers.telegram_id_copied++;
+                        logger.info(`📋 Copied telegram_id from crew member to employee ${employee.id}`);
+                    }
+
+                    results.crewMembers.synced++;
+                    logger.info(`🔗 Linked crew member ${cm.name} to employee ${employee.id}`);
+
+                } catch (error) {
+                    logger.error(`❌ Error syncing crew member ${cm.name}:`, error.message);
+                    results.crewMembers.errors.push({
+                        name: cm.name,
+                        id: cm.id,
+                        error: error.message
+                    });
+                }
+            }
+
+            await transaction.commit();
+
+            logger.info('✅ Legacy records synchronization completed', results);
+
+            res.status(200).json({
+                success: true,
+                message: 'Legacy records synchronized successfully',
+                data: results
+            });
+
+        } catch (error) {
+            await transaction.rollback();
+            logger.error('❌ Error during legacy records synchronization:', error);
+            res.status(500).json({
+                success: false,
+                message: 'Failed to synchronize legacy records',
+                error: error.message
             });
         }
     }

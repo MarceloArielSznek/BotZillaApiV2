@@ -34,6 +34,7 @@ import branchService from '../services/branchService';
 import ShiftApproval from './ShiftApproval';
 import salespersonService from '../services/salespersonService';
 import crewService from '../services/crewService';
+import { getJobStatuses } from '../services/statusService';
 import type { Job, Branch, SalesPerson, CrewMember, JobDetails } from '../interfaces';
 import JobDetailsModal from '../components/jobs/JobDetailsModal';
 import JobFormModal from '../components/jobs/JobFormModal';
@@ -59,11 +60,13 @@ const Jobs: React.FC = () => {
     const [branches, setBranches] = useState<Branch[]>([]);
     const [salespersons, setSalespersons] = useState<SalesPerson[]>([]);
     const [crewLeaders, setCrewLeaders] = useState<CrewMember[]>([]);
+    const [jobStatuses, setJobStatuses] = useState<{ id: number; name: string }[]>([]);
     const [filters, setFilters] = useState({
         search: '',
         branchId: '',
         salespersonId: '',
         crewLeaderId: '',
+        statusId: '',
         startDate: '',
         endDate: '',
     });
@@ -91,14 +94,16 @@ const Jobs: React.FC = () => {
     useEffect(() => {
         const fetchFilterData = async () => {
             try {
-                const [branchesRes, salespersonsData, crewRes] = await Promise.all([
+                const [branchesRes, salespersonsData, crewRes, statusesData] = await Promise.all([
                     branchService.getBranches({ limit: 1000 }),
                     salespersonService.getSalesPersonsForFilter(),
-                    crewService.getCrewMembers({ isLeader: true, limit: 1000 })
+                    crewService.getCrewMembers({ isLeader: true, limit: 1000 }),
+                    getJobStatuses()
                 ]);
                 setBranches(branchesRes.branches || []);
                 setSalespersons(salespersonsData || []);
                 setCrewLeaders(crewRes.crewMembers || []);
+                setJobStatuses(statusesData || []);
             } catch (err) {
                 setError('Failed to fetch filter options.');
             }
@@ -225,7 +230,7 @@ const Jobs: React.FC = () => {
                                 <Typography variant="h6">Filters</Typography>
                                 <Button
                                 size="small"
-                                onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', startDate: '', endDate: '' })}
+                                onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '' })}
                                 sx={{ ml: 'auto' }}
                                 >
                                 Clear filters
@@ -262,9 +267,16 @@ const Jobs: React.FC = () => {
                                         {crewLeaders.map(cl => <MenuItem key={cl.id} value={cl.id}>{cl.name}</MenuItem>)}
                                     </Select>
                                 </FormControl>
+                                <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+                                    <InputLabel>Status</InputLabel>
+                                    <Select value={filters.statusId} name="statusId" onChange={handleFilterChange} label="Status">
+                                        <MenuItem value=""><em>All Statuses</em></MenuItem>
+                                        {jobStatuses.map(status => <MenuItem key={status.id} value={status.id}>{status.name}</MenuItem>)}
+                                    </Select>
+                                </FormControl>
                                 <TextField sx={{ flex: '1 1 150px' }} type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="From Date" size="small" />
                                 <TextField sx={{ flex: '1 1 150px' }} type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="To Date" size="small" />
-                                <Button variant="outlined" onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', startDate: '', endDate: '' })}>Clear</Button>
+                                <Button variant="outlined" onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '' })}>Clear</Button>
                             </Box>
                         </CardContent>
                     </Card>
@@ -286,6 +298,7 @@ const Jobs: React.FC = () => {
                                             <TableCell sx={{ fontWeight: 'bold' }}>Branch</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Estimator</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Crew Leader</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Closing Date</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
                                         </TableRow>
@@ -305,7 +318,8 @@ const Jobs: React.FC = () => {
                                                 <TableCell>{job.branch?.name || 'N/A'}</TableCell>
                                                 <TableCell>{job.estimate?.salesperson?.name || 'N/A'}</TableCell>
                                                 <TableCell>{job.crewLeader?.name || 'N/A'}</TableCell>
-                                                <TableCell>{new Date(job.closing_date).toLocaleDateString()}</TableCell>
+                                                <TableCell>{job.status?.name || 'N/A'}</TableCell>
+                                                <TableCell>{job.closing_date ? new Date(job.closing_date).toLocaleDateString() : 'N/A'}</TableCell>
                                                 <TableCell sx={{ textAlign: 'center' }}>
                                                     <Tooltip title="Edit Job">
                                                         <IconButton

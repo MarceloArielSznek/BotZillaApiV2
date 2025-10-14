@@ -81,6 +81,11 @@ export const getSpecialShifts = async (): Promise<SpecialShift[]> => {
     return response.data;
 };
 
+export const getJobStatuses = async (): Promise<{ id: number; name: string }[]> => {
+    const response = await api.get('/job-statuses');
+    return response.data;
+};
+
 const statusService = {
   // GET /api/estimate-statuses - Obtener todos los estimate statuses
   getStatuses: async (params: StatusListParams = {}): Promise<StatusListResponse> => {

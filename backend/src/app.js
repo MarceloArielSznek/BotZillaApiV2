@@ -30,6 +30,10 @@ const telegramGroupRoutes = require('./routes/telegramGroups.routes'); // Ruta p
 const employeeRoutes = require('./routes/employees.routes'); // Ruta para Empleados
 const telegramGroupCategoryRoutes = require('./routes/telegramGroupCategory.routes'); // Ruta para Categorías
 const inspectionReportsRoutes = require('./routes/inspectionReports.routes.js');
+const jobSyncRoutes = require('./routes/jobSync.routes');
+const jobStatusRoutes = require('./routes/jobStatus.routes');
+const atticTechUserRoutes = require('./routes/atticTechUser.routes');
+const atticTechSyncRoutes = require('./routes/atticTechSync.routes');
 // const botRoutes = require('./routes/bot.routes'); // No longer needed
 const { logger, requestLogger, errorLogger } = require('./utils/logger');
 const { caches } = require('./utils/cache');
@@ -216,11 +220,15 @@ app.use('/api', healthRoutes);
 app.use('/api/column-map', columnMapRoutes);
 app.use('/api/shift-approval', shiftApprovalRoutes);
 app.use('/api/employee-registration', employeeRegistrationRoutes);
+app.use('/api/attic-tech-users', atticTechUserRoutes);
+app.use('/api/attic-tech-sync', atticTechSyncRoutes);
 app.use('/api/onboarding', onboardingRoutes); // Nueva ruta
 app.use('/api/telegram-groups', telegramGroupRoutes); // Ruta para CRUD
 app.use('/api/employees', employeeRoutes); // Ruta para Empleados
 app.use('/api/telegram-group-categories', telegramGroupCategoryRoutes); // Ruta para Categorías
 app.use('/api/inspection-reports', inspectionReportsRoutes);
+app.use('/api/job-sync', jobSyncRoutes);
+app.use('/api/job-statuses', jobStatusRoutes);
 // app.use('/api/bot', botRoutes); // No longer needed
 
 // Health check endpoint

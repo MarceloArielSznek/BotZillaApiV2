@@ -8,6 +8,7 @@ interface JobFilters {
     branchId?: string;
     salespersonId?: string;
     crewLeaderId?: string;
+    statusId?: string;
     startDate?: string;
     endDate?: string;
 }
@@ -29,6 +30,7 @@ export const getJobs = async (filters: JobFilters = {}): Promise<JobsResponse> =
     if (filters.branchId) params.append('branchId', filters.branchId);
     if (filters.salespersonId) params.append('salespersonId', filters.salespersonId);
     if (filters.crewLeaderId) params.append('crewLeaderId', filters.crewLeaderId);
+    if (filters.statusId) params.append('statusId', filters.statusId);
     if (filters.startDate) params.append('startDate', filters.startDate);
     if (filters.endDate) params.append('endDate', filters.endDate);
 

@@ -1,7 +1,29 @@
 const { logger } = require('../utils/logger');
-const { Employee } = require('../models');
+const { Employee, Branch } = require('../models');
 const makeWebhookService = require('../services/makeWebhook.service');
 const { v4: uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
+
+/**
+ * Buscar branch por nombre
+ */
+async function findBranchByName(branchName) {
+    if (!branchName) return null;
+    
+    try {
+        const branch = await Branch.findOne({
+            where: {
+                name: {
+                    [Op.iLike]: branchName.trim()
+                }
+            }
+        });
+        return branch;
+    } catch (error) {
+        logger.error('Error finding branch by name', { branchName, error: error.message });
+        return null;
+    }
+}
 
 /**
  * Controlador para registro de empleados
@@ -24,13 +46,73 @@ class EmployeeRegistrationController {
 
             // 1. Verificar si el email ya existe
             const existingEmployeeByEmail = await Employee.findOne({ where: { email: email.toLowerCase() } });
+            
             if (existingEmployeeByEmail) {
-                logger.warn('Registration attempt with existing email', { email });
-                return res.status(409).json({ // 409 Conflict es más apropiado
-                    success: false,
-                    message: 'Email address is already registered.',
-                    error: 'DUPLICATE_EMAIL'
-                });
+                // Si existe Y está pending con attic_tech_user_id → ACTUALIZAR (completar perfil)
+                if (existingEmployeeByEmail.status === 'pending' && existingEmployeeByEmail.attic_tech_user_id) {
+                    logger.info('Completing registration for existing AT employee', { 
+                        email, 
+                        attic_tech_user_id: existingEmployeeByEmail.attic_tech_user_id 
+                    });
+                    
+                    // Verificar si el Telegram ID ya existe (y no es el mismo employee)
+                    const existingTelegramId = await Employee.findOne({ 
+                        where: { telegram_id: telegramId } 
+                    });
+                    
+                    if (existingTelegramId && existingTelegramId.id !== existingEmployeeByEmail.id) {
+                        logger.warn('Telegram ID already in use by another employee', { telegramId });
+                        return res.status(409).json({
+                            success: false,
+                            message: 'Telegram ID is already registered.',
+                            error: 'DUPLICATE_TELEGRAM_ID'
+                        });
+                    }
+                    
+                    // Actualizar campos faltantes
+                    await existingEmployeeByEmail.update({
+                        street: street,
+                        city: city,
+                        state: state,
+                        zip: zip,
+                        date_of_birth: dateOfBirth,
+                        phone_number: phoneNumber,
+                        telegram_id: telegramId,
+                        notes: `Employee from Attic Tech completed registration on ${new Date().toISOString()}`
+                    });
+                    
+                    logger.info('AT Employee registration completed', { employeeId: existingEmployeeByEmail.id });
+                    
+                    // Enviar notificación a Make.com
+                    makeWebhookService.sendEmployeeRegistration(existingEmployeeByEmail)
+                        .catch(error => {
+                            logger.error('Error sending to Make.com webhook (non-blocking)', {
+                                employeeId: existingEmployeeByEmail.id,
+                                error: error.message
+                            });
+                        });
+                    
+                    return res.status(200).json({
+                        success: true,
+                        message: 'Employee registration completed successfully.',
+                        data: {
+                            registrationId: existingEmployeeByEmail.employee_code,
+                            employeeId: existingEmployeeByEmail.id,
+                            email: existingEmployeeByEmail.email
+                        }
+                    });
+                } else {
+                    // Ya existe y NO está pending → ERROR
+                    logger.warn('Registration attempt with existing email (not pending)', { 
+                        email, 
+                        status: existingEmployeeByEmail.status 
+                    });
+                    return res.status(409).json({
+                        success: false,
+                        message: 'Email address is already registered.',
+                        error: 'DUPLICATE_EMAIL'
+                    });
+                }
             }
 
             // 2. Verificar si el Telegram ID ya existe
@@ -44,7 +126,18 @@ class EmployeeRegistrationController {
                 });
             }
 
-            // 3. Crear nuevo empleado en la base de datos
+            // 3. Buscar branch por nombre
+            const branchObj = await findBranchByName(branch);
+            if (!branchObj) {
+                logger.warn('Branch not found', { branch });
+                return res.status(400).json({
+                    success: false,
+                    message: `Branch "${branch}" not found. Please select a valid branch.`,
+                    error: 'INVALID_BRANCH'
+                });
+            }
+
+            // 4. Crear nuevo empleado en la base de datos (NO viene de AT)
             const newEmployee = await Employee.create({
                 first_name: firstName,
                 last_name: lastName,
@@ -56,9 +149,10 @@ class EmployeeRegistrationController {
                 email: email.toLowerCase(),
                 phone_number: phoneNumber,
                 telegram_id: telegramId,
-                branch: branch,
+                branch_id: branchObj.id, // Usar el ID del branch
                 role: role,
                 status: 'pending', // Estado inicial
+                attic_tech_user_id: null, // No viene de AT
                 notes: `Employee registered via self-registration form on ${new Date().toISOString()}`
             });
 

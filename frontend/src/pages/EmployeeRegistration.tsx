@@ -3,6 +3,7 @@ import employeeRegistrationService, {
   type EmployeeRegistrationData,
   AVAILABLE_BRANCHES
 } from '../services/employeeRegistrationService';
+import atticTechUserService, { type AtticTechUser } from '../services/atticTechUserService';
 import {
   Box,
   Typography,
@@ -10,15 +11,10 @@ import {
   CardContent,
   TextField,
   Button,
-  Grid,
   Alert,
   Paper,
-  Divider,
-  Link,
   Chip,
   InputAdornment,
-  IconButton,
-  Tooltip,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -27,7 +23,8 @@ import {
   Select,
   MenuItem,
   FormControl,
-  InputLabel
+  InputLabel,
+  Switch
 } from '@mui/material';
 import {
   Person as PersonIcon,
@@ -37,7 +34,9 @@ import {
   Save as SaveIcon,
   Clear as ClearIcon,
   ContentCopy as CopyIcon,
-  Work as WorkIcon
+  Work as WorkIcon,
+  Search as SearchIcon,
+  CheckCircle as CheckCircleIcon
 } from '@mui/icons-material';
 
 // Interface ya importada desde el servicio
@@ -65,6 +64,12 @@ const EmployeeRegistration: React.FC = () => {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [registrationData, setRegistrationData] = useState<any>(null);
   const [redirectCountdown, setRedirectCountdown] = useState(10);
+  
+  // Estados para flujo de Attic Tech
+  const [isAtticTechEmployee, setIsAtticTechEmployee] = useState(false);
+  const [atticTechEmail, setAtticTechEmail] = useState('');
+  const [searchingAtUser, setSearchingAtUser] = useState(false);
+  const [atUserFound, setAtUserFound] = useState<AtticTechUser | null>(null);
 
   // Efecto para manejar la lógica de Branch/Role
   useEffect(() => {
@@ -101,6 +106,62 @@ const EmployeeRegistration: React.FC = () => {
     };
   }, [showSuccessModal, redirectCountdown]);
 
+
+  // Buscar usuario en Attic Tech
+  const handleSearchAtUser = async () => {
+    if (!atticTechEmail) {
+      setError('Please enter an email to search');
+      return;
+    }
+
+    setSearchingAtUser(true);
+    setError(null);
+    setSuccess(null);
+    setAtUserFound(null);
+
+    try {
+      const response = await atticTechUserService.searchUserByEmail(atticTechEmail);
+      
+      if (response.success && response.data) {
+        const userData = response.data;
+        setAtUserFound(userData);
+        
+        // Auto-completar formulario con datos de AT
+        const [firstName, ...lastNameParts] = userData.name.split(' ');
+        const lastName = lastNameParts.join(' ');
+        
+        setFormData(prev => ({
+          ...prev,
+          firstName: firstName || '',
+          lastName: lastName || '',
+          email: userData.email,
+          role: userData.role,
+          branch: userData.branches[0] || '' // Primera branch por defecto
+        }));
+        
+        setSuccess(`User found! ${userData.name} (${userData.role})`);
+      } else {
+        setError(response.message || 'User not found in Attic Tech system');
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Error searching user in Attic Tech');
+    } finally {
+      setSearchingAtUser(false);
+    }
+  };
+
+  // Manejar toggle de "Already in AT"
+  const handleAtticTechToggle = () => {
+    const newValue = !isAtticTechEmployee;
+    setIsAtticTechEmployee(newValue);
+    
+    // Limpiar datos cuando se desactiva
+    if (!newValue) {
+      setAtticTechEmail('');
+      setAtUserFound(null);
+      handleClear();
+    }
+  };
 
   // Manejar cambios en los campos del formulario
   const handleInputChange = (field: keyof EmployeeRegistrationData) => (
@@ -255,10 +316,153 @@ const EmployeeRegistration: React.FC = () => {
           </Typography>
         </Box>
 
+        {/* Attic Tech Employee Toggle */}
+        <Card 
+          elevation={0} 
+          sx={{ 
+            mb: 3, 
+            borderRadius: 3, 
+            border: 2,
+            borderColor: isAtticTechEmployee ? 'primary.main' : 'divider',
+            bgcolor: 'background.paper',
+            transition: 'all 0.3s ease'
+          }}
+        >
+          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: isAtticTechEmployee ? 3 : 0 }}>
+              <Box>
+                <Typography variant="h6" color="text.primary" fontWeight="600">
+                  Already registered in Attic Tech?
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  We'll auto-fill your information from Attic Tech
+                </Typography>
+              </Box>
+              <Switch 
+                checked={isAtticTechEmployee} 
+                onChange={handleAtticTechToggle}
+                size="medium"
+              />
+            </Box>
+
+            {/* Búsqueda de usuario en AT */}
+            {isAtticTechEmployee && (
+              <Box sx={{ mt: 2 }}>
+                <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                  <TextField
+                    fullWidth
+                    type="email"
+                    label="Your Attic Tech Email"
+                    value={atticTechEmail}
+                    onChange={(e) => setAtticTechEmail(e.target.value)}
+                    variant="outlined"
+                    placeholder="your.email@example.com"
+                    size="medium"
+                    disabled={searchingAtUser || !!atUserFound}
+                    sx={{ 
+                      '& .MuiOutlinedInput-root': { 
+                        borderRadius: 2
+                      }
+                    }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <EmailIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                  <Button
+                    variant="contained"
+                    onClick={handleSearchAtUser}
+                    disabled={searchingAtUser || !atticTechEmail || !!atUserFound}
+                    startIcon={searchingAtUser ? <CircularProgress size={20} color="inherit" /> : <SearchIcon />}
+                    sx={{ 
+                      borderRadius: 2,
+                      px: 4,
+                      minWidth: { xs: '100%', sm: '140px' },
+                      height: '56px',
+                      textTransform: 'none',
+                      fontWeight: 600
+                    }}
+                  >
+                    {searchingAtUser ? 'Searching...' : 'Search'}
+                  </Button>
+                </Box>
+
+                {/* Usuario encontrado */}
+                {atUserFound && (
+                  <Paper 
+                    elevation={0}
+                    sx={{ 
+                      mt: 2, 
+                      p: 2.5,
+                      bgcolor: 'rgba(76, 175, 80, 0.08)', // Verde muy suave con opacidad
+                      borderRadius: 2,
+                      border: 1,
+                      borderColor: 'success.main',
+                      display: 'flex',
+                      gap: 2,
+                      alignItems: 'flex-start'
+                    }}
+                  >
+                    <CheckCircleIcon sx={{ color: 'success.main', fontSize: 28, flexShrink: 0 }} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}> {/* minWidth: 0 permite que el contenido se ajuste */}
+                      <Typography variant="subtitle1" fontWeight="600" color="text.primary" gutterBottom>
+                        User found: {atUserFound.name}
+                      </Typography>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                            Role:
+                          </Typography>
+                          <Chip 
+                            label={atUserFound.role.replace('_', ' ').toUpperCase()}
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            sx={{ fontWeight: 600 }}
+                          />
+                        </Box>
+                        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                          <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500, mt: 0.5 }}>
+                            Branches:
+                          </Typography>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, flex: 1 }}>
+                            {atUserFound.branches.map((branch, index) => (
+                              <Chip 
+                                key={index}
+                                label={branch}
+                                size="small"
+                                sx={{ 
+                                  bgcolor: 'action.hover',
+                                  fontWeight: 500,
+                                  fontSize: '0.75rem'
+                                }}
+                              />
+                            ))}
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Box>
+                  </Paper>
+                )}
+              </Box>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Error Messages */}
         {error && (
           <Alert severity="error" sx={{ mb: 2, mx: { xs: 1, sm: 0 } }}>
             {error}
+          </Alert>
+        )}
+        
+        {/* Success Messages */}
+        {success && !showSuccessModal && (
+          <Alert severity="success" sx={{ mb: 2, mx: { xs: 1, sm: 0 } }}>
+            {success}
           </Alert>
         )}
 
@@ -283,7 +487,15 @@ const EmployeeRegistration: React.FC = () => {
                   variant="outlined"
                   placeholder="Enter your first name"
                   size="medium"
+                  disabled={!!atUserFound}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                  InputProps={{
+                    endAdornment: atUserFound ? (
+                      <InputAdornment position="end">
+                        <Chip label="From AT" size="small" color="success" />
+                      </InputAdornment>
+                    ) : undefined
+                  }}
                 />
                 
                 <TextField
@@ -295,7 +507,15 @@ const EmployeeRegistration: React.FC = () => {
                   variant="outlined"
                   placeholder="Enter your last name"
                   size="medium"
+                  disabled={!!atUserFound}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                  InputProps={{
+                    endAdornment: atUserFound ? (
+                      <InputAdornment position="end">
+                        <Chip label="From AT" size="small" color="success" />
+                      </InputAdornment>
+                    ) : undefined
+                  }}
                 />
                 
                 <TextField
@@ -408,7 +628,15 @@ const EmployeeRegistration: React.FC = () => {
                   variant="outlined"
                   placeholder="your.email@example.com"
                   size="medium"
+                  disabled={!!atUserFound}
                   sx={{ '& .MuiOutlinedInput-root': { borderRadius: 2 } }}
+                  InputProps={{
+                    endAdornment: atUserFound ? (
+                      <InputAdornment position="end">
+                        <Chip label="From AT" size="small" color="success" />
+                      </InputAdornment>
+                    ) : undefined
+                  }}
                 />
                 
                 <TextField
@@ -443,13 +671,27 @@ const EmployeeRegistration: React.FC = () => {
                     value={formData.branch}
                     label="Branch"
                     onChange={(e) => setFormData(prev => ({ ...prev, branch: e.target.value as string }))}
+                    disabled={!!atUserFound}
                     sx={{ borderRadius: 2 }}
+                    endAdornment={atUserFound ? (
+                      <InputAdornment position="end" sx={{ mr: 3 }}>
+                        <Chip label="From AT" size="small" color="success" />
+                      </InputAdornment>
+                    ) : undefined}
                   >
-                    {AVAILABLE_BRANCHES.map((branch) => (
-                      <MenuItem key={branch} value={branch}>
-                        {branch}
-                      </MenuItem>
-                    ))}
+                    {atUserFound ? (
+                      atUserFound.branches.map((branch) => (
+                        <MenuItem key={branch} value={branch}>
+                          {branch}
+                        </MenuItem>
+                      ))
+                    ) : (
+                      AVAILABLE_BRANCHES.map((branch) => (
+                        <MenuItem key={branch} value={branch}>
+                          {branch}
+                        </MenuItem>
+                      ))
+                    )}
                   </Select>
                 </FormControl>
                 
@@ -460,8 +702,13 @@ const EmployeeRegistration: React.FC = () => {
                     value={formData.role}
                     label="Role"
                     onChange={(e) => setFormData(prev => ({ ...prev, role: e.target.value as 'crew_member' | 'crew_leader' | 'salesperson' | 'corporate' }))}
-                    disabled={formData.branch === 'Corporate'}
+                    disabled={formData.branch === 'Corporate' || !!atUserFound}
                     sx={{ borderRadius: 2 }}
+                    endAdornment={atUserFound ? (
+                      <InputAdornment position="end" sx={{ mr: 3 }}>
+                        <Chip label="From AT" size="small" color="success" />
+                      </InputAdornment>
+                    ) : undefined}
                   >
                     <MenuItem value="crew_member">Crew Member</MenuItem>
                     <MenuItem value="crew_leader">Crew Leader</MenuItem>

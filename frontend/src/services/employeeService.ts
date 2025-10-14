@@ -17,6 +17,7 @@ export interface Employee {
   branch_id: number | null;
   branch?: Branch;
   telegramGroups?: TelegramGroup[];
+  registration_date?: string;
 }
 
 export interface GetEmployeesParams {
@@ -69,6 +70,28 @@ const employeeService = {
 
     reject: async (employeeId: number, reason?: string): Promise<{ success: boolean; message: string }> => {
         const response = await api.post(`/employees/${employeeId}/reject`, { reason });
+        return response.data;
+    },
+
+    getAwaitingRegistration: async (): Promise<Employee[]> => {
+        const response = await api.get('/employees/awaiting-registration');
+        return response?.data?.data || [];
+    },
+
+    sendRegistrationReminder: async (employeeId: number): Promise<{ success: boolean; message: string }> => {
+        const response = await api.post(`/employees/${employeeId}/send-reminder`);
+        return response.data;
+    },
+
+    syncLegacyRecords: async (): Promise<{
+        success: boolean;
+        message: string;
+        data: {
+            salesPersons: { synced: number; created: number; telegram_id_copied: number; errors: any[] };
+            crewMembers: { synced: number; created: number; telegram_id_copied: number; errors: any[] };
+        };
+    }> => {
+        const response = await api.post('/employees/sync-legacy');
         return response.data;
     }
 };
