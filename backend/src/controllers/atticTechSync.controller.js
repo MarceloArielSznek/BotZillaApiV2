@@ -96,17 +96,41 @@ async function findOrCreateBranch(branchName) {
     if (!branchName) return null;
 
     try {
-        const [branch] = await Branch.findOrCreate({
+        const trimmedName = branchName.trim();
+        
+        // Buscar branch existente con nombre similar (case-insensitive y sin espacios extra)
+        const existingBranches = await Branch.findAll({
             where: { 
                 name: {
-                    [Op.iLike]: branchName.trim()
+                    [Op.iLike]: `%${trimmedName}%`
                 }
-            },
-            defaults: {
-                name: branchName.trim(),
-                is_active: true
             }
         });
+
+        // Buscar coincidencia exacta después de normalizar
+        let branch = existingBranches.find(b => {
+            const normalizedDbName = b.name.trim().toLowerCase().replace(/\s+/g, ' ');
+            const normalizedSearchName = trimmedName.toLowerCase().replace(/\s+/g, ' ');
+            return normalizedDbName === normalizedSearchName;
+        });
+
+        // Si no existe, crear uno nuevo
+        if (!branch) {
+            // Verificar una vez más con búsqueda exacta antes de crear
+            branch = await Branch.findOne({
+                where: { 
+                    name: trimmedName
+                }
+            });
+
+            if (!branch) {
+                branch = await Branch.create({
+                    name: trimmedName
+                });
+                logger.info(`✅ Created new branch: ${trimmedName}`);
+            }
+        }
+
         return branch;
     } catch (error) {
         logger.error(`Error finding/creating branch: ${branchName}`, { error: error.message });
@@ -132,8 +156,17 @@ async function syncUsersToDb(users) {
             }
 
             const nameParts = atUser.name.split(' ');
-            const firstName = nameParts[0] || '';
-            const lastName = nameParts.slice(1).join(' ') || '';
+            let firstName = nameParts[0] || 'Unknown';
+            let lastName = nameParts.slice(1).join(' ') || 'User';
+            
+            // Sanitizar nombres para que solo contengan caracteres válidos
+            const sanitizeName = (name) => {
+                // Remover caracteres no válidos y mantener solo letras, números, espacios, guiones, apóstrofes y puntos
+                return name.replace(/[^a-zA-ZÀ-ÿ\u00f1\u00d1\s'\-0-9.]/g, '').trim() || 'Unknown';
+            };
+            
+            firstName = sanitizeName(firstName);
+            lastName = sanitizeName(lastName);
 
             const existingEmployee = await Employee.findOne({
                 where: { email: atUser.email }

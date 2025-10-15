@@ -65,13 +65,10 @@ app.set('trust proxy', [
 // Configuración CORS específica para desarrollo
 const corsOptions = {
     origin: function (origin, callback) {
-        console.log('🔍 CORS Origin check:', origin);
-        
         // En desarrollo, permitir localhost en cualquier puerto
         if (!origin || 
             (typeof origin === 'string' && (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))) ||
             process.env.NODE_ENV === 'development') {
-            console.log('✅ CORS: Origen permitido');
             callback(null, true);
         } else if (process.env.NODE_ENV === 'production') {
             // En producción, usar lista de orígenes permitidos

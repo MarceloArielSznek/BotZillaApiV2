@@ -1,0 +1,373 @@
+Border style is 2.
+Output format is aligned.
++--------+
+| header |
++--------+
++--------+
+(0 rows)
+
+================================================================================
+BASE DE DATOS: BOTZILLA - ESTRUCTURA COMPLETA
+Generado: 2025-10-14
+================================================================================
+
+================================================================================
+TABLA: branch
+================================================================================
++-------------------+-------------------+----------+----------+---------------------------------------------+
+|      Columna      |       Tipo        | Longitud | Nullable |                   Default                   |
++-------------------+-------------------+----------+----------+---------------------------------------------+
+| id                | integer           |          | NO       | nextval('botzilla.branch_id_seq'::regclass) |
+| name              | character varying | (100)    | NO       | -                                           |
+| address           | text              |          | YES      | -                                           |
+| telegram_group_id | text              |          | YES      | -                                           |
++-------------------+-------------------+----------+----------+---------------------------------------------+
+(4 rows)
+
+
+================================================================================
+TABLA: crew_member
+================================================================================
++-------------+-------------------+----------+----------+--------------------------------------------------+
+|   Columna   |       Tipo        | Longitud | Nullable |                     Default                      |
++-------------+-------------------+----------+----------+--------------------------------------------------+
+| id          | integer           |          | NO       | nextval('botzilla.crew_member_id_seq'::regclass) |
+| phone       | character varying | (20)     | YES      | -                                                |
+| telegram_id | character varying | (50)     | YES      | -                                                |
+| name        | character varying | (100)    | NO       | -                                                |
+| is_leader   | boolean           |          | YES      | false                                            |
+| animal      | character varying | (50)     | YES      | -                                                |
+| employee_id | integer           |          | YES      | -                                                |
++-------------+-------------------+----------+----------+--------------------------------------------------+
+(7 rows)
+
+
+================================================================================
+TABLA: crew_member_branch
+================================================================================
++----------------+---------+----------+----------+---------+
+|    Columna     |  Tipo   | Longitud | Nullable | Default |
++----------------+---------+----------+----------+---------+
+| crew_member_id | integer |          | NO       | -       |
+| branch_id      | integer |          | NO       | -       |
++----------------+---------+----------+----------+---------+
+(2 rows)
+
+
+================================================================================
+TABLA: employee ⭐ IMPORTANTE
+================================================================================
++--------------------+--------------------------+----------+----------+-----------------------------------------------+
+|      Columna       |           Tipo           | Longitud | Nullable |                    Default                    |
++--------------------+--------------------------+----------+----------+-----------------------------------------------+
+| id                 | integer                  |          | NO       | nextval('botzilla.employee_id_seq'::regclass) |
+| first_name         | character varying        | (50)     | NO       | -                                             |
+| last_name          | character varying        | (50)     | NO       | -                                             |
+| nickname           | character varying        | (30)     | YES      | -                                             |
+| email              | character varying        | (100)    | NO       | -                                             |
+| phone_number       | character varying        | (20)     | YES      | -                                             |
+| telegram_id        | character varying        | (20)     | YES      | -                                             |
+| status             | character varying        | (20)     | NO       | 'pending'::character varying                  |
+| registration_date  | timestamp with time zone |          | NO       | CURRENT_TIMESTAMP                             |
+| approved_date      | timestamp with time zone |          | YES      | -                                             |
+| approved_by        | integer                  |          | YES      | -                                             |
+| notes              | text                     |          | YES      | -                                             |
+| employee_code      | character varying        | (20)     | YES      | -                                             |
+| created_at         | timestamp with time zone |          | NO       | CURRENT_TIMESTAMP                             |
+| updated_at         | timestamp with time zone |          | NO       | CURRENT_TIMESTAMP                             |
+| street             | character varying        | (200)    | YES      | -                                             |
+| city               | character varying        | (100)    | YES      | -                                             |
+| state              | character varying        | (50)     | YES      | -                                             |
+| zip                | character varying        | (20)     | YES      | -                                             |
+| date_of_birth      | date                     |          | YES      | -                                             |
+| role               | character varying        | (20)     | YES      | -                                             |
+| branch_id          | integer                  |          | YES      | -                                             |
+| attic_tech_user_id | integer                  |          | YES      | -                                             |
++--------------------+--------------------------+----------+----------+-----------------------------------------------+
+(23 rows)
+
+
+================================================================================
+TABLA: employee_telegram_group
+================================================================================
++-------------------+--------------------------+----------+----------+--------------------------------------------------------------+
+|      Columna      |           Tipo           | Longitud | Nullable |                           Default                            |
++-------------------+--------------------------+----------+----------+--------------------------------------------------------------+
+| id                | integer                  |          | NO       | nextval('botzilla.employee_telegram_group_id_seq'::regclass) |
+| employee_id       | integer                  |          | NO       | -                                                            |
+| telegram_group_id | integer                  |          | NO       | -                                                            |
+| status_id         | integer                  |          | NO       | -                                                            |
+| joined_at         | timestamp with time zone |          | YES      | CURRENT_TIMESTAMP                                            |
+| blocked_at        | timestamp with time zone |          | YES      | -                                                            |
++-------------------+--------------------------+----------+----------+--------------------------------------------------------------+
+(6 rows)
+
+
+================================================================================
+TABLA: estimate
+================================================================================
++-------------------------+-----------------------------+----------+----------+-----------------------------------------------+
+|         Columna         |            Tipo             | Longitud | Nullable |                    Default                    |
++-------------------------+-----------------------------+----------+----------+-----------------------------------------------+
+| id                      | integer                     |          | NO       | nextval('botzilla.estimate_id_seq'::regclass) |
+| name                    | character varying           | (100)    | NO       | -                                             |
+| sales_person_id         | integer                     |          | YES      | -                                             |
+| status_id               | integer                     |          | YES      | -                                             |
+| branch_id               | integer                     |          | YES      | -                                             |
+| price                   | numeric                     |          | YES      | -                                             |
+| discount                | numeric                     |          | YES      | -                                             |
+| attic_tech_hours        | numeric                     |          | YES      | -                                             |
+| attic_tech_estimate_id  | integer                     |          | YES      | -                                             |
+| customer_name           | character varying           | (200)    | YES      | -                                             |
+| customer_address        | text                        |          | YES      | -                                             |
+| crew_notes              | text                        |          | YES      | -                                             |
+| retail_cost             | numeric                     |          | YES      | -                                             |
+| final_price             | numeric                     |          | YES      | -                                             |
+| sub_service_retail_cost | numeric                     |          | YES      | -                                             |
+| at_updated_date         | timestamp without time zone |          | YES      | -                                             |
+| at_created_date         | timestamp without time zone |          | YES      | -                                             |
+| created_at              | timestamp with time zone    |          | YES      | -                                             |
+| updated_at              | timestamp with time zone    |          | YES      | -                                             |
+| customer_email          | character varying           | (200)    | YES      | -                                             |
+| customer_phone          | character varying           | (50)     | YES      | -                                             |
++-------------------------+-----------------------------+----------+----------+-----------------------------------------------+
+(21 rows)
+
+
+================================================================================
+TABLA: estimate_status
+================================================================================
++---------+-------------------+----------+----------+------------------------------------------------------+
+| Columna |       Tipo        | Longitud | Nullable |                       Default                        |
++---------+-------------------+----------+----------+------------------------------------------------------+
+| id      | integer           |          | NO       | nextval('botzilla.estimate_status_id_seq'::regclass) |
+| name    | character varying | (50)     | NO       | -                                                    |
++---------+-------------------+----------+----------+------------------------------------------------------+
+(2 rows)
+
+
+================================================================================
+TABLA: inspection_report
+================================================================================
++---------------------------------------+--------------------------+----------+----------+--------------------------------------------------------+
+|                Columna                |           Tipo           | Longitud | Nullable |                        Default                         |
++---------------------------------------+--------------------------+----------+----------+--------------------------------------------------------+
+| id                                    | integer                  |          | NO       | nextval('botzilla.inspection_report_id_seq'::regclass) |
+| attic_tech_report_id                  | integer                  |          | NO       | -                                                      |
+| attic_tech_estimate_id                | integer                  |          | NO       | -                                                      |
+| estimate_name                         | character varying        | (255)    | YES      | -                                                      |
+| salesperson_name                      | character varying        | (255)    | YES      | -                                                      |
+| client_name                           | character varying        | (255)    | YES      | -                                                      |
+| client_phone                          | character varying        | (50)     | YES      | -                                                      |
+| client_email                          | character varying        | (255)    | YES      | -                                                      |
+| client_address                        | text                     |          | YES      | -                                                      |
+| branch_name                           | character varying        | (255)    | YES      | -                                                      |
+| estimate_link                         | text                     |          | YES      | -                                                      |
+| roof_material                         | character varying        | (100)    | YES      | -                                                      |
+| decking_type                          | character varying        | (100)    | YES      | -                                                      |
+| roof_age                              | character varying        | (50)     | YES      | -                                                      |
+| walkable_roof                         | character varying        | (50)     | YES      | -                                                      |
+| roof_condition                        | character varying        | (100)    | YES      | -                                                      |
+| full_roof_inspection_interest         | boolean                  |          | YES      | false                                                  |
+| customer_comfort                      | character varying        | (100)    | YES      | -                                                      |
+| hvac_age                              | character varying        | (50)     | YES      | -                                                      |
+| system_condition                      | character varying        | (100)    | YES      | -                                                      |
+| air_ducts_condition                   | character varying        | (100)    | YES      | -                                                      |
+| full_hvac_furnace_inspection_interest | boolean                  |          | YES      | false                                                  |
+| roof_notification_sent                | boolean                  |          | NO       | false                                                  |
+| hvac_notification_sent                | boolean                  |          | NO       | false                                                  |
+| attic_tech_created_at                 | timestamp with time zone |          | YES      | -                                                      |
+| created_at                            | timestamp with time zone |          | YES      | CURRENT_TIMESTAMP                                      |
+| updated_at                            | timestamp with time zone |          | YES      | CURRENT_TIMESTAMP                                      |
+| salesperson_email                     | character varying        | (255)    | YES      | -                                                      |
++---------------------------------------+--------------------------+----------+----------+--------------------------------------------------------+
+(28 rows)
+
+
+================================================================================
+TABLA: job ⭐ IMPORTANTE
+================================================================================
++---------------------------+-----------------------------+----------+----------+------------------------------------------+
+|          Columna          |            Tipo             | Longitud | Nullable |                 Default                  |
++---------------------------+-----------------------------+----------+----------+------------------------------------------+
+| id                        | integer                     |          | NO       | nextval('botzilla.job_id_seq'::regclass) |
+| name                      | character varying           | (100)    | NO       | -                                        |
+| closing_date              | timestamp without time zone |          | YES      | CURRENT_TIMESTAMP                        |
+| estimate_id               | integer                     |          | YES      | -                                        |
+| crew_leader_id            | integer                     |          | YES      | -                                        |
+| branch_id                 | integer                     |          | YES      | -                                        |
+| note                      | text                        |          | YES      | -                                        |
+| review                    | integer                     |          | YES      | -                                        |
+| attic_tech_hours          | numeric                     |          | YES      | -                                        |
+| crew_leader_hours         | numeric                     |          | YES      | -                                        |
+| notification_sent         | boolean                     |          | NO       | false                                    |
+| cl_estimated_plan_hours   | numeric                     |          | YES      | NULL::numeric                            |
+| status_id                 | integer                     |          | YES      | -                                        |
+| attic_tech_job_id         | integer                     |          | YES      | -                                        |
+| last_synced_at            | timestamp without time zone |          | YES      | -                                        |
+| attic_tech_estimate_id    | integer                     |          | YES      | -                                        |
+| last_known_status_id      | integer                     |          | YES      | -                                        |
+| last_notification_sent_at | timestamp without time zone |          | YES      | -                                        |
++---------------------------+-----------------------------+----------+----------+------------------------------------------+
+(18 rows)
+
+
+================================================================================
+TABLA: job_status
+================================================================================
++---------+-------------------+----------+----------+-------------------------------------------------+
+| Columna |       Tipo        | Longitud | Nullable |                     Default                     |
++---------+-------------------+----------+----------+-------------------------------------------------+
+| id      | integer           |          | NO       | nextval('botzilla.job_status_id_seq'::regclass) |
+| name    | character varying | (50)     | NO       | -                                               |
++---------+-------------------+----------+----------+-------------------------------------------------+
+(2 rows)
+
+
+================================================================================
+TABLA: sales_person
+================================================================================
++---------------+-------------------+----------+----------+---------------------------------------------------+
+|    Columna    |       Tipo        | Longitud | Nullable |                      Default                      |
++---------------+-------------------+----------+----------+---------------------------------------------------+
+| id            | integer           |          | NO       | nextval('botzilla.sales_person_id_seq'::regclass) |
+| name          | character varying | (100)    | NO       | -                                                 |
+| phone         | character varying | (20)     | YES      | -                                                 |
+| telegram_id   | character varying | (50)     | YES      | -                                                 |
+| warning_count | integer           |          | YES      | 0                                                 |
+| is_active     | boolean           |          | NO       | true                                              |
+| employee_id   | integer           |          | YES      | -                                                 |
++---------------+-------------------+----------+----------+---------------------------------------------------+
+(7 rows)
+
+
+================================================================================
+TABLA: sales_person_branch
+================================================================================
++-----------------+---------+----------+----------+----------------------------------------------------------+
+|     Columna     |  Tipo   | Longitud | Nullable |                         Default                          |
++-----------------+---------+----------+----------+----------------------------------------------------------+
+| sales_person_id | integer |          | NO       | -                                                        |
+| branch_id       | integer |          | NO       | -                                                        |
+| id              | integer |          | NO       | nextval('botzilla.sales_person_branch_id_seq'::regclass) |
++-----------------+---------+----------+----------+----------------------------------------------------------+
+(3 rows)
+
+
+================================================================================
+TABLA: telegram_group
+================================================================================
++-------------+--------------------------+----------+----------+-----------------------------------------------------+
+|   Columna   |           Tipo           | Longitud | Nullable |                       Default                       |
++-------------+--------------------------+----------+----------+-----------------------------------------------------+
+| id          | integer                  |          | NO       | nextval('botzilla.telegram_group_id_seq'::regclass) |
+| name        | character varying        | (255)    | NO       | -                                                   |
+| branch_id   | integer                  |          | YES      | -                                                   |
+| telegram_id | bigint                   |          | NO       | -                                                   |
+| description | text                     |          | YES      | -                                                   |
+| created_at  | timestamp with time zone |          | YES      | CURRENT_TIMESTAMP                                   |
+| updated_at  | timestamp with time zone |          | YES      | CURRENT_TIMESTAMP                                   |
+| category_id | integer                  |          | YES      | -                                                   |
+| is_default  | boolean                  |          | NO       | false                                               |
++-------------+--------------------------+----------+----------+-----------------------------------------------------+
+(9 rows)
+
+
+================================================================================
+TABLA: telegram_group_category
+================================================================================
++-------------+--------------------------+----------+----------+--------------------------------------------------------------+
+|   Columna   |           Tipo           | Longitud | Nullable |                           Default                            |
++-------------+--------------------------+----------+----------+--------------------------------------------------------------+
+| id          | integer                  |          | NO       | nextval('botzilla.telegram_group_category_id_seq'::regclass) |
+| name        | character varying        | (100)    | NO       | -                                                            |
+| description | text                     |          | YES      | -                                                            |
+| created_at  | timestamp with time zone |          | YES      | CURRENT_TIMESTAMP                                            |
+| updated_at  | timestamp with time zone |          | YES      | CURRENT_TIMESTAMP                                            |
++-------------+--------------------------+----------+----------+--------------------------------------------------------------+
+(5 rows)
+
+
+================================================================================
+TABLA: user
+================================================================================
++-------------+-------------------+----------+----------+-------------------------------------------+
+|   Columna   |       Tipo        | Longitud | Nullable |                  Default                  |
++-------------+-------------------+----------+----------+-------------------------------------------+
+| id          | integer           |          | NO       | nextval('botzilla.user_id_seq'::regclass) |
+| rol_id      | integer           |          | YES      | -                                         |
+| phone       | character varying | (20)     | YES      | -                                         |
+| email       | character varying | (100)    | NO       | -                                         |
+| password    | character varying | (100)    | NO       | -                                         |
+| telegram_id | character varying | (50)     | YES      | -                                         |
++-------------+-------------------+----------+----------+-------------------------------------------+
+(6 rows)
+
+
+================================================================================
+TABLA: user_rol ⭐ IMPORTANTE
+================================================================================
++---------+-------------------+----------+----------+-----------------------------------------------+
+| Columna |       Tipo        | Longitud | Nullable |                    Default                    |
++---------+-------------------+----------+----------+-----------------------------------------------+
+| id      | integer           |          | NO       | nextval('botzilla.user_rol_id_seq'::regclass) |
+| name    | character varying | (50)     | NO       | -                                             |
++---------+-------------------+----------+----------+-----------------------------------------------+
+(2 rows)
+
+
+================================================================================
+TABLA: user_branch
+================================================================================
++-----------+---------+----------+----------+---------+
+|  Columna  |  Tipo   | Longitud | Nullable | Default |
++-----------+---------+----------+----------+---------+
+| user_id   | integer |          | NO       | -       |
+| branch_id | integer |          | NO       | -       |
++-----------+---------+----------+----------+---------+
+(2 rows)
+
+
+================================================================================
+TABLA: shift
+================================================================================
++----------------+---------+----------+----------+---------+
+|    Columna     |  Tipo   | Longitud | Nullable | Default |
++----------------+---------+----------+----------+---------+
+| crew_member_id | integer |          | NO       | -       |
+| job_id         | integer |          | NO       | -       |
+| hours          | numeric |          | NO       | -       |
+| approved_shift | boolean |          | NO       | false   |
++----------------+---------+----------+----------+---------+
+(4 rows)
+
+
+================================================================================
+TABLA: special_shift
+================================================================================
++---------+-------------------+----------+----------+----------------------------------------------------+
+| Columna |       Tipo        | Longitud | Nullable |                      Default                       |
++---------+-------------------+----------+----------+----------------------------------------------------+
+| id      | integer           |          | NO       | nextval('botzilla.special_shift_id_seq'::regclass) |
+| name    | character varying | (100)    | NO       | -                                                  |
++---------+-------------------+----------+----------+----------------------------------------------------+
+(2 rows)
+
+
+================================================================================
+TABLA: warning
+================================================================================
++-----------------+-----------------------------+----------+----------+----------------------------------------------+
+|     Columna     |            Tipo             | Longitud | Nullable |                   Default                    |
++-----------------+-----------------------------+----------+----------+----------------------------------------------+
+| id              | integer                     |          | NO       | nextval('botzilla.warning_id_seq'::regclass) |
+| sales_person_id | integer                     |          | YES      | -                                            |
+| reason_id       | integer                     |          | YES      | -                                            |
+| created_at      | timestamp without time zone |          | YES      | CURRENT_TIMESTAMP                            |
++-----------------+-----------------------------+----------+----------+----------------------------------------------+
+(4 rows)
+
+
+================================================================================
+FIN DEL REPORTE
+================================================================================

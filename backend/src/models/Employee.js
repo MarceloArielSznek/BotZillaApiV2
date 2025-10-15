@@ -67,12 +67,12 @@ Employee.init({
         msg: 'Last name cannot be empty'
       },
       len: {
-        args: [2, 50],
-        msg: 'Last name must be between 2 and 50 characters'
+        args: [1, 50],
+        msg: 'Last name must be between 1 and 50 characters'
       },
       is: {
-        args: /^[a-zA-ZÀ-ÿ\u00f1\u00d1\s'-]+$/,
-        msg: 'Last name can only contain letters, spaces, hyphens and apostrophes'
+        args: /^[a-zA-ZÀ-ÿ\u00f1\u00d1\s'\-0-9.]+$/,
+        msg: 'Last name can only contain letters, numbers, spaces, hyphens, apostrophes and periods'
       }
     }
   },

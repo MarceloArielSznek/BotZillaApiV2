@@ -725,7 +725,7 @@ class EstimatesController {
         // Crear nuevo salesperson solo si no existe uno inactivo
         const [finalSalesPerson, created] = await SalesPerson.findOrCreate({
             where: { name: { [Op.iLike]: trimmedName } },
-            defaults: { name: trimmedName, warning_count: 0, is_active: true }
+            defaults: { name: trimmedName, warning_count: 0 }
         });
 
         if (created) {

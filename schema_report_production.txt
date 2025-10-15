@@ -1,0 +1,245 @@
+============================================================================
+TODAS LAS TABLAS EN SCHEMA BOTZILLA
+============================================================================
+       table_name        | column_count 
+-------------------------+--------------
+ branch                  |            4
+ crew_member             |            7
+ crew_member_branch      |            2
+ employee                |           23
+ employee_backup         |           15
+ employee_telegram_group |            6
+ estimate                |           21
+ estimate_status         |            2
+ group_membership_status |            2
+ inspection_report       |           28
+ job                     |           18
+ job_special_shift       |            5
+ job_status              |            2
+ notification            |            8
+ notification_templates  |            5
+ notification_type       |            2
+ sales_person            |            7
+ sales_person_branch     |            3
+ sheet_column_map        |            5
+ shift                   |            4
+ special_shift           |            2
+ telegram_group          |            9
+ telegram_group_category |            5
+ user                    |            6
+ user_branch             |            2
+ user_rol                |            2
+ warning                 |            4
+ warning_reason          |            2
+(28 rows)
+
+
+============================================================================
+DETALLE DE COLUMNAS POR TABLA
+============================================================================
+
+       table_name        |              column_name              |          data_type          |          full_type          | is_nullable |                        column_default                        
+-------------------------+---------------------------------------+-----------------------------+-----------------------------+-------------+--------------------------------------------------------------
+ branch                  | id                                    | integer                     | integer                     | NO          | nextval('botzilla.branch_id_seq'::regclass)
+ branch                  | name                                  | character varying           | character varying(100)      | NO          | 
+ branch                  | address                               | text                        | text                        | YES         | 
+ branch                  | telegram_group_id                     | text                        | text                        | YES         | 
+ crew_member             | id                                    | integer                     | integer                     | NO          | nextval('botzilla.crew_member_id_seq'::regclass)
+ crew_member             | phone                                 | character varying           | character varying(20)       | YES         | 
+ crew_member             | telegram_id                           | character varying           | character varying(50)       | YES         | 
+ crew_member             | name                                  | character varying           | character varying(100)      | NO          | 
+ crew_member             | is_leader                             | boolean                     | boolean                     | YES         | false
+ crew_member             | animal                                | character varying           | character varying(50)       | YES         | 
+ crew_member             | employee_id                           | integer                     | integer                     | YES         | 
+ crew_member_branch      | crew_member_id                        | integer                     | integer                     | NO          | 
+ crew_member_branch      | branch_id                             | integer                     | integer                     | NO          | 
+ employee                | id                                    | integer                     | integer                     | NO          | nextval('botzilla.employee_id_seq'::regclass)
+ employee                | first_name                            | character varying           | character varying(50)       | NO          | 
+ employee                | last_name                             | character varying           | character varying(50)       | NO          | 
+ employee                | nickname                              | character varying           | character varying(30)       | YES         | 
+ employee                | email                                 | character varying           | character varying(100)      | NO          | 
+ employee                | phone_number                          | character varying           | character varying(20)       | NO          | 
+ employee                | telegram_id                           | character varying           | character varying(20)       | NO          | 
+ employee                | status                                | character varying           | character varying(20)       | NO          | 'pending'::character varying
+ employee                | registration_date                     | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee                | approved_date                         | timestamp with time zone    | timestamp with time zone    | YES         | 
+ employee                | approved_by                           | integer                     | integer                     | YES         | 
+ employee                | notes                                 | text                        | text                        | YES         | 
+ employee                | employee_code                         | character varying           | character varying(20)       | YES         | 
+ employee                | created_at                            | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee                | updated_at                            | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee                | street                                | character varying           | character varying(200)      | NO          | 
+ employee                | city                                  | character varying           | character varying(100)      | NO          | 
+ employee                | state                                 | character varying           | character varying(50)       | NO          | 
+ employee                | zip                                   | character varying           | character varying(20)       | NO          | 
+ employee                | date_of_birth                         | date                        | date                        | NO          | 
+ employee                | role                                  | character varying           | character varying(20)       | NO          | 
+ employee                | branch_id                             | integer                     | integer                     | YES         | 
+ employee                | attic_tech_user_id                    | integer                     | integer                     | YES         | 
+ employee_backup         | id                                    | integer                     | integer                     | NO          | nextval('botzilla.employee_id_seq'::regclass)
+ employee_backup         | first_name                            | character varying           | character varying(50)       | NO          | 
+ employee_backup         | last_name                             | character varying           | character varying(50)       | NO          | 
+ employee_backup         | nickname                              | character varying           | character varying(30)       | YES         | 
+ employee_backup         | email                                 | character varying           | character varying(100)      | NO          | 
+ employee_backup         | phone_number                          | character varying           | character varying(20)       | NO          | 
+ employee_backup         | telegram_id                           | character varying           | character varying(20)       | NO          | 
+ employee_backup         | status                                | character varying           | character varying(20)       | NO          | 'pending'::character varying
+ employee_backup         | registration_date                     | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee_backup         | approved_date                         | timestamp with time zone    | timestamp with time zone    | YES         | 
+ employee_backup         | approved_by                           | integer                     | integer                     | YES         | 
+ employee_backup         | notes                                 | text                        | text                        | YES         | 
+ employee_backup         | employee_code                         | character varying           | character varying(20)       | YES         | 
+ employee_backup         | created_at                            | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee_backup         | updated_at                            | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee_telegram_group | id                                    | integer                     | integer                     | NO          | nextval('botzilla.employee_telegram_group_id_seq'::regclass)
+ employee_telegram_group | employee_id                           | integer                     | integer                     | NO          | 
+ employee_telegram_group | telegram_group_id                     | integer                     | integer                     | NO          | 
+ employee_telegram_group | status_id                             | integer                     | integer                     | NO          | 
+ employee_telegram_group | joined_at                             | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ employee_telegram_group | blocked_at                            | timestamp with time zone    | timestamp with time zone    | YES         | 
+ estimate                | id                                    | integer                     | integer                     | NO          | nextval('botzilla.estimate_id_seq'::regclass)
+ estimate                | name                                  | character varying           | character varying(100)      | NO          | 
+ estimate                | sales_person_id                       | integer                     | integer                     | YES         | 
+ estimate                | status_id                             | integer                     | integer                     | YES         | 
+ estimate                | branch_id                             | integer                     | integer                     | YES         | 
+ estimate                | price                                 | numeric                     | numeric                     | YES         | 
+ estimate                | discount                              | numeric                     | numeric                     | YES         | 
+ estimate                | attic_tech_hours                      | numeric                     | numeric                     | YES         | 
+ estimate                | attic_tech_estimate_id                | integer                     | integer                     | YES         | 
+ estimate                | customer_name                         | character varying           | character varying(200)      | YES         | 
+ estimate                | customer_address                      | text                        | text                        | YES         | 
+ estimate                | crew_notes                            | text                        | text                        | YES         | 
+ estimate                | retail_cost                           | numeric                     | numeric                     | YES         | 
+ estimate                | final_price                           | numeric                     | numeric                     | YES         | 
+ estimate                | sub_service_retail_cost               | numeric                     | numeric                     | YES         | 
+ estimate                | at_updated_date                       | timestamp without time zone | timestamp without time zone | YES         | 
+ estimate                | at_created_date                       | timestamp without time zone | timestamp without time zone | YES         | 
+ estimate                | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | 
+ estimate                | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | 
+ estimate                | customer_email                        | character varying           | character varying(200)      | YES         | 
+ estimate                | customer_phone                        | character varying           | character varying(50)       | YES         | 
+ estimate_status         | id                                    | integer                     | integer                     | NO          | nextval('botzilla.estimate_status_id_seq'::regclass)
+ estimate_status         | name                                  | character varying           | character varying(50)       | NO          | 
+ group_membership_status | id                                    | integer                     | integer                     | NO          | nextval('botzilla.group_membership_status_id_seq'::regclass)
+ group_membership_status | name                                  | character varying           | character varying(50)       | NO          | 
+ inspection_report       | id                                    | integer                     | integer                     | NO          | nextval('botzilla.inspection_report_id_seq'::regclass)
+ inspection_report       | attic_tech_report_id                  | integer                     | integer                     | NO          | 
+ inspection_report       | attic_tech_estimate_id                | integer                     | integer                     | NO          | 
+ inspection_report       | estimate_name                         | character varying           | character varying(255)      | YES         | 
+ inspection_report       | salesperson_name                      | character varying           | character varying(255)      | YES         | 
+ inspection_report       | salesperson_email                     | character varying           | character varying(255)      | YES         | 
+ inspection_report       | client_name                           | character varying           | character varying(255)      | YES         | 
+ inspection_report       | client_phone                          | character varying           | character varying(50)       | YES         | 
+ inspection_report       | client_email                          | character varying           | character varying(255)      | YES         | 
+ inspection_report       | client_address                        | text                        | text                        | YES         | 
+ inspection_report       | branch_name                           | character varying           | character varying(255)      | YES         | 
+ inspection_report       | estimate_link                         | text                        | text                        | YES         | 
+ inspection_report       | roof_material                         | character varying           | character varying(100)      | YES         | 
+ inspection_report       | decking_type                          | character varying           | character varying(100)      | YES         | 
+ inspection_report       | roof_age                              | character varying           | character varying(50)       | YES         | 
+ inspection_report       | walkable_roof                         | character varying           | character varying(50)       | YES         | 
+ inspection_report       | roof_condition                        | character varying           | character varying(100)      | YES         | 
+ inspection_report       | full_roof_inspection_interest         | boolean                     | boolean                     | YES         | false
+ inspection_report       | customer_comfort                      | character varying           | character varying(100)      | YES         | 
+ inspection_report       | hvac_age                              | character varying           | character varying(50)       | YES         | 
+ inspection_report       | system_condition                      | character varying           | character varying(100)      | YES         | 
+ inspection_report       | air_ducts_condition                   | character varying           | character varying(100)      | YES         | 
+ inspection_report       | full_hvac_furnace_inspection_interest | boolean                     | boolean                     | YES         | false
+ inspection_report       | roof_notification_sent                | boolean                     | boolean                     | NO          | false
+ inspection_report       | hvac_notification_sent                | boolean                     | boolean                     | NO          | false
+ inspection_report       | attic_tech_created_at                 | timestamp with time zone    | timestamp with time zone    | YES         | 
+ inspection_report       | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ inspection_report       | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ job                     | id                                    | integer                     | integer                     | NO          | nextval('botzilla.job_id_seq'::regclass)
+ job                     | name                                  | character varying           | character varying(100)      | NO          | 
+ job                     | closing_date                          | timestamp without time zone | timestamp without time zone | YES         | CURRENT_TIMESTAMP
+ job                     | estimate_id                           | integer                     | integer                     | YES         | 
+ job                     | crew_leader_id                        | integer                     | integer                     | YES         | 
+ job                     | branch_id                             | integer                     | integer                     | YES         | 
+ job                     | note                                  | text                        | text                        | YES         | 
+ job                     | review                                | integer                     | integer                     | YES         | 
+ job                     | attic_tech_hours                      | numeric                     | numeric                     | YES         | 
+ job                     | crew_leader_hours                     | numeric                     | numeric                     | YES         | 
+ job                     | notification_sent                     | boolean                     | boolean                     | NO          | false
+ job                     | cl_estimated_plan_hours               | numeric                     | numeric                     | YES         | NULL::numeric
+ job                     | status_id                             | integer                     | integer                     | YES         | 
+ job                     | attic_tech_job_id                     | integer                     | integer                     | YES         | 
+ job                     | attic_tech_estimate_id                | integer                     | integer                     | YES         | 
+ job                     | last_known_status_id                  | integer                     | integer                     | YES         | 
+ job                     | last_synced_at                        | timestamp without time zone | timestamp without time zone | YES         | 
+ job                     | last_notification_sent_at             | timestamp without time zone | timestamp without time zone | YES         | 
+ job_special_shift       | special_shift_id                      | integer                     | integer                     | NO          | 
+ job_special_shift       | job_id                                | integer                     | integer                     | NO          | 
+ job_special_shift       | date                                  | date                        | date                        | NO          | 
+ job_special_shift       | hours                                 | numeric                     | numeric                     | NO          | 
+ job_special_shift       | approved_shift                        | boolean                     | boolean                     | NO          | false
+ job_status              | id                                    | integer                     | integer                     | NO          | nextval('botzilla.job_status_id_seq'::regclass)
+ job_status              | name                                  | character varying           | character varying(50)       | NO          | 
+ notification            | id                                    | integer                     | integer                     | NO          | nextval('botzilla.notification_id_seq'::regclass)
+ notification            | message                               | text                        | text                        | NO          | 
+ notification            | created_at                            | timestamp without time zone | timestamp without time zone | YES         | CURRENT_TIMESTAMP
+ notification            | recipient_type                        | character varying           | character varying(20)       | NO          | 
+ notification            | recipient_id                          | integer                     | integer                     | NO          | 
+ notification            | read_at                               | timestamp without time zone | timestamp without time zone | YES         | 
+ notification            | sent_to_telegram                      | boolean                     | boolean                     | YES         | false
+ notification            | notification_type_id                  | integer                     | integer                     | YES         | 
+ notification_templates  | id                                    | integer                     | integer                     | NO          | nextval('botzilla.notification_templates_id_seq'::regclass)
+ notification_templates  | name                                  | character varying           | character varying(100)      | NO          | 
+ notification_templates  | notification_type_id                  | integer                     | integer                     | NO          | 
+ notification_templates  | level                                 | integer                     | integer                     | YES         | 
+ notification_templates  | template_text                         | text                        | text                        | NO          | 
+ notification_type       | id                                    | integer                     | integer                     | NO          | nextval('botzilla.notification_type_id_seq'::regclass)
+ notification_type       | name                                  | character varying           | character varying(50)       | NO          | 
+ sales_person            | id                                    | integer                     | integer                     | NO          | nextval('botzilla.sales_person_id_seq'::regclass)
+ sales_person            | name                                  | character varying           | character varying(100)      | NO          | 
+ sales_person            | phone                                 | character varying           | character varying(20)       | YES         | 
+ sales_person            | telegram_id                           | character varying           | character varying(50)       | YES         | 
+ sales_person            | warning_count                         | integer                     | integer                     | YES         | 0
+ sales_person            | is_active                             | boolean                     | boolean                     | NO          | true
+ sales_person            | employee_id                           | integer                     | integer                     | YES         | 
+ sales_person_branch     | sales_person_id                       | integer                     | integer                     | NO          | 
+ sales_person_branch     | branch_id                             | integer                     | integer                     | NO          | 
+ sales_person_branch     | id                                    | integer                     | integer                     | NO          | nextval('botzilla.sales_person_branch_id_seq'::regclass)
+ sheet_column_map        | id                                    | integer                     | integer                     | NO          | nextval('botzilla.sheet_column_map_id_seq'::regclass)
+ sheet_column_map        | sheet_name                            | text                        | text                        | NO          | 
+ sheet_column_map        | field_name                            | text                        | text                        | NO          | 
+ sheet_column_map        | column_index                          | integer                     | integer                     | NO          | 
+ sheet_column_map        | type                                  | text                        | text                        | NO          | 
+ shift                   | crew_member_id                        | integer                     | integer                     | NO          | 
+ shift                   | job_id                                | integer                     | integer                     | NO          | 
+ shift                   | hours                                 | numeric                     | numeric                     | NO          | 
+ shift                   | approved_shift                        | boolean                     | boolean                     | NO          | false
+ special_shift           | id                                    | integer                     | integer                     | NO          | nextval('botzilla.special_shift_id_seq'::regclass)
+ special_shift           | name                                  | character varying           | character varying(100)      | NO          | 
+ telegram_group          | id                                    | integer                     | integer                     | NO          | nextval('botzilla.telegram_group_id_seq'::regclass)
+ telegram_group          | name                                  | character varying           | character varying(255)      | NO          | 
+ telegram_group          | branch_id                             | integer                     | integer                     | YES         | 
+ telegram_group          | telegram_id                           | bigint                      | bigint                      | NO          | 
+ telegram_group          | description                           | text                        | text                        | YES         | 
+ telegram_group          | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ telegram_group          | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ telegram_group          | category_id                           | integer                     | integer                     | YES         | 
+ telegram_group          | is_default                            | boolean                     | boolean                     | NO          | false
+ telegram_group_category | id                                    | integer                     | integer                     | NO          | nextval('botzilla.telegram_group_category_id_seq'::regclass)
+ telegram_group_category | name                                  | character varying           | character varying(100)      | NO          | 
+ telegram_group_category | description                           | text                        | text                        | YES         | 
+ telegram_group_category | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ telegram_group_category | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ user                    | id                                    | integer                     | integer                     | NO          | nextval('botzilla.user_id_seq'::regclass)
+ user                    | rol_id                                | integer                     | integer                     | YES         | 
+ user                    | phone                                 | character varying           | character varying(20)       | YES         | 
+ user                    | email                                 | character varying           | character varying(100)      | NO          | 
+ user                    | password                              | character varying           | character varying(100)      | NO          | 
+ user                    | telegram_id                           | character varying           | character varying(50)       | YES         | 
+ user_branch             | user_id                               | integer                     | integer                     | NO          | 
+ user_branch             | branch_id                             | integer                     | integer                     | NO          | 
+ user_rol                | id                                    | integer                     | integer                     | NO          | nextval('botzilla.user_rol_id_seq'::regclass)
+ user_rol                | name                                  | character varying           | character varying(50)       | NO          | 
+ warning                 | id                                    | integer                     | integer                     | NO          | nextval('botzilla.warning_id_seq'::regclass)
+ warning                 | sales_person_id                       | integer                     | integer                     | YES         | 
+ warning                 | reason_id                             | integer                     | integer                     | YES         | 
+ warning                 | created_at                            | timestamp without time zone | timestamp without time zone | YES         | CURRENT_TIMESTAMP
+ warning_reason          | id                                    | integer                     | integer                     | NO          | nextval('botzilla.warning_reason_id_seq'::regclass)
+ warning_reason          | name                                  | character varying           | character varying(100)      | NO          | 
+(201 rows)
+
