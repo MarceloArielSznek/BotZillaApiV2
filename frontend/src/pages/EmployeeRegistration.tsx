@@ -254,12 +254,19 @@ const EmployeeRegistration: React.FC = () => {
           branch: '',
           role: ''
         });
+        setIsAtticTechEmployee(false);
+        setAtUserFound(null);
+        setAtticTechEmail('');
+
       } else {
-        setError(result.message || 'Registration failed. Please try again.');
+        // Si el backend devuelve success: false, mostrar el mensaje de error
+        setError(result.message || 'Registration failed');
       }
 
     } catch (err: any) {
-      setError(err.message || 'Failed to submit registration. Please try again.');
+      console.error('Frontend registration handler error:', err);
+      setError(err.message || 'An unexpected error occurred.');
+
     } finally {
       setLoading(false);
     }

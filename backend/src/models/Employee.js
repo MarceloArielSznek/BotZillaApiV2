@@ -286,7 +286,13 @@ Employee.init({
       name: 'unique_attic_tech_user_id',
       msg: 'Attic Tech User ID is already in use'
     },
-    comment: 'ID del usuario en Attic Tech (para sincronización)'
+    comment: 'ID del usuario en Attic Tech (para sincronización)',
+  },
+  is_deleted: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Indica si el empleado ha sido eliminado lógicamente'
   }
 }, {
   sequelize,
@@ -298,11 +304,15 @@ Employee.init({
   indexes: [
     {
       name: 'idx_employee_email',
-      fields: ['email']
+      fields: ['email'],
+      unique: true, // Unique index will still be created, but we'll manage uniqueness in hooks
+      where: { is_deleted: false }
     },
     {
       name: 'idx_employee_telegram_id',
-      fields: ['telegram_id']
+      fields: ['telegram_id'],
+      unique: true, // Unique index will still be created, but we'll manage uniqueness in hooks
+      where: { is_deleted: false, telegram_id: { [require('sequelize').Op.ne]: null } }
     },
     {
       name: 'idx_employee_status',

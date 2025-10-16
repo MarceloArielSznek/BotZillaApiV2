@@ -1,4 +1,4 @@
-const { SalesPerson, Branch, SalesPersonBranch, Estimate, EstimateStatus } = require('../models');
+const { SalesPerson, Branch, SalesPersonBranch, Estimate, EstimateStatus, Employee } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 const { caches } = require('../utils/cache'); // Importar caches
@@ -429,9 +429,18 @@ exports.deleteSalesPerson = async (req, res) => {
 
         // Verificar si tiene estimates asociados
         const estimatesCount = await Estimate.count({ where: { sales_person_id: id } });
+        
         if (estimatesCount > 0) {
-            // Si tiene estimates, hacer soft delete (marcar como inactivo)
+            // Si tiene estimates, hacer soft delete del SalesPerson (marcar como inactivo)
+            // y también marcar el Employee asociado como eliminado lógicamente
             await salesPerson.update({ is_active: false });
+
+            // Marcar el Employee asociado como eliminado lógicamente (si existe)
+            const employee = await Employee.findOne({ where: { email: salesPerson.email } });
+            if (employee) {
+                await employee.update({ is_deleted: true, status: 'rejected' });
+                console.log(`✅ Employee ID: ${employee.id} (${employee.first_name} ${employee.last_name}) marcado como eliminado lógicamente y status 'rejected'.`);
+            }
             
             console.log(`✅ Salesperson marcado como inactivo (soft delete): ${salesPerson.name} - ${estimatesCount} estimates asociados`);
             
@@ -442,14 +451,22 @@ exports.deleteSalesPerson = async (req, res) => {
             });
         }
 
-        // Si no tiene estimates, eliminar completamente
+        // Si no tiene estimates, eliminar completamente el SalesPerson
+        // y también marcar el Employee asociado como eliminado lógicamente
         // Eliminar relaciones con branches
         await SalesPersonBranch.destroy({ where: { sales_person_id: id } });
+
+        // Marcar el Employee asociado como eliminado lógicamente (si existe)
+        const employee = await Employee.findOne({ where: { email: salesPerson.email } });
+        if (employee) {
+            await employee.update({ is_deleted: true, status: 'rejected' });
+            console.log(`✅ Employee ID: ${employee.id} (${employee.first_name} ${employee.last_name}) marcado como eliminado lógicamente y status 'rejected'.`);
+        }
 
         // Eliminar el salesperson
         await salesPerson.destroy();
 
-        console.log(`✅ Salesperson eliminado exitosamente: ${salesPerson.name}`);
+        console.log(`✅ Salesperson eliminado exitosamente: ${salesPerson.name} y Employee asociado actualizado.`);
 
         res.json({
             success: true,

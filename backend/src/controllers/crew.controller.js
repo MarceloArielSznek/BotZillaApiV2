@@ -1,4 +1,4 @@
-const { CrewMember, Branch, CrewMemberBranch } = require('../models');
+const { CrewMember, Branch, CrewMemberBranch, Employee } = require('../models');
 const { Op } = require('sequelize');
 
 // GET /api/crew-members - Obtener todos los crew members
@@ -357,10 +357,18 @@ exports.deleteCrewMember = async (req, res) => {
         // Eliminar relaciones con branches
         await CrewMemberBranch.destroy({ where: { crew_member_id: id } });
 
-        // Eliminar el crew member
+        // Marcar el Employee asociado como eliminado lógicamente (soft delete)
+        const employee = await Employee.findOne({ where: { telegram_id: crewMember.telegram_id } });
+        if (employee) {
+            await employee.update({ is_deleted: true, status: 'rejected' });
+            console.log(`✅ Employee ID: ${employee.id} (${employee.first_name} ${employee.last_name}) marcado como eliminado lógicamente y status 'rejected'.`);
+        }
+
+        // Eliminar el crew member (o hacer soft delete si es preferible solo para CrewMember)
+        // Por ahora lo eliminamos físicamente, ya que el employee asociado maneja el soft delete
         await crewMember.destroy();
 
-        console.log(`✅ Crew member eliminado exitosamente: ${crewMember.name}`);
+        console.log(`✅ Crew member eliminado exitosamente: ${crewMember.name} y Employee asociado actualizado.`);
 
         res.json({
             success: true,
