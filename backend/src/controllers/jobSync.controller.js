@@ -422,6 +422,21 @@ async function saveJobsToDb(jobsFromAT) {
                     logger.info(`📝 Estado cambió para "${atJob.name}": ${oldStatusName} (ID ${oldStatusId}) → ${newStatusName} (ID ${newStatusId})`);
                 }
                 
+                // ⚠️  RESETEAR NOTIFICACIÓN: Si el job regresa a "Requires Crew Leader"
+                // Esto permite que el NUEVO crew leader reciba una notificación cuando sea asignado
+                if (statusChanged && newStatusName === 'Requires Crew Lead') {
+                    logger.info(`🔄 Job "${atJob.name}" regresó a "Requires Crew Leader". Reseteando notification_sent y crew_leader_id...`);
+                    await Job.update(
+                        { 
+                            notification_sent: false,
+                            last_notification_sent_at: null,
+                            crew_leader_id: null // Remover crew leader anterior
+                        },
+                        { where: { id: existingJob.id } }
+                    );
+                    logger.info(`✅ Notification reset completado para job: ${atJob.name}`);
+                }
+                
                 // ESCENARIO 1: Detectar si cambió a "Plans In Progress" desde "Requires Crew Lead"
                 if (statusChanged && oldStatusName === 'Requires Crew Lead' && newStatusName === 'Plans In Progress') {
                     if (crewLeader) {
