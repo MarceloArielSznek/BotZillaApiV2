@@ -389,6 +389,83 @@ class MakeWebhookService {
     }
 
     /**
+     * Enviar alerta de crew leader sin registro
+     * Se usa cuando se asigna un job a un crew leader que NO tiene telegram_id
+     * 
+     * @param {object} crewLeaderData - Datos del crew leader sin registro
+     * @param {number} crewLeaderData.crewLeaderId - ID del crew leader
+     * @param {string} crewLeaderData.crewLeaderName - Nombre completo
+     * @param {string} crewLeaderData.crewLeaderEmail - Email
+     * @param {string} crewLeaderData.jobName - Nombre del job asignado
+     * @param {string} crewLeaderData.branchName - Branch del job
+     * @param {string} crewLeaderData.registrationUrl - URL para registrarse
+     */
+    async sendCrewLeaderRegistrationAlert(crewLeaderData) {
+        const webhookUrl = process.env.MAKE_CREW_LEADER_ALERT_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.info('MAKE_CREW_LEADER_ALERT_WEBHOOK_URL not configured. Skipping crew leader alert.');
+            return false;
+        }
+
+        try {
+            // Generar mensaje descriptivo según el caso
+            let message;
+            if (crewLeaderData.notInDatabase) {
+                message = `Crew Leader "${crewLeaderData.crewLeaderName}" was assigned to job "${crewLeaderData.jobName}" but is NOT in our database yet. Please run sync-users first, then send them the registration link.`;
+            } else if (crewLeaderData.hasTelegramId && crewLeaderData.activeUser === false) {
+                message = `Crew Leader "${crewLeaderData.crewLeaderName}" was assigned to job "${crewLeaderData.jobName}" and has registered with Telegram, but is still PENDING APPROVAL. Please approve them to start receiving job notifications.`;
+            } else {
+                message = `Crew Leader "${crewLeaderData.crewLeaderName}" was assigned to job "${crewLeaderData.jobName}" but hasn't registered with their Telegram ID yet. Please send them the registration link.`;
+            }
+
+            const payload = {
+                event: 'crew_leader_needs_registration',
+                timestamp: new Date().toISOString(),
+                message: message, // Mensaje descriptivo para Make.com
+                crew_leader: {
+                    id: crewLeaderData.crewLeaderId,
+                    name: crewLeaderData.crewLeaderName,
+                    email: crewLeaderData.crewLeaderEmail,
+                    branch: crewLeaderData.branchName,
+                    active_user: crewLeaderData.activeUser === true, // Solo true si explícitamente es true
+                    has_telegram_id: crewLeaderData.hasTelegramId === true // true si completó registro
+                },
+                job: {
+                    name: crewLeaderData.jobName,
+                    status: 'Plans In Progress'
+                },
+                registration_url: crewLeaderData.registrationUrl,
+                environment: process.env.NODE_ENV || 'production'
+            };
+
+            logger.info('Sending crew leader registration alert to Make.com', {
+                crewLeaderId: crewLeaderData.crewLeaderId,
+                crewLeaderName: crewLeaderData.crewLeaderName,
+                jobName: crewLeaderData.jobName
+            });
+
+            await axios.post(webhookUrl, payload, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': uuidv4()
+                },
+                timeout: 10000
+            });
+
+            logger.info('Crew leader registration alert sent successfully');
+            return true;
+
+        } catch (error) {
+            logger.error('Error sending crew leader registration alert', {
+                message: error.message,
+                responseData: error.response?.data
+            });
+            return false;
+        }
+    }
+
+    /**
      * Envía una actualización de membresía de grupo a Make.com
      * @param {object} payload
      * @param {string} payload.employeeTelegramId - El ID de Telegram del empleado

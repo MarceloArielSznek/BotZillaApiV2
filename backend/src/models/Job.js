@@ -26,10 +26,12 @@ Job.init({
   },
   crew_leader_id: {
     type: DataTypes.INTEGER,
+    allowNull: true,
     references: {
-      model: 'crew_member',
+      model: 'employee', // Cambiado de 'crew_member' a 'employee' para permitir asignaciones a empleados pendientes
       key: 'id'
-    }
+    },
+    comment: 'References employee.id (not crew_member.id). Allows jobs to be assigned to pending employees.'
   },
   branch_id: {
     type: DataTypes.INTEGER,

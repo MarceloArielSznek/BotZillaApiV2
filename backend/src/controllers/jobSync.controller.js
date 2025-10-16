@@ -1,13 +1,16 @@
 const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 const { findBranch: branchHelperFind } = require('../utils/branchHelper');
+const makeWebhookService = require('../services/makeWebhook.service');
 
 // Importar modelos
 const Job = require('../models/Job');
 const JobStatus = require('../models/JobStatus');
 const Branch = require('../models/Branch');
 const CrewMember = require('../models/CrewMember');
+const Employee = require('../models/Employee');
 const Estimate = require('../models/Estimate');
 const User = require('../models/User');
 const UserRol = require('../models/UserRol');
@@ -45,7 +48,7 @@ async function fetchJobsFromAtticTech(apiKey, fromDate) {
         
         // Construir query params
         const params = {
-            depth: 2,
+            depth: 3, // Aumentado para traer más relaciones
             limit: 1000, // Ajustar según necesidad
             // Filtrar por updatedAt >= HOY (solo jobs actualizados hoy)
             'where[updatedAt][greater_than_equal]': fromDate
@@ -122,17 +125,86 @@ async function findCrewLeader(assignedCrew) {
 
         if (!crewLeaderData) return null;
 
-        // Buscar en nuestra BD por nombre o email
-        const crewLeader = await CrewMember.findOne({
+        // 1. Buscar primero en CrewMember (crew leaders ya aprobados) - SOLO por nombre
+        let crewLeaderFromCrewMember = await CrewMember.findOne({
             where: {
-                [Op.or]: [
-                    { name: { [Op.iLike]: `%${crewLeaderData.name}%` } },
-                    ...(crewLeaderData.email ? [{ telegram_id: crewLeaderData.email }] : [])
-                ]
+                name: { [Op.iLike]: `%${crewLeaderData.name}%` }
             }
         });
 
-        return crewLeader;
+        // Si lo encontramos en CrewMember, buscar su Employee correspondiente por telegram_id
+        if (crewLeaderFromCrewMember) {
+            logger.info(`✅ Crew Leader encontrado en CrewMember (activo): ${crewLeaderFromCrewMember.name}`);
+            
+            // Buscar el Employee correspondiente usando telegram_id
+            const employeeRecord = await Employee.findOne({
+                where: {
+                    telegram_id: crewLeaderFromCrewMember.telegram_id
+                },
+                attributes: ['id', 'first_name', 'last_name', 'email', 'phone_number', 'telegram_id', 'status', 'role', 'branch_id'],
+                raw: true // Retornar objeto plano
+            });
+
+            if (employeeRecord) {
+                logger.info(`🔍 Debug: Employee encontrado - ID: ${employeeRecord.id}, Status: ${employeeRecord.status}, Telegram: ${employeeRecord.telegram_id}`);
+                
+                // Retornar un objeto combinado con el ID del Employee pero los datos del CrewMember
+                const combinedRecord = {
+                    id: employeeRecord.id, // ⚠️ IMPORTANTE: Usar employee.id para la foreign key
+                    name: crewLeaderFromCrewMember.name,
+                    telegram_id: crewLeaderFromCrewMember.telegram_id,
+                    phone: crewLeaderFromCrewMember.phone || employeeRecord.phone_number,
+                    email: employeeRecord.email,
+                    status: employeeRecord.status || 'active', // Si viene de CrewMember, asumir activo
+                    first_name: employeeRecord.first_name,
+                    last_name: employeeRecord.last_name,
+                    is_leader: crewLeaderFromCrewMember.is_leader,
+                    _source: 'crew_member' // Flag para identificar origen
+                };
+                
+                logger.info(`✅ Retornando crew leader combinado - ID: ${combinedRecord.id}, Status: ${combinedRecord.status}`);
+                return combinedRecord;
+            } else {
+                logger.warn(`⚠️  Crew Leader encontrado en CrewMember pero NO en Employee (telegram_id: ${crewLeaderFromCrewMember.telegram_id})`);
+            }
+        }
+
+        // 2. Si no se encuentra en CrewMember, buscar en Employee (crew leaders pendientes de aprobación)
+        // Prioridad 1: Buscar por email (más confiable)
+        let crewLeader = null;
+        if (crewLeaderData.email) {
+            crewLeader = await Employee.findOne({
+                where: {
+                    email: { [Op.iLike]: crewLeaderData.email }
+                },
+                attributes: ['id', 'first_name', 'last_name', 'email', 'phone_number', 'telegram_id', 'status', 'role', 'branch_id'],
+                raw: true
+            });
+        }
+
+        // Prioridad 2: Si no se encuentra por email, buscar concatenando first_name + last_name
+        if (!crewLeader && crewLeaderData.name) {
+            crewLeader = await Employee.findOne({
+                where: sequelize.where(
+                    sequelize.fn('CONCAT', 
+                        sequelize.col('first_name'), 
+                        ' ', 
+                        sequelize.col('last_name')
+                    ),
+                    { [Op.iLike]: `%${crewLeaderData.name}%` }
+                ),
+                attributes: ['id', 'first_name', 'last_name', 'email', 'phone_number', 'telegram_id', 'status', 'role', 'branch_id'],
+                raw: true
+            });
+        }
+        
+        if (crewLeader) {
+            logger.info(`✅ Crew Leader encontrado en Employee (pendiente de aprobación): ${crewLeader.first_name} ${crewLeader.last_name} (${crewLeader.email || 'sin email'})`);
+            return crewLeader;
+        }
+
+        logger.warn(`⚠️  Crew Leader "${crewLeaderData.name}" (${crewLeaderData.email}) NO encontrado en nuestra BD`);
+        return null;
     } catch (error) {
         logger.error(`Error finding crew leader`, { error: error.message });
         return null;
@@ -161,6 +233,25 @@ async function findEstimateInOurDb(atticTechEstimateId) {
         logger.error(`Error finding estimate ${atticTechEstimateId}`, { error: error.message });
         return null;
     }
+}
+
+/**
+ * Obtener el nombre completo del crew leader (maneja CrewMember y Employee)
+ */
+function getCrewLeaderName(crewLeader) {
+    if (!crewLeader) return 'Unknown';
+    
+    // Si tiene first_name y last_name, es de Employee
+    if (crewLeader.first_name && crewLeader.last_name) {
+        return `${crewLeader.first_name} ${crewLeader.last_name}`.trim();
+    }
+    
+    // Si tiene name, es de CrewMember
+    if (crewLeader.name) {
+        return crewLeader.name;
+    }
+    
+    return 'Unknown';
 }
 
 /**
@@ -274,7 +365,18 @@ async function saveJobsToDb(jobsFromAT) {
             const status = await findOrCreateJobStatus(atJob.status);
             const branch = atJob.job_estimate?.branch ? 
                 await findBranch(atJob.job_estimate.branch.name) : null;
+            
+            // Buscar crew leader en nuestra BD
             const crewLeader = await findCrewLeader(atJob.assignedCrew);
+            
+            // Extraer datos del crew leader desde AT (aunque no esté en nuestra BD)
+            const crewLeaderFromAT = atJob.assignedCrew?.find(member => {
+                const roles = member.roles || [];
+                return roles.some(role => 
+                    (typeof role === 'object' && role.name === 'Crew Leader') ||
+                    (typeof role === 'string' && role === 'Crew Leader')
+                );
+            });
             
             // Buscar estimate en NUESTRA BD por su attic_tech_estimate_id
             const estimate = await findEstimateInOurDb(atJob.job_estimate?.id);
@@ -320,12 +422,171 @@ async function saveJobsToDb(jobsFromAT) {
                     logger.info(`📝 Estado cambió para "${atJob.name}": ${oldStatusName} (ID ${oldStatusId}) → ${newStatusName} (ID ${newStatusId})`);
                 }
                 
-                // Detectar si cambió a "Plans In Progress" desde "Requires Crew Lead" y tiene crew leader
-                if (statusChanged && oldStatusName === 'Requires Crew Lead' && newStatusName === 'Plans In Progress' && crewLeader) {
-                    shouldNotify = true;
-                    logger.info(`🔔 ¡Notificación necesaria! Crew Leader asignado a job: ${atJob.name}`);
-                } else if (statusChanged && oldStatusName === 'Requires Crew Lead' && newStatusName === 'Plans In Progress' && !crewLeader) {
-                    logger.warn(`⚠️  Job cambió a "Plans In Progress" pero NO tiene Crew Leader asignado: ${atJob.name}`);
+                // ESCENARIO 1: Detectar si cambió a "Plans In Progress" desde "Requires Crew Lead"
+                if (statusChanged && oldStatusName === 'Requires Crew Lead' && newStatusName === 'Plans In Progress') {
+                    if (crewLeader) {
+                        shouldNotify = true;
+                        logger.info(`🔔 Escenario 1: Estado cambió a "Plans In Progress" con Crew Leader asignado: ${atJob.name}`);
+                        
+                        // Verificar si el crew leader tiene telegram_id
+                        if (!crewLeader.telegram_id) {
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" no tiene telegram_id. Enviando alerta de registro...`);
+                            
+                            // Enviar webhook de alerta (crew leader debe registrarse)
+                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                                crewLeaderId: crewLeader.id,
+                                crewLeaderName: getCrewLeaderName(crewLeader),
+                                crewLeaderEmail: crewLeader.email || 'No email',
+                                jobName: atJob.name,
+                                branchName: branch?.name || 'Unknown',
+                                registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                                activeUser: false, // No tiene telegram_id
+                                hasTelegramId: false // NO completó el registro
+                            });
+                        } else if (crewLeader.status !== 'active') {
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta...`);
+                            
+                            // Enviar webhook de alerta (crew leader pendiente de aprobación)
+                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                                crewLeaderId: crewLeader.id,
+                                crewLeaderName: getCrewLeaderName(crewLeader),
+                                crewLeaderEmail: crewLeader.email || 'No email',
+                                jobName: atJob.name,
+                                branchName: branch?.name || 'Unknown',
+                                registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                                activeUser: false,
+                                hasTelegramId: true
+                            });
+                        }
+                    } else if (crewLeaderFromAT) {
+                        // Crew leader existe en AT pero NO en nuestra BD
+                        logger.warn(`⚠️  Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD. Enviando alerta de registro...`);
+                        
+                        // Enviar webhook de alerta usando datos de AT
+                        await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                            crewLeaderId: null, // No existe en nuestra BD
+                            crewLeaderName: crewLeaderFromAT.name,
+                            crewLeaderEmail: crewLeaderFromAT.email || 'No email',
+                            jobName: atJob.name,
+                            branchName: branch?.name || 'Unknown',
+                            registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                            notInDatabase: true, // Flag para indicar que no está en BD
+                            activeUser: false, // NO está activo (no está en BD)
+                            hasTelegramId: false // NO está en BD = no tiene telegram_id
+                        });
+                    } else {
+                        logger.warn(`⚠️  Job cambió a "Plans In Progress" pero NO tiene Crew Leader asignado: ${atJob.name}`);
+                    }
+                }
+                
+                // RECORDATORIO CONTINUO: Si el job tiene crew leader sin telegram_id, enviar alerta en cada sync
+                if (!statusChanged && crewLeader && !crewLeader.telegram_id && newStatusName === 'Plans In Progress') {
+                    logger.warn(`🔄 Recordatorio: Crew Leader "${getCrewLeaderName(crewLeader)}" aún no tiene telegram_id. Enviando alerta...`);
+                    
+                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                        crewLeaderId: crewLeader.id,
+                        crewLeaderName: getCrewLeaderName(crewLeader),
+                        crewLeaderEmail: crewLeader.email || 'No email',
+                        jobName: atJob.name,
+                        branchName: branch?.name || 'Unknown',
+                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                        activeUser: false, // No está activo (sin telegram_id)
+                        hasTelegramId: false // NO completó el registro
+                    });
+                }
+                
+                // RECORDATORIO CONTINUO: Si el crew leader tiene telegram_id pero NO está aprobado (status != 'active')
+                if (!statusChanged && crewLeader && crewLeader.telegram_id && crewLeader.status !== 'active' && newStatusName === 'Plans In Progress') {
+                    logger.warn(`🔄 Recordatorio: Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero aún no está aprobado (status: ${crewLeader.status}). Enviando alerta...`);
+                    
+                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                        crewLeaderId: crewLeader.id,
+                        crewLeaderName: getCrewLeaderName(crewLeader),
+                        crewLeaderEmail: crewLeader.email || 'No email',
+                        jobName: atJob.name,
+                        branchName: branch?.name || 'Unknown',
+                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                        activeUser: false, // Tiene telegram_id pero NO está aprobado
+                        hasTelegramId: true // Flag para indicar que completó el registro
+                    });
+                }
+                
+                // RECORDATORIO CONTINUO: Si el job tiene crew leader de AT pero NO en BD
+                if (!statusChanged && !crewLeader && crewLeaderFromAT && newStatusName === 'Plans In Progress') {
+                    logger.warn(`🔄 Recordatorio: Crew Leader "${crewLeaderFromAT.name}" aún NO está en BD. Enviando alerta...`);
+                    
+                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                        crewLeaderId: null,
+                        crewLeaderName: crewLeaderFromAT.name,
+                        crewLeaderEmail: crewLeaderFromAT.email || 'No email',
+                        jobName: atJob.name,
+                        branchName: branch?.name || 'Unknown',
+                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                        notInDatabase: true,
+                        activeUser: false, // NO está en BD
+                        hasTelegramId: false // NO está en BD = no tiene telegram_id
+                    });
+                }
+                
+                // ESCENARIO 2: Job ya está en "Plans In Progress" pero se le asignó crew leader ahora
+                const crewLeaderChanged = existingJob.crew_leader_id !== jobData.crew_leader_id;
+                const isPlansInProgress = newStatusName === 'Plans In Progress';
+                const hadNoCrewLeader = !existingJob.crew_leader_id;
+                const nowHasCrewLeader = !!crewLeader;
+                const nowHasCrewLeaderFromAT = !!crewLeaderFromAT;
+                
+                if (!shouldNotify && isPlansInProgress && crewLeaderChanged && hadNoCrewLeader) {
+                    if (nowHasCrewLeader) {
+                        shouldNotify = true;
+                        logger.info(`🔔 Escenario 2: Crew Leader asignado a job existente en "Plans In Progress": ${atJob.name}`);
+                        
+                        // Verificar si el crew leader tiene telegram_id
+                        if (!crewLeader.telegram_id) {
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" no tiene telegram_id. Enviando alerta de registro...`);
+                            
+                            // Enviar webhook de alerta (crew leader debe registrarse)
+                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                                crewLeaderId: crewLeader.id,
+                                crewLeaderName: getCrewLeaderName(crewLeader),
+                                crewLeaderEmail: crewLeader.email || 'No email',
+                                jobName: atJob.name,
+                                branchName: branch?.name || 'Unknown',
+                                registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                                activeUser: false, // No tiene telegram_id
+                                hasTelegramId: false // NO completó el registro
+                            });
+                        } else if (crewLeader.status !== 'active') {
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta...`);
+                            
+                            // Enviar webhook de alerta (crew leader pendiente de aprobación)
+                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                                crewLeaderId: crewLeader.id,
+                                crewLeaderName: getCrewLeaderName(crewLeader),
+                                crewLeaderEmail: crewLeader.email || 'No email',
+                                jobName: atJob.name,
+                                branchName: branch?.name || 'Unknown',
+                                registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                                activeUser: false,
+                                hasTelegramId: true
+                            });
+                        }
+                    } else if (nowHasCrewLeaderFromAT) {
+                        // Crew leader existe en AT pero NO en nuestra BD
+                        logger.warn(`⚠️  Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD (Escenario 2). Enviando alerta de registro...`);
+                        
+                        // Enviar webhook de alerta usando datos de AT
+                        await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                            crewLeaderId: null, // No existe en nuestra BD
+                            crewLeaderName: crewLeaderFromAT.name,
+                            crewLeaderEmail: crewLeaderFromAT.email || 'No email',
+                            jobName: atJob.name,
+                            branchName: branch?.name || 'Unknown',
+                            registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                            notInDatabase: true, // Flag para indicar que no está en BD
+                            activeUser: false, // NO está activo (no está en BD)
+                            hasTelegramId: false // NO está en BD = no tiene telegram_id
+                        });
+                    }
                 }
 
                 // Verificar si algo realmente cambió
@@ -364,12 +625,44 @@ async function saveJobsToDb(jobsFromAT) {
                     logger.debug(`✓ No changes for job: ${atJob.name} (AT ID: ${atJob.id})`);
                 }
 
-                // Generar notificación si es necesario
-                if (shouldNotify && !existingJob.notification_sent && crewLeader) {
+                // Generar notificación si es necesario (el sistema existente la enviará)
+                // SOLO para usuarios ACTIVOS (status = 'active')
+                const needsNotification = shouldNotify || 
+                    (!existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active' && newStatusName === 'Plans In Progress');
+                
+                if (needsNotification && !existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active') {
                     const notification = await generateNotification(atJob, crewLeader, branch, estimate);
                     if (notification) {
+                        // Agregar a la lista de notificaciones
+                        // El sistema existente (que se ejecuta cada 15 min) las procesará
                         notifications.push(notification);
+                        
+                        logger.info(`📨 Notificación generada para Crew Leader activo: ${getCrewLeaderName(crewLeader)} (será enviada por el sistema de notificaciones)`);
+                        
+                        // Marcar como notificado
+                        await Job.update(
+                            { 
+                                notification_sent: true,
+                                last_notification_sent_at: new Date()
+                            },
+                            { where: { id: existingJob.id } }
+                        );
+                        logger.info(`✅ Marcado notification_sent = true para job: ${atJob.name}`);
                     }
+                } else if (needsNotification && !existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status !== 'active') {
+                    // Crew leader tiene telegram_id pero NO está aprobado → Enviar webhook de alerta
+                    logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta al admin...`);
+                    
+                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                        crewLeaderId: crewLeader.id,
+                        crewLeaderName: getCrewLeaderName(crewLeader),
+                        crewLeaderEmail: crewLeader.email || 'No email',
+                        jobName: atJob.name,
+                        branchName: branch?.name || 'Unknown',
+                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                        activeUser: false,
+                        hasTelegramId: true
+                    });
                 }
             } else {
                 // Crear nuevo job
@@ -380,14 +673,56 @@ async function saveJobsToDb(jobsFromAT) {
                 newCount++;
                 logger.info(`✅ Created new job: ${atJob.name} (AT ID: ${atJob.id})`);
 
-                // NOTIFICACIÓN AL OPERATION MANAGER: Nuevo job con "Requires Crew Lead"
                 const newStatus = status?.name;
+                
+                // ESCENARIO 1 (Job Nuevo): Si el job viene con crew leader en AT pero NO está en nuestra BD
+                if (newStatus === 'Plans In Progress' && !crewLeader && crewLeaderFromAT) {
+                    logger.warn(`⚠️  Nuevo job con Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD. Enviando alerta...`);
+                    
+                    // Enviar webhook de alerta usando datos de AT
+                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                        crewLeaderId: null,
+                        crewLeaderName: crewLeaderFromAT.name,
+                        crewLeaderEmail: crewLeaderFromAT.email || 'No email',
+                        jobName: atJob.name,
+                        branchName: branch?.name || 'Unknown',
+                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                        notInDatabase: true,
+                        activeUser: false, // NO está en BD
+                        hasTelegramId: false // NO está en BD = no tiene telegram_id
+                    });
+                }
+                
+                // NOTIFICACIÓN AL OPERATION MANAGER: Nuevo job con "Requires Crew Lead"
                 if (newStatus === 'Requires Crew Lead' && branch) {
                     logger.info(`🔔 Nuevo job con estado "Requires Crew Lead": ${atJob.name} (Branch: ${branch.name})`);
                     const notification = await generateOperationManagerNotification(atJob, branch, estimate);
                     if (notification) {
                         notifications.push(notification);
                     }
+                }
+                
+                // NOTIFICACIÓN AL CREW LEADER: Nuevo job con "Plans In Progress" y crew leader activo
+                if (newStatus === 'Plans In Progress' && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active') {
+                    const notification = await generateNotification(atJob, crewLeader, branch, estimate);
+                    if (notification) {
+                        notifications.push(notification);
+                        logger.info(`📨 Notificación generada para Crew Leader activo (nuevo job): ${getCrewLeaderName(crewLeader)}`);
+                    }
+                } else if (newStatus === 'Plans In Progress' && crewLeader && crewLeader.telegram_id && crewLeader.status !== 'active') {
+                    // Crew leader tiene telegram_id pero NO está aprobado
+                    logger.warn(`⚠️  Nuevo job con Crew Leader "${getCrewLeaderName(crewLeader)}" pendiente de aprobación (status: ${crewLeader.status}). Enviando alerta...`);
+                    
+                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                        crewLeaderId: crewLeader.id,
+                        crewLeaderName: getCrewLeaderName(crewLeader),
+                        crewLeaderEmail: crewLeader.email || 'No email',
+                        jobName: atJob.name,
+                        branchName: branch?.name || 'Unknown',
+                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                        activeUser: false,
+                        hasTelegramId: true
+                    });
                 }
             }
 
@@ -418,13 +753,13 @@ async function generateNotification(atJob, crewLeader, branch, estimate) {
             branch: branch?.name || 'N/A',
             salesperson_name: estimate?.SalesPerson?.name || atJob.job_estimate?.salesperson?.name || 'N/A',
             client_email: estimate?.customer_email || atJob.job_estimate?.customer?.email || null,
-            crew_leader_name: crewLeader.name, // Nombre del crew leader asignado
+            crew_leader_name: getCrewLeaderName(crewLeader), // Nombre del crew leader asignado
             job_link: `https://www.attic-tech.com/jobs/${atJob.id}`,
             notification_type: 'Crew Leader Assigned',
             telegram_id: crewLeader.telegram_id
         };
 
-        logger.info(`📨 Notificación generada para Crew Leader: ${crewLeader.name} (Job: ${atJob.name})`);
+        logger.info(`📨 Notificación generada para Crew Leader: ${getCrewLeaderName(crewLeader)} (Job: ${atJob.name})`);
         return notification;
     } catch (error) {
         logger.error(`Error generando notificación para job ${atJob.id}:`, error);
@@ -497,8 +832,8 @@ class JobSyncController {
 
             const notificationCount = notifications.length;
             const message = notificationCount > 0 
-                ? `Job sync completed. ${notificationCount} notification${notificationCount > 1 ? 's' : ''} pending.`
-                : 'Job sync completed successfully. No notifications pending.';
+                ? `Job sync completed. ${notificationCount} notification${notificationCount > 1 ? 's' : ''} sent.`
+                : 'Job sync completed successfully. No notifications sent.';
 
             logger.info(`✅ Job sync completed in ${duration}s - New: ${newCount}, Updated: ${updatedCount}, Notifications: ${notificationCount}`);
 
