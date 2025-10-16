@@ -118,7 +118,7 @@ async function findBranch(branchName) {
 async function cleanupDuplicateBranches() {
     try {
         const allBranches = await Branch.findAll({
-            order: [['created_at', 'ASC']] // Más viejos primero
+            order: [['createdAt', 'ASC']] // Más viejos primero (usa camelCase de Sequelize)
         });
 
         const branchMap = new Map();
