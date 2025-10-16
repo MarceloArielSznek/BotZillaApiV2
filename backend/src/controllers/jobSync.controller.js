@@ -436,6 +436,40 @@ async function saveJobsToDb(jobsFromAT) {
                     );
                     logger.info(`✅ Notification reset completado para job: ${atJob.name}`);
                 }
+
+                // ⚠️  RESETEAR NOTIFICACIÓN: Si el crew_leader_id cambió (fue removido o cambiado a otro CL)
+                // Esto asegura que el nuevo crew leader reciba su notificación
+                const crewLeaderIdChanged = existingJob.crew_leader_id !== (crewLeader ? crewLeader.id : null);
+                if (crewLeaderIdChanged && existingJob.notification_sent) {
+                    logger.info(`🔄 Crew Leader cambió para job "${atJob.name}": ${existingJob.crew_leader_id} → ${crewLeader ? crewLeader.id : null}. Reseteando notification_sent...`);
+                    await Job.update(
+                        { 
+                            notification_sent: false,
+                            last_notification_sent_at: null
+                        },
+                        { where: { id: existingJob.id } }
+                    );
+                    // Actualizar el registro en memoria para que el resto del código lo vea actualizado
+                    existingJob.notification_sent = false;
+                    existingJob.last_notification_sent_at = null;
+                    logger.info(`✅ Notification reset completado por cambio de crew leader para job: ${atJob.name}`);
+                }
+
+                // ⚠️  LIMPIEZA: Si notification_sent = true PERO no hay crew_leader_id, resetear
+                // Esto cubre casos donde el crew leader fue removido en un sync anterior
+                if (existingJob.notification_sent && !existingJob.crew_leader_id && !crewLeader) {
+                    logger.warn(`🧹 Limpieza: Job "${atJob.name}" tiene notification_sent=true pero sin crew_leader_id. Reseteando...`);
+                    await Job.update(
+                        { 
+                            notification_sent: false,
+                            last_notification_sent_at: null
+                        },
+                        { where: { id: existingJob.id } }
+                    );
+                    existingJob.notification_sent = false;
+                    existingJob.last_notification_sent_at = null;
+                    logger.info(`✅ Limpieza completada para job: ${atJob.name}`);
+                }
                 
                 // ESCENARIO 1: Detectar si cambió a "Plans In Progress" desde "Requires Crew Lead"
                 if (statusChanged && oldStatusName === 'Requires Crew Lead' && newStatusName === 'Plans In Progress') {
