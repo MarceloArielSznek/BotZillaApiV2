@@ -174,10 +174,10 @@ async function fetchAllEstimatesFromAtticTech(apiKey, fechaInicio, fechaFin, log
     while (hasMore && page <= maxPages) {
         let queryString = `limit=${pageSize}&page=${page}&depth=2&sort=-updatedAt`;
         if (fechaInicio) {
-            queryString += `&where[updatedAt][greater_than]=${encodeURIComponent(fechaInicio)}`;
+            queryString += `&where[updatedAt][greater_than_equal]=${encodeURIComponent(fechaInicio)}`;
         }
         if (fechaFin) {
-            queryString += `&where[updatedAt][less_than]=${encodeURIComponent(fechaFin)}`;
+            queryString += `&where[updatedAt][less_than_equal]=${encodeURIComponent(fechaFin)}`;
         }
 
         // Log de la query que se está construyendo
@@ -697,8 +697,10 @@ class AutomationsController {
                 startDate.setDate(startDate.getDate() - 45); // Últimos 45 días
                 startDate = startDate.toISOString().split('T')[0];
                 
-                // Fecha de fin por defecto: fecha actual (día de ejecución)
-                endDate = new Date().toISOString().split('T')[0];
+                // Fecha de fin por defecto: MAÑANA (+1 día para asegurar que capturamos todo)
+                endDate = new Date();
+                endDate.setDate(endDate.getDate() + 1); // Agregar 1 día
+                endDate = endDate.toISOString().split('T')[0];
                 
                 // Si hay parámetros en el body, usarlos
                 if (req.body && Object.keys(req.body).length > 0) {

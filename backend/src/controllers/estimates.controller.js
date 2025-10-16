@@ -190,8 +190,10 @@ class EstimatesController {
             startDate.setDate(startDate.getDate() - 45); // Últimos 45 días
             startDate = startDate.toISOString().split('T')[0];
             
-            // Fecha de fin por defecto: fecha actual (día de ejecución)
-            let endDate = new Date().toISOString().split('T')[0];
+            // Fecha de fin por defecto: MAÑANA (+1 día para asegurar que capturamos todo)
+            let endDate = new Date();
+            endDate.setDate(endDate.getDate() + 1); // Agregar 1 día
+            endDate = endDate.toISOString().split('T')[0];
             
             // Si hay parámetros en el body, usarlos
             if (req.body && Object.keys(req.body).length > 0) {
