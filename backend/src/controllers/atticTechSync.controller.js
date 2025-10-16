@@ -6,6 +6,7 @@ const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { Employee, Branch } = require('../models');
 const { Op } = require('sequelize');
+const { findOrCreateBranch: branchHelperFindOrCreate } = require('../utils/branchHelper');
 
 /**
  * Login a Attic Tech API
@@ -91,51 +92,10 @@ function classifyUser(user) {
 
 /**
  * Encontrar o crear branch en nuestra BD
+ * Usa helper centralizado para evitar duplicados
  */
 async function findOrCreateBranch(branchName) {
-    if (!branchName) return null;
-
-    try {
-        const trimmedName = branchName.trim();
-        
-        // Buscar branch existente con nombre similar (case-insensitive y sin espacios extra)
-        const existingBranches = await Branch.findAll({
-            where: { 
-                name: {
-                    [Op.iLike]: `%${trimmedName}%`
-                }
-            }
-        });
-
-        // Buscar coincidencia exacta después de normalizar
-        let branch = existingBranches.find(b => {
-            const normalizedDbName = b.name.trim().toLowerCase().replace(/\s+/g, ' ');
-            const normalizedSearchName = trimmedName.toLowerCase().replace(/\s+/g, ' ');
-            return normalizedDbName === normalizedSearchName;
-        });
-
-        // Si no existe, crear uno nuevo
-        if (!branch) {
-            // Verificar una vez más con búsqueda exacta antes de crear
-            branch = await Branch.findOne({
-                where: { 
-                    name: trimmedName
-                }
-            });
-
-            if (!branch) {
-                branch = await Branch.create({
-                    name: trimmedName
-                });
-                logger.info(`✅ Created new branch: ${trimmedName}`);
-            }
-        }
-
-        return branch;
-    } catch (error) {
-        logger.error(`Error finding/creating branch: ${branchName}`, { error: error.message });
-        return null;
-    }
+    return await branchHelperFindOrCreate(branchName);
 }
 
 /**

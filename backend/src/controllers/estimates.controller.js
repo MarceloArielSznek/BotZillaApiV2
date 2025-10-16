@@ -1,6 +1,7 @@
 const { Op } = require('sequelize');
 const { Estimate, SalesPerson, Branch, EstimateStatus, Job, SalesPersonBranch } = require('../models');
 const https = require('https');
+const { findOrCreateBranch: branchHelperFindOrCreate } = require('../utils/branchHelper');
 
 // Función para transformar la estructura de los datos para el frontend
 const transformEstimateForFrontend = (estimate) => {
@@ -502,18 +503,8 @@ class EstimatesController {
     }
 
     async findOrCreateBranch(name, logMessages = []) {
-        if (!name) return null;
-        
-        const [branch, created] = await Branch.findOrCreate({
-            where: { name },
-            defaults: { name }
-        });
-
-        if (created) {
-            logMessages.push(`🏢 Created new branch: ${name}`);
-        }
-
-        return branch;
+        // Usar helper centralizado para evitar duplicados
+        return await branchHelperFindOrCreate(name, logMessages);
     }
 
     async findOrCreateSalesPerson(name, branchId, logMessages = []) {

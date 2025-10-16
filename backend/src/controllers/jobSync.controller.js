@@ -1,6 +1,7 @@
 const axios = require('axios');
 const { logger } = require('../utils/logger');
 const { Op } = require('sequelize');
+const { findBranch: branchHelperFind } = require('../utils/branchHelper');
 
 // Importar modelos
 const Job = require('../models/Job');
@@ -97,22 +98,10 @@ async function findOrCreateJobStatus(statusName) {
 
 /**
  * Buscar Branch en nuestra BD
+ * Usa helper centralizado para búsqueda consistente
  */
 async function findBranch(branchName) {
-    if (!branchName) return null;
-
-    try {
-        const branch = await Branch.findOne({ 
-            where: { 
-                name: { [Op.iLike]: `%${branchName.trim()}%` }
-            } 
-        });
-
-        return branch;
-    } catch (error) {
-        logger.error(`Error finding branch: ${branchName}`, { error: error.message });
-        return null;
-    }
+    return await branchHelperFind(branchName);
 }
 
 /**

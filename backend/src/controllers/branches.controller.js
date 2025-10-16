@@ -1,5 +1,6 @@
 const { Branch, SalesPersonBranch, SalesPerson, Estimate } = require('../models');
 const { Op } = require('sequelize');
+const { cleanupDuplicateBranches } = require('../utils/branchHelper');
 
 // GET /api/branches - Obtener todas las branches
 exports.getAllBranches = async (req, res) => {
@@ -392,6 +393,52 @@ exports.removeSalesPerson = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Error removing salesperson',
+            error: error.message
+        });
+    }
+};
+
+// POST /api/branches/cleanup-duplicates - Limpiar branches duplicados
+exports.cleanupDuplicates = async (req, res) => {
+    try {
+        console.log('🧹 Starting branch cleanup process...');
+        
+        const result = await cleanupDuplicateBranches();
+        
+        if (!result.success) {
+            return res.status(500).json({
+                success: false,
+                message: 'Error during cleanup process',
+                error: result.error
+            });
+        }
+        
+        if (result.duplicatesFound === 0) {
+            return res.status(200).json({
+                success: true,
+                message: 'No duplicate branches found',
+                result: {
+                    duplicatesFound: 0,
+                    duplicatesDeleted: 0
+                }
+            });
+        }
+        
+        res.status(200).json({
+            success: true,
+            message: `Successfully cleaned up ${result.duplicatesDeleted} duplicate branches`,
+            result: {
+                duplicatesFound: result.duplicatesFound,
+                duplicatesDeleted: result.duplicatesDeleted,
+                consolidationMap: result.consolidationMap
+            }
+        });
+        
+    } catch (error) {
+        console.error('❌ Error in cleanup duplicates:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Error cleaning up duplicate branches',
             error: error.message
         });
     }

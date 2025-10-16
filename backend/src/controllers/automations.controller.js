@@ -26,6 +26,7 @@ const {
 } = require('../utils/logger');
 const { caches } = require('../utils/cache');
 const makeWebhookService = require('../services/makeWebhook.service');
+const { findOrCreateBranch: branchHelperFindOrCreate } = require('../utils/branchHelper');
 require('dotenv').config();
 const sequelize = require('../config/database');
 const { calculateJobPerformance } = require('../services/performance.service');
@@ -531,18 +532,8 @@ async function findSalesPerson(name, branchId, logMessages = []) {
 module.exports = { findSalesPerson };
 
 async function findOrCreateBranch(name, logMessages = []) {
-    if (!name) return null;
-    
-    const [branch, created] = await Branch.findOrCreate({
-        where: { name },
-        defaults: { name }
-    });
-
-    if (created) {
-        logMessages.push(`🏢 Created new branch: ${name}`);
-    }
-
-    return branch;
+    // Usar helper centralizado para evitar duplicados
+    return await branchHelperFindOrCreate(name, logMessages);
 }
 
 async function findOrCreateEstimateStatus(name, logMessages = []) {

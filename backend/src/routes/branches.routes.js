@@ -65,4 +65,12 @@ router.delete('/:id/salespersons/:salesPersonId',
     branchesController.removeSalesPerson
 );
 
+// POST /api/branches/cleanup-duplicates - Limpiar branches duplicados (requiere admin)
+const { isAdmin } = require('../middleware/roles.middleware');
+router.post('/cleanup-duplicates', 
+    isAdmin, // Solo admins pueden limpiar duplicados
+    cacheInvalidationMiddleware('branch'),
+    branchesController.cleanupDuplicates
+);
+
 module.exports = router; 
