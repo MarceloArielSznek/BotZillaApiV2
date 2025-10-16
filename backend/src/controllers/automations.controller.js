@@ -674,12 +674,15 @@ class AutomationsController {
 
     async syncExternalEstimates(req, res) {
         const logMessages = [];
-        const background = req.query.background === 'true';
+        // Por defecto usar background=true para evitar timeouts en Make.com
+        // Solo si explícitamente se pasa background=false se ejecuta en foreground
+        const background = req.query.background !== 'false';
         
         // Log de los parámetros recibidos
         console.log('🔍 Backend - Parámetros recibidos:', {
             body: req.body,
             query: req.query,
+            background: background,
             hasBodyParams: Object.keys(req.body || {}).length > 0,
             hasQueryParams: Object.keys(req.query || {}).length > 0,
             startDateInBody: req.body?.startDate,
@@ -687,7 +690,7 @@ class AutomationsController {
             bodyKeys: Object.keys(req.body || {})
         });
         
-        logMessages.push('🚀 Starting synchronization...');
+        logMessages.push(`🚀 Starting ${background ? 'background' : 'foreground'} synchronization...`);
 
         const processSync = async () => {
             try {
@@ -754,9 +757,19 @@ class AutomationsController {
         };
 
         if (background) {
-            res.status(202).json({ success: true, message: 'Background synchronization started.' });
-            processSync();
+            // Responder inmediatamente con 202 Accepted
+            res.status(202).json({ 
+                success: true, 
+                message: 'Background synchronization started. This may take several minutes.',
+                status: 'processing',
+                timestamp: new Date().toISOString()
+            });
+            // Ejecutar sync en background sin esperar
+            processSync().catch(error => {
+                logger.error('Background sync failed', { error: error.message });
+            });
         } else {
+            // Modo foreground: esperar a que termine
             await processSync();
         }
     }
