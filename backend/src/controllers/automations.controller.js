@@ -25,6 +25,7 @@ const {
     logger
 } = require('../utils/logger');
 const { caches } = require('../utils/cache');
+const makeWebhookService = require('../services/makeWebhook.service');
 require('dotenv').config();
 const sequelize = require('../config/database');
 const { calculateJobPerformance } = require('../services/performance.service');
@@ -693,17 +694,20 @@ class AutomationsController {
         logMessages.push(`🚀 Starting ${background ? 'background' : 'foreground'} synchronization...`);
 
         const processSync = async () => {
+            const syncStartTime = Date.now();
+            let startDate, endDate, totalFetched = 0, newCount = 0, updatedCount = 0;
+
             try {
                 logMessages.push('🔑 Logging into Attic Tech...');
                 const apiKey = await loginToAtticTech(logMessages);
 
                 // Usar parámetros del frontend si están disponibles, sino usar valores por defecto
-                let startDate = new Date();
+                startDate = new Date();
                 startDate.setDate(startDate.getDate() - 45); // Últimos 45 días
                 startDate = startDate.toISOString().split('T')[0];
                 
                 // Fecha de fin por defecto: fecha actual (día de ejecución)
-                let endDate = new Date().toISOString().split('T')[0];
+                endDate = new Date().toISOString().split('T')[0];
                 
                 // Si hay parámetros en el body, usarlos
                 if (req.body && Object.keys(req.body).length > 0) {
@@ -725,9 +729,25 @@ class AutomationsController {
                     endDateType: typeof endDate
                 });
                 const allLeads = await fetchAllEstimatesFromAtticTech(apiKey, startDate, endDate, logMessages);
+                totalFetched = allLeads.length;
 
                 if (allLeads.length === 0) {
                     logMessages.push('✅ No new or updated estimates to process.');
+                    
+                    // Enviar webhook de resultado (si está en background)
+                    if (background) {
+                        const syncDuration = Math.round((Date.now() - syncStartTime) / 1000);
+                        await makeWebhookService.sendSyncEstimatesResult({
+                            status: 'success',
+                            newCount: 0,
+                            updatedCount: 0,
+                            totalFetched: 0,
+                            startDate,
+                            endDate,
+                            durationSeconds: syncDuration
+                        });
+                    }
+                    
                     if (!background) {
                         res.status(200).json({ success: true, message: 'Synchronization finished. No new data.', log: logMessages });
                     }
@@ -738,18 +758,50 @@ class AutomationsController {
                 const estimatesData = mapAtticTechDataToEstimates(allLeads);
                 
                 logMessages.push('💾 Saving estimates to the database...');
-                const { newCount, updatedCount } = await saveEstimatesToDb(estimatesData, logMessages);
+                const dbResult = await saveEstimatesToDb(estimatesData, logMessages);
+                newCount = dbResult.newCount;
+                updatedCount = dbResult.updatedCount;
                 
+                const syncDuration = Math.round((Date.now() - syncStartTime) / 1000);
                 const summary = `✅ Background synchronization finished. New: ${newCount}, Updated: ${updatedCount}.`;
                 logMessages.push(summary);
-                logger.info(summary);
+                logger.info(summary, { duration: `${syncDuration}s`, totalFetched });
+
+                // Enviar webhook de resultado (si está en background)
+                if (background) {
+                    await makeWebhookService.sendSyncEstimatesResult({
+                        status: 'success',
+                        newCount,
+                        updatedCount,
+                        totalFetched,
+                        startDate,
+                        endDate,
+                        durationSeconds: syncDuration
+                    });
+                }
 
                 if (!background) {
                     res.status(200).json({ success: true, message: summary, new: newCount, updated: updatedCount, log: logMessages });
                 }
             } catch (error) {
+                const syncDuration = Math.round((Date.now() - syncStartTime) / 1000);
                 logMessages.push(`❌ Error during synchronization: ${error.message}`);
-                logger.error('Synchronization failed:', { error: error.message, log: logMessages });
+                logger.error('Synchronization failed:', { error: error.message, duration: `${syncDuration}s`, log: logMessages });
+                
+                // Enviar webhook de error (si está en background)
+                if (background && startDate && endDate) {
+                    await makeWebhookService.sendSyncEstimatesResult({
+                        status: 'error',
+                        newCount,
+                        updatedCount,
+                        totalFetched,
+                        startDate,
+                        endDate,
+                        durationSeconds: syncDuration,
+                        error: error.message
+                    });
+                }
+                
                 if (!background && !res.headersSent) {
                     res.status(500).json({ success: false, message: 'Synchronization failed.', log: logMessages });
                 }

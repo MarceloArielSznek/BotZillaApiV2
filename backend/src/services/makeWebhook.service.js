@@ -318,6 +318,77 @@ class MakeWebhookService {
     }
 
     /**
+     * Enviar notificación de resultados de sync de estimates
+     * @param {object} syncResults - Resultados del sync
+     * @param {number} syncResults.newCount - Nuevos estimates creados
+     * @param {number} syncResults.updatedCount - Estimates actualizados
+     * @param {number} syncResults.totalFetched - Total de estimates obtenidos de AT
+     * @param {string} syncResults.startDate - Fecha de inicio del rango
+     * @param {string} syncResults.endDate - Fecha de fin del rango
+     * @param {number} syncResults.durationSeconds - Duración del sync en segundos
+     * @param {string} syncResults.status - Estado: 'success' o 'error'
+     * @param {string} syncResults.error - Mensaje de error si falló
+     */
+    async sendSyncEstimatesResult(syncResults) {
+        const webhookUrl = process.env.MAKE_SYNC_CALLBACK_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.info('MAKE_SYNC_CALLBACK_WEBHOOK_URL not configured. Skipping sync result notification.');
+            return false;
+        }
+
+        try {
+            const payload = {
+                event: 'sync_estimates_completed',
+                timestamp: new Date().toISOString(),
+                status: syncResults.status || 'success',
+                results: {
+                    total_fetched: syncResults.totalFetched || 0,
+                    new_estimates: syncResults.newCount || 0,
+                    updated_estimates: syncResults.updatedCount || 0,
+                    total_processed: (syncResults.newCount || 0) + (syncResults.updatedCount || 0)
+                },
+                date_range: {
+                    start_date: syncResults.startDate,
+                    end_date: syncResults.endDate
+                },
+                performance: {
+                    duration_seconds: syncResults.durationSeconds || 0,
+                    duration_minutes: Math.round((syncResults.durationSeconds || 0) / 60 * 10) / 10
+                },
+                error: syncResults.error || null,
+                environment: process.env.NODE_ENV || 'production'
+            };
+
+            logger.info('Sending sync estimates result to Make.com', {
+                status: payload.status,
+                newCount: syncResults.newCount,
+                updatedCount: syncResults.updatedCount,
+                duration: `${payload.performance.duration_minutes} min`
+            });
+
+            await axios.post(webhookUrl, payload, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': uuidv4()
+                },
+                timeout: 10000
+            });
+
+            logger.info('Sync estimates result notification sent successfully');
+            return true;
+
+        } catch (error) {
+            logger.error('Error sending sync estimates result webhook', {
+                message: error.message,
+                responseData: error.response?.data
+            });
+            // No throw - no queremos que esto bloquee el proceso principal
+            return false;
+        }
+    }
+
+    /**
      * Envía una actualización de membresía de grupo a Make.com
      * @param {object} payload
      * @param {string} payload.employeeTelegramId - El ID de Telegram del empleado
