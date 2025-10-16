@@ -471,6 +471,175 @@ class EmployeeController {
     }
 
     /**
+     * Enviar recordatorios de registro en masa (bulk)
+     * POST /api/employees/send-bulk-reminders
+     * Body: { employeeIds: [1, 2, 3] }
+     */
+    async sendBulkRegistrationReminders(req, res) {
+        try {
+            const { employeeIds } = req.body;
+
+            if (!employeeIds || !Array.isArray(employeeIds) || employeeIds.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'employeeIds array is required and must not be empty.'
+                });
+            }
+
+            logger.info('Starting bulk registration reminders', { count: employeeIds.length });
+
+            const results = {
+                total: employeeIds.length,
+                sent: 0,
+                blocked: 0,
+                alreadyRegistered: 0,
+                errors: []
+            };
+
+            // Obtener todos los employees de una vez
+            const employees = await Employee.findAll({
+                where: {
+                    id: {
+                        [Op.in]: employeeIds
+                    },
+                    status: 'pending',
+                    telegram_id: {
+                        [Op.is]: null
+                    }
+                },
+                include: [{
+                    model: Branch,
+                    as: 'branch'
+                }]
+            });
+
+            // Verificar estado en Attic Tech para employees que tienen attic_tech_user_id
+            const axios = require('axios');
+            const { loginToAtticTech } = require('../utils/atticTechAuth');
+            
+            let apiKey = null;
+            try {
+                apiKey = await loginToAtticTech();
+            } catch (error) {
+                logger.warn('Could not login to Attic Tech for blocked check', { error: error.message });
+            }
+
+            // Array para acumular los employees que SÍ se enviarán
+            const employeesToSend = [];
+
+            // Validar cada employee y acumular los que NO están bloqueados
+            for (const employee of employees) {
+                try {
+                    // Si tiene attic_tech_user_id, verificar que no esté bloqueado
+                    if (employee.attic_tech_user_id && apiKey) {
+                        try {
+                            const userResponse = await axios.get(`https://www.attic-tech.com/api/users/${employee.attic_tech_user_id}`, {
+                                headers: {
+                                    'Authorization': `JWT ${apiKey}`,
+                                    'Content-Type': 'application/json'
+                                },
+                                params: {
+                                    depth: 1
+                                },
+                                timeout: 5000
+                            });
+
+                            const atUser = userResponse.data;
+                            
+                            if (atUser.isBlocked) {
+                                logger.warn('Employee is blocked in Attic Tech, skipping', {
+                                    employeeId: employee.id,
+                                    email: employee.email
+                                });
+                                results.blocked++;
+                                results.errors.push({
+                                    employeeId: employee.id,
+                                    email: employee.email,
+                                    reason: 'User is blocked in Attic Tech'
+                                });
+                                continue;
+                            }
+                        } catch (atError) {
+                            logger.warn('Could not verify AT status, will send anyway', {
+                                employeeId: employee.id,
+                                error: atError.message
+                            });
+                        }
+                    }
+
+                    // Agregar al array de employees a enviar
+                    employeesToSend.push({
+                        employeeId: employee.id,
+                        firstName: employee.first_name,
+                        lastName: employee.last_name,
+                        email: employee.email,
+                        role: employee.role,
+                        branchName: employee.branch?.name || 'N/A',
+                        registrationDate: employee.registration_date,
+                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`
+                    });
+
+                } catch (error) {
+                    logger.error('Error validating employee', {
+                        employeeId: employee.id,
+                        email: employee.email,
+                        error: error.message
+                    });
+                    results.errors.push({
+                        employeeId: employee.id,
+                        email: employee.email,
+                        reason: error.message
+                    });
+                }
+            }
+
+            // Enviar UN SOLO webhook con todos los employees válidos
+            if (employeesToSend.length > 0) {
+                try {
+                    await makeWebhookService.sendBulkRegistrationReminders(employeesToSend);
+                    results.sent = employeesToSend.length;
+                    logger.info('Bulk reminders sent successfully', { 
+                        count: employeesToSend.length,
+                        emails: employeesToSend.map(e => e.email).join(', ')
+                    });
+                } catch (webhookError) {
+                    logger.error('Error sending bulk webhook', {
+                        count: employeesToSend.length,
+                        error: webhookError.message
+                    });
+                    // Marcar todos como error si falla el webhook
+                    employeesToSend.forEach(emp => {
+                        results.errors.push({
+                            employeeId: emp.employeeId,
+                            email: emp.email,
+                            reason: 'Webhook failed: ' + webhookError.message
+                        });
+                    });
+                }
+            }
+
+            logger.info('Bulk registration reminders completed', results);
+
+            res.status(200).json({
+                success: true,
+                message: `Sent ${results.sent} of ${results.total} reminders successfully.`,
+                data: results
+            });
+
+        } catch (error) {
+            logger.error('Error sending bulk registration reminders', { 
+                error: error.message,
+                stack: error.stack
+            });
+            res.status(500).json({ 
+                success: false, 
+                message: 'Failed to send bulk registration reminders.',
+                error: error.message
+            });
+        }
+    }
+
+    /**
      * Rechazar un empleado
      */
     async rejectEmployee(req, res) {

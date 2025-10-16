@@ -2,12 +2,13 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
     TableHead, TableRow, Button, Chip, CircularProgress, Alert, IconButton, Tooltip,
-    TextField, InputAdornment, FormControl, InputLabel, Select, MenuItem, Grid
+    TextField, InputAdornment, FormControl, InputLabel, Select, MenuItem, Grid, Checkbox
 } from '@mui/material';
 import EmailIcon from '@mui/icons-material/Email';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import SendIcon from '@mui/icons-material/Send';
 import employeeService, { Employee } from '@/services/employeeService';
 
 interface AwaitingRegistrationTableProps {
@@ -25,6 +26,10 @@ const AwaitingRegistrationTable: React.FC<AwaitingRegistrationTableProps> = ({ a
     const [searchTerm, setSearchTerm] = useState('');
     const [branchFilter, setBranchFilter] = useState<string>('all');
     const [roleFilter, setRoleFilter] = useState<string>('all');
+    
+    // Estados para selección múltiple
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [sendingBulk, setSendingBulk] = useState(false);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -46,21 +51,6 @@ const AwaitingRegistrationTable: React.FC<AwaitingRegistrationTableProps> = ({ a
             loadData();
         }
     }, [active, loadData]);
-
-    const handleSendReminder = async (employee: Employee) => {
-        setSendingReminder(employee.id);
-        setError(null);
-        setSuccess(null);
-
-        try {
-            const result = await employeeService.sendRegistrationReminder(employee.id);
-            setSuccess(`✉️ Registration reminder sent to ${employee.email}`);
-        } catch (err: any) {
-            setError(err.response?.data?.message || 'Failed to send reminder');
-        } finally {
-            setSendingReminder(null);
-        }
-    };
 
     const formatRole = (role: string): string => {
         return role.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
@@ -108,6 +98,86 @@ const AwaitingRegistrationTable: React.FC<AwaitingRegistrationTableProps> = ({ a
         });
     }, [employees, searchTerm, branchFilter, roleFilter]);
 
+    // Verificar si todos están seleccionados
+    const allSelected = filteredEmployees.length > 0 && selectedIds.size === filteredEmployees.length;
+    const someSelected = selectedIds.size > 0 && selectedIds.size < filteredEmployees.length;
+
+    const handleSendReminder = async (employee: Employee) => {
+        setSendingReminder(employee.id);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const result = await employeeService.sendRegistrationReminder(employee.id);
+            setSuccess(`✉️ Registration reminder sent to ${employee.email}`);
+        } catch (err: any) {
+            setError(err.response?.data?.message || 'Failed to send reminder');
+        } finally {
+            setSendingReminder(null);
+        }
+    };
+
+    // Manejar selección individual
+    const handleToggleSelect = (employeeId: number) => {
+        setSelectedIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(employeeId)) {
+                newSet.delete(employeeId);
+            } else {
+                newSet.add(employeeId);
+            }
+            return newSet;
+        });
+    };
+
+    // Manejar "Select All"
+    const handleToggleSelectAll = () => {
+        if (selectedIds.size === filteredEmployees.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredEmployees.map(emp => emp.id)));
+        }
+    };
+
+    // Enviar recordatorios masivos
+    const handleSendBulkReminders = async () => {
+        if (selectedIds.size === 0) return;
+
+        setSendingBulk(true);
+        setError(null);
+        setSuccess(null);
+
+        try {
+            const result = await employeeService.sendBulkRegistrationReminders(Array.from(selectedIds));
+            
+            // Mostrar resultados detallados
+            const { sent, blocked, total, errors } = result.data;
+            
+            if (sent === total) {
+                setSuccess(`✅ Successfully sent ${sent} registration reminders!`);
+            } else {
+                const messages = [`✅ Sent ${sent} of ${total} reminders.`];
+                if (blocked > 0) {
+                    messages.push(`⚠️ ${blocked} employees are blocked in Attic Tech.`);
+                }
+                if (errors.length > 0) {
+                    messages.push(`❌ ${errors.length} failed to send.`);
+                }
+                setSuccess(messages.join(' '));
+            }
+
+            // Limpiar selección
+            setSelectedIds(new Set());
+            
+            // Recargar datos
+            await loadData();
+        } catch (err: any) {
+            setError(err.response?.data?.message || 'Failed to send bulk reminders');
+        } finally {
+            setSendingBulk(false);
+        }
+    };
+
     if (loading) {
         return (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -128,6 +198,19 @@ const AwaitingRegistrationTable: React.FC<AwaitingRegistrationTableProps> = ({ a
                     </Typography>
                 </Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {selectedIds.size > 0 && (
+                        <Button
+                            variant="contained"
+                            color="primary"
+                            size="small"
+                            startIcon={sendingBulk ? <CircularProgress size={16} color="inherit" /> : <SendIcon />}
+                            onClick={handleSendBulkReminders}
+                            disabled={sendingBulk}
+                            sx={{ textTransform: 'none' }}
+                        >
+                            {sendingBulk ? 'Sending...' : `Send to Selected (${selectedIds.size})`}
+                        </Button>
+                    )}
                     {employees.length > 0 && (
                         <Chip 
                             label={`${filteredEmployees.length} of ${employees.length} awaiting`} 
@@ -218,6 +301,14 @@ const AwaitingRegistrationTable: React.FC<AwaitingRegistrationTableProps> = ({ a
                     <Table>
                         <TableHead>
                             <TableRow>
+                                <TableCell padding="checkbox" sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>
+                                    <Checkbox
+                                        checked={allSelected}
+                                        indeterminate={someSelected}
+                                        onChange={handleToggleSelectAll}
+                                        disabled={filteredEmployees.length === 0}
+                                    />
+                                </TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>Name</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>Email</TableCell>
                                 <TableCell sx={{ fontWeight: 'bold', bgcolor: 'action.hover' }}>Role</TableCell>
@@ -231,8 +322,17 @@ const AwaitingRegistrationTable: React.FC<AwaitingRegistrationTableProps> = ({ a
                                 <TableRow 
                                     key={employee.id}
                                     hover
-                                    sx={{ '&:last-child td': { border: 0 } }}
+                                    sx={{ 
+                                        '&:last-child td': { border: 0 },
+                                        bgcolor: selectedIds.has(employee.id) ? 'action.selected' : 'inherit'
+                                    }}
                                 >
+                                    <TableCell padding="checkbox">
+                                        <Checkbox
+                                            checked={selectedIds.has(employee.id)}
+                                            onChange={() => handleToggleSelect(employee.id)}
+                                        />
+                                    </TableCell>
                                     <TableCell>
                                         {employee.first_name} {employee.last_name}
                                     </TableCell>

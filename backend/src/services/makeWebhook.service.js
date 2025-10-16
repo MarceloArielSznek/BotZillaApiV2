@@ -249,6 +249,15 @@ class MakeWebhookService {
      * @param {object} employeeData - Datos del empleado
      */
     async sendRegistrationReminder(employeeData) {
+        // Convertir a array y usar la función bulk
+        return this.sendBulkRegistrationReminders([employeeData]);
+    }
+
+    /**
+     * Enviar recordatorios de registro a múltiples employees (bulk)
+     * @param {Array<object>} employeesData - Array de datos de empleados
+     */
+    async sendBulkRegistrationReminders(employeesData) {
         const webhookUrl = process.env.MAKE_REGISTRATION_REMINDER_WEBHOOK_URL;
 
         if (!webhookUrl) {
@@ -256,27 +265,33 @@ class MakeWebhookService {
             return false;
         }
 
+        if (!Array.isArray(employeesData) || employeesData.length === 0) {
+            logger.warn('No employees data provided for bulk reminders');
+            return false;
+        }
+
         try {
             const payload = {
-                event: 'registration_reminder',
+                event: 'bulk_registration_reminder',
                 timestamp: new Date().toISOString(),
-                employee: {
-                    id: employeeData.employeeId,
-                    first_name: employeeData.firstName,
-                    last_name: employeeData.lastName,
-                    full_name: `${employeeData.firstName} ${employeeData.lastName}`,
-                    email: employeeData.email,
-                    role: employeeData.role,
-                    branch: employeeData.branchName,
-                    registration_date: employeeData.registrationDate,
-                    registration_url: employeeData.registrationUrl
-                },
+                count: employeesData.length,
+                employees: employeesData.map(emp => ({
+                    id: emp.employeeId,
+                    first_name: emp.firstName,
+                    last_name: emp.lastName,
+                    full_name: `${emp.firstName} ${emp.lastName}`,
+                    email: emp.email,
+                    role: emp.role,
+                    branch: emp.branchName,
+                    registration_date: emp.registrationDate,
+                    registration_url: emp.registrationUrl
+                })),
                 environment: process.env.NODE_ENV || 'production'
             };
 
-            logger.info('Sending registration reminder webhook to Make.com', {
-                employeeId: employeeData.employeeId,
-                email: employeeData.email
+            logger.info('Sending bulk registration reminder webhook to Make.com', {
+                count: employeesData.length,
+                emails: employeesData.map(e => e.email).join(', ')
             });
 
             await axios.post(webhookUrl, payload, {
@@ -284,15 +299,18 @@ class MakeWebhookService {
                     'Content-Type': 'application/json',
                     'X-Request-ID': uuidv4()
                 },
-                timeout: 10000
+                timeout: 30000 // 30 segundos para bulk
             });
 
-            logger.info('Registration reminder webhook sent successfully');
+            logger.info('Bulk registration reminder webhook sent successfully', {
+                count: employeesData.length
+            });
             return true;
 
         } catch (error) {
-            logger.error('Error sending registration reminder webhook', {
+            logger.error('Error sending bulk registration reminder webhook', {
                 message: error.message,
+                count: employeesData.length,
                 responseData: error.response?.data
             });
             throw error;

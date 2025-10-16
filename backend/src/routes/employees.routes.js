@@ -77,4 +77,17 @@ router.post(
     employeeController.sendRegistrationReminder
 );
 
+/**
+ * @route POST /api/employees/send-bulk-reminders
+ * @description Enviar recordatorios de registro a múltiples employees
+ * @access Private (Admin only)
+ * @body { employeeIds: [1, 2, 3] }
+ */
+router.post(
+    '/send-bulk-reminders',
+    verifyToken,
+    isAdmin,
+    employeeController.sendBulkRegistrationReminders
+);
+
 module.exports = router;

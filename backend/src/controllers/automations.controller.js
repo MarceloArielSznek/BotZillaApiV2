@@ -164,10 +164,12 @@ async function fetchAllEstimatesFromAtticTech(apiKey, fechaInicio, fechaFin, log
     let page = 1;
     let hasMore = true;
     const pageSize = 100;
+    const maxPages = 50; // Límite de seguridad para evitar loops infinitos
 
     logMessages.push(`📊 Starting to fetch estimates from ${fechaInicio} to ${fechaFin}`);
+    console.log('🔍 [SYNC] Starting estimate fetch process', { fechaInicio, fechaFin, page });
 
-    while (hasMore) {
+    while (hasMore && page <= maxPages) {
         let queryString = `limit=${pageSize}&page=${page}&depth=2&sort=-updatedAt`;
         if (fechaInicio) {
             queryString += `&where[updatedAt][greater_than]=${encodeURIComponent(fechaInicio)}`;
@@ -197,47 +199,83 @@ async function fetchAllEstimatesFromAtticTech(apiKey, fechaInicio, fechaFin, log
         };
 
         try {
+            console.log(`🔍 [SYNC] Fetching page ${page}...`);
+            
             const leads = await new Promise((resolve, reject) => {
-                const req = https.request({ ...options, timeout: 300000 }, (resApi) => {
+                const req = https.request({ ...options, timeout: 120000 }, (resApi) => {
                     let data = '';
-                    resApi.on('data', chunk => { data += chunk; });
+                    let dataSize = 0;
+                    
+                    resApi.on('data', chunk => { 
+                        data += chunk;
+                        dataSize += chunk.length;
+                    });
+                    
                     resApi.on('end', () => {
+                        console.log(`🔍 [SYNC] Response received for page ${page} (${Math.round(dataSize / 1024)}KB)`);
+                        
                         if (resApi.statusCode === 200) {
                             try {
                                 const json = JSON.parse(data);
-                                resolve(json.docs || []);
-                                hasMore = page < (json.totalPages || 1);
+                                const docs = json.docs || [];
+                                const totalPages = json.totalPages || 1;
+                                
+                                console.log(`🔍 [SYNC] Page ${page}/${totalPages}: ${docs.length} estimates`);
+                                
+                                resolve(docs);
+                                hasMore = page < totalPages;
                             } catch (e) {
+                                console.error(`❌ [SYNC] Parse error on page ${page}:`, e.message);
                                 reject(new Error('Error parsing Attic Tech API response'));
                             }
                         } else {
+                            console.error(`❌ [SYNC] API error on page ${page}: ${resApi.statusCode}`);
                             reject(new Error(`Attic Tech API error: ${resApi.statusCode}`));
                         }
                     });
                 });
-                req.on('error', reject);
-                req.on('timeout', () => {
-                    req.destroy();
-                    reject(new Error('Request to Attic Tech API timed out (5 minutes)'));
+                
+                req.on('error', (err) => {
+                    console.error(`❌ [SYNC] Request error on page ${page}:`, err.message);
+                    reject(err);
                 });
+                
+                req.on('timeout', () => {
+                    console.error(`❌ [SYNC] Timeout on page ${page}`);
+                    req.destroy();
+                    reject(new Error('Request to Attic Tech API timed out (2 minutes)'));
+                });
+                
                 req.end();
             });
 
             allLeads = allLeads.concat(leads);
-            logMessages.push(`📄 Fetched page ${page}: ${leads.length} estimates`);
+            logMessages.push(`📄 Fetched page ${page}: ${leads.length} estimates (Total: ${allLeads.length})`);
+            console.log(`✅ [SYNC] Page ${page} complete. Total so far: ${allLeads.length}`);
             
             if (leads.length < pageSize) {
                 hasMore = false;
+                console.log(`🏁 [SYNC] Last page reached (${leads.length} < ${pageSize})`);
             } else {
                 page++;
+                // Pequeño delay entre requests para no sobrecargar
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
         } catch (error) {
+            console.error(`❌ [SYNC] Error on page ${page}:`, error.message);
             logMessages.push(`❌ Error fetching page ${page}: ${error.message}`);
             throw error;
         }
     }
 
+    if (page > maxPages) {
+        const warning = `⚠️ Reached maximum page limit (${maxPages}). Some estimates may not be synced.`;
+        logMessages.push(warning);
+        console.warn(`⚠️ [SYNC] ${warning}`);
+    }
+
     logMessages.push(`✅ Total estimates fetched: ${allLeads.length}`);
+    console.log(`🎉 [SYNC] Fetch complete! Total: ${allLeads.length} estimates`);
     return allLeads;
 }
 
@@ -657,11 +695,12 @@ class AutomationsController {
                 const apiKey = await loginToAtticTech(logMessages);
 
                 // Usar parámetros del frontend si están disponibles, sino usar valores por defecto
-                let startDate = '2025-06-15'; // Fecha por defecto
-                // Fecha de fin por defecto: fecha actual + 2 días para capturar estimates que se actualicen durante el día
-                const endDateObj = new Date();
-                endDateObj.setDate(endDateObj.getDate() + 2);
-                let endDate = endDateObj.toISOString().split('T')[0];
+                let startDate = new Date();
+                startDate.setDate(startDate.getDate() - 45); // Últimos 45 días
+                startDate = startDate.toISOString().split('T')[0];
+                
+                // Fecha de fin por defecto: fecha actual (día de ejecución)
+                let endDate = new Date().toISOString().split('T')[0];
                 
                 // Si hay parámetros en el body, usarlos
                 if (req.body && Object.keys(req.body).length > 0) {

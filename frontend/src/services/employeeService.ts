@@ -83,6 +83,21 @@ const employeeService = {
         return response.data;
     },
 
+    sendBulkRegistrationReminders: async (employeeIds: number[]): Promise<{
+        success: boolean;
+        message: string;
+        data: {
+            total: number;
+            sent: number;
+            blocked: number;
+            alreadyRegistered: number;
+            errors: Array<{ employeeId: number; email: string; reason: string }>;
+        };
+    }> => {
+        const response = await api.post('/employees/send-bulk-reminders', { employeeIds });
+        return response.data;
+    },
+
     syncLegacyRecords: async (): Promise<{
         success: boolean;
         message: string;
