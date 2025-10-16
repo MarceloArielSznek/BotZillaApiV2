@@ -263,14 +263,6 @@ const employeeRegistrationService = {
 
 
   /**
-   * Generar URL del bot de Telegram (configurable)
-   */
-  getTelegramBotUrl: (): string => {
-    // URL del bot oficial de BotZilla con comando /id automático
-    return 'https://t.me/BotzillaAP_bot';
-  },
-
-  /**
    * Verificar si el formulario está completo
    */
   isFormComplete: (data: EmployeeRegistrationData): boolean => {

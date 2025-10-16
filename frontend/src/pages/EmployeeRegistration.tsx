@@ -60,7 +60,8 @@ const EmployeeRegistration: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [telegramBotUrl] = useState(employeeRegistrationService.getTelegramBotUrl());
+  const [telegramBotUrl] = useState('https://t.me/BotZillaId_bot'); // Nuevo bot para obtener ID
+  const [redirectBotUrl] = useState('https://t.me/BotzillaAP_bot'); // Bot original para redirección post-registro
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [registrationData, setRegistrationData] = useState<any>(null);
   const [redirectCountdown, setRedirectCountdown] = useState(10);
@@ -96,7 +97,7 @@ const EmployeeRegistration: React.FC = () => {
       }, 1000);
     } else if (showSuccessModal && redirectCountdown === 0) {
       // Redirigir al bot de Telegram
-      window.location.href = telegramBotUrl;
+      window.location.href = redirectBotUrl;
     }
 
     return () => {
@@ -287,7 +288,7 @@ const EmployeeRegistration: React.FC = () => {
   // Copiar URL del bot de Telegram
   const copyTelegramUrl = async () => {
     try {
-      await navigator.clipboard.writeText(telegramBotUrl);
+      await navigator.clipboard.writeText(telegramBotUrl); // Usa el nuevo bot para copiar
       setSuccess('Telegram bot URL copied to clipboard!');
     } catch (err) {
       console.error('Failed to copy URL:', err);
@@ -985,7 +986,7 @@ const EmployeeRegistration: React.FC = () => {
           <DialogActions sx={{ justifyContent: 'center', pt: 0 }}>
             <Button
               variant="contained"
-              onClick={() => window.location.href = telegramBotUrl}
+              onClick={() => window.location.href = redirectBotUrl}
               size="large"
               sx={{ borderRadius: 3, px: 4 }}
             >
