@@ -21,6 +21,14 @@ const SalesPerson = sequelize.define('SalesPerson', {
         type: DataTypes.STRING(50),
         allowNull: true
     },
+    employee_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'employee',
+            key: 'id'
+        }
+    },
     warning_count: {
         type: DataTypes.INTEGER,
         defaultValue: 0

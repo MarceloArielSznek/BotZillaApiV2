@@ -177,6 +177,23 @@ const employeeRegistrationService = {
         throw new Error(backendMessage);
       }
 
+      // Manejar errores de conflicto (email o telegram ID duplicado)
+      if (error.response?.status === 409) {
+        const errorCode = error.response.data?.error;
+        const backendMessage = error.response.data?.message;
+        
+        if (errorCode === 'DUPLICATE_EMAIL') {
+          throw new Error('Este email ya está registrado. Si ya tienes una cuenta, por favor contacta a HR.');
+        }
+        
+        if (errorCode === 'DUPLICATE_TELEGRAM_ID') {
+          throw new Error('Este Telegram ID ya está registrado. Por favor verifica que sea el ID correcto.');
+        }
+        
+        // Fallback para otros conflictos
+        throw new Error(backendMessage || 'Ya existe un registro con estos datos.');
+      }
+
       // Errores de red o servidor
       if (error.response?.status >= 500) {
         throw new Error('Server error. Please try again later.');

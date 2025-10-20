@@ -436,10 +436,12 @@ exports.deleteSalesPerson = async (req, res) => {
             await salesPerson.update({ is_active: false });
 
             // Marcar el Employee asociado como eliminado lógicamente (si existe)
-            const employee = await Employee.findOne({ where: { email: salesPerson.email } });
-            if (employee) {
-                await employee.update({ is_deleted: true, status: 'rejected' });
-                console.log(`✅ Employee ID: ${employee.id} (${employee.first_name} ${employee.last_name}) marcado como eliminado lógicamente y status 'rejected'.`);
+            if (salesPerson.employee_id) {
+                const employee = await Employee.findByPk(salesPerson.employee_id);
+                if (employee) {
+                    await employee.update({ is_deleted: true, status: 'rejected' });
+                    console.log(`✅ Employee ID: ${employee.id} (${employee.first_name} ${employee.last_name}) marcado como eliminado lógicamente y status 'rejected'.`);
+                }
             }
             
             console.log(`✅ Salesperson marcado como inactivo (soft delete): ${salesPerson.name} - ${estimatesCount} estimates asociados`);
@@ -457,10 +459,12 @@ exports.deleteSalesPerson = async (req, res) => {
         await SalesPersonBranch.destroy({ where: { sales_person_id: id } });
 
         // Marcar el Employee asociado como eliminado lógicamente (si existe)
-        const employee = await Employee.findOne({ where: { email: salesPerson.email } });
-        if (employee) {
-            await employee.update({ is_deleted: true, status: 'rejected' });
-            console.log(`✅ Employee ID: ${employee.id} (${employee.first_name} ${employee.last_name}) marcado como eliminado lógicamente y status 'rejected'.`);
+        if (salesPerson.employee_id) {
+            const employee = await Employee.findByPk(salesPerson.employee_id);
+            if (employee) {
+                await employee.update({ is_deleted: true, status: 'rejected' });
+                console.log(`✅ Employee ID: ${employee.id} (${employee.first_name} ${employee.last_name}) marcado como eliminado lógicamente y status 'rejected'.`);
+            }
         }
 
         // Eliminar el salesperson
