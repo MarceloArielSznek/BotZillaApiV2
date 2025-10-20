@@ -24,6 +24,7 @@ import {
 } from '@mui/material';
 import { Employee } from '@/services/employeeService';
 import { TelegramGroup } from '@/services/telegramGroupService';
+import userRoleService, { UserRole } from '@/services/userRoleService';
 
 interface ActivateEmployeeModalProps {
     open: boolean;
@@ -32,11 +33,12 @@ interface ActivateEmployeeModalProps {
     allGroups: TelegramGroup[];
     onClose: () => void;
     onConfirm: (data: {
-        final_role: 'crew_member' | 'crew_leader' | 'sales_person';
+        final_role: 'crew_member' | 'crew_leader' | 'sales_person' | 'corporate';
         branches: number[];
         is_leader?: boolean;
         animal?: string;
         telegram_groups: number[];
+        user_role_id?: number;
     }) => Promise<void>;
 }
 
@@ -50,12 +52,38 @@ const ActivateEmployeeModal: React.FC<ActivateEmployeeModalProps> = ({
     onClose,
     onConfirm
 }) => {
-    const [finalRole, setFinalRole] = useState<'crew_member' | 'crew_leader' | 'sales_person'>('crew_member');
+    const [finalRole, setFinalRole] = useState<'crew_member' | 'crew_leader' | 'sales_person' | 'corporate'>('crew_member');
     const [selectedBranches, setSelectedBranches] = useState<number[]>([]);
     const [animal, setAnimal] = useState<string>('');
     const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // Estados para roles de usuario (corporate)
+    const [userRoles, setUserRoles] = useState<UserRole[]>([]);
+    const [selectedUserRoleId, setSelectedUserRoleId] = useState<number | ''>('');
+
+    // Cargar roles de usuario cuando se abre el modal
+    useEffect(() => {
+        const loadUserRoles = async () => {
+            if (open) {
+                try {
+                    const roles = await userRoleService.getAllRoles();
+                    setUserRoles(roles);
+                    
+                    // Seleccionar "operation manager" (5) por defecto si está disponible
+                    const operationManagerRole = roles.find(r => r.name === 'operation manager');
+                    if (operationManagerRole) {
+                        setSelectedUserRoleId(operationManagerRole.id);
+                    }
+                } catch (err) {
+                    console.error('Failed to load user roles:', err);
+                }
+            }
+        };
+        
+        loadUserRoles();
+    }, [open]);
 
     // Reset form cuando se abre el modal o cambia el employee
     useEffect(() => {
@@ -65,6 +93,8 @@ const ActivateEmployeeModal: React.FC<ActivateEmployeeModalProps> = ({
                 setFinalRole('crew_leader');
             } else if (employee.role === 'salesperson') {
                 setFinalRole('sales_person');
+            } else if (employee.role === 'corporate') {
+                setFinalRole('corporate');
             } else {
                 setFinalRole('crew_member');
             }
@@ -138,6 +168,17 @@ const ActivateEmployeeModal: React.FC<ActivateEmployeeModalProps> = ({
             return;
         }
 
+        // Corporate requiere seleccionar un rol de usuario
+        if (finalRole === 'corporate' && !selectedUserRoleId) {
+            setError('Please select a user role for corporate employees.');
+            return;
+        }
+
+        // Corporate no requiere grupos de Telegram
+        if (finalRole === 'corporate') {
+            setSelectedGroups([]);
+        }
+
         setLoading(true);
         try {
             await onConfirm({
@@ -145,7 +186,8 @@ const ActivateEmployeeModal: React.FC<ActivateEmployeeModalProps> = ({
                 branches: selectedBranches,
                 is_leader: finalRole === 'crew_leader',
                 animal: (finalRole === 'crew_member' || finalRole === 'crew_leader') ? animal : undefined,
-                telegram_groups: selectedGroups
+                telegram_groups: selectedGroups,
+                user_role_id: finalRole === 'corporate' ? (selectedUserRoleId as number) : undefined
             });
             handleClose();
         } catch (err: any) {
@@ -169,6 +211,9 @@ const ActivateEmployeeModal: React.FC<ActivateEmployeeModalProps> = ({
     if (!employee) return null;
 
     const isCrew = finalRole === 'crew_member' || finalRole === 'crew_leader';
+
+    // Filter out "Corporate" branch from the list (it's only for initial registration)
+    const availableBranches = allBranches.filter(b => b.name !== 'Corporate');
 
     // Filter groups relevant to selected branches
     const relevantGroups = allGroups.filter(g => 
@@ -222,24 +267,29 @@ const ActivateEmployeeModal: React.FC<ActivateEmployeeModalProps> = ({
                                 control={<Radio />} 
                                 label="Sales Person" 
                             />
+                            <FormControlLabel 
+                                value="corporate" 
+                                control={<Radio />} 
+                                label="Corporate (Creates User Account)" 
+                            />
                         </RadioGroup>
                     </FormControl>
 
                     {/* Branch Selection */}
                     <FormControl fullWidth>
-                        <FormLabel>Branches *</FormLabel>
+                        <FormLabel>Branches * {finalRole === 'corporate' && '(Select real branches for user access)'}</FormLabel>
                         <Select<number[]>
                             multiple
                             value={selectedBranches}
                             onChange={handleBranchChange}
                             renderValue={(selected) => 
-                                allBranches
+                                availableBranches
                                     .filter(b => selected.includes(b.id))
                                     .map(b => b.name)
                                     .join(', ')
                             }
                         >
-                            {allBranches.map((branch) => (
+                            {availableBranches.map((branch) => (
                                 <MenuItem key={branch.id} value={branch.id}>
                                     <Checkbox checked={selectedBranches.includes(branch.id)} />
                                     <ListItemText primary={branch.name} />
@@ -269,34 +319,69 @@ const ActivateEmployeeModal: React.FC<ActivateEmployeeModalProps> = ({
                         </FormControl>
                     )}
 
-                    <Divider />
+                    {/* Telegram Groups (only for non-corporate) */}
+                    {finalRole !== 'corporate' && (
+                        <>
+                            <Divider />
+                            <FormControl fullWidth>
+                                <FormLabel>Telegram Groups (auto-selected)</FormLabel>
+                                <Select<number[]>
+                                    multiple
+                                    value={selectedGroups}
+                                    onChange={handleGroupChange}
+                                    renderValue={(selected) => {
+                                        const count = selected.length;
+                                        return `${count} group${count !== 1 ? 's' : ''} selected`;
+                                    }}
+                                >
+                                    {relevantGroups.map((group) => (
+                                        <MenuItem key={group.id} value={group.id}>
+                                            <Checkbox checked={selectedGroups.includes(group.id)} />
+                                            <ListItemText 
+                                                primary={group.name}
+                                                secondary={`${group.branch?.name || 'General'} - ${group.category?.name || 'No Category'}`}
+                                            />
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                                    Groups are automatically selected based on role and branches.
+                                </Typography>
+                            </FormControl>
+                        </>
+                    )}
 
-                    {/* Telegram Groups */}
-                    <FormControl fullWidth>
-                        <FormLabel>Telegram Groups (auto-selected)</FormLabel>
-                        <Select<number[]>
-                            multiple
-                            value={selectedGroups}
-                            onChange={handleGroupChange}
-                            renderValue={(selected) => {
-                                const count = selected.length;
-                                return `${count} group${count !== 1 ? 's' : ''} selected`;
-                            }}
-                        >
-                            {relevantGroups.map((group) => (
-                                <MenuItem key={group.id} value={group.id}>
-                                    <Checkbox checked={selectedGroups.includes(group.id)} />
-                                    <ListItemText 
-                                        primary={group.name}
-                                        secondary={`${group.branch?.name || 'General'} - ${group.category?.name || 'No Category'}`}
-                                    />
-                                </MenuItem>
-                            ))}
-                        </Select>
-                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                            Groups are automatically selected based on role and branches.
-                        </Typography>
-                    </FormControl>
+                    {/* User Role Selection (only for corporate) */}
+                    {finalRole === 'corporate' && (
+                        <>
+                            <Divider />
+                            <FormControl fullWidth required>
+                                <FormLabel>User Role *</FormLabel>
+                                <Select
+                                    value={selectedUserRoleId}
+                                    onChange={(e) => setSelectedUserRoleId(e.target.value as number)}
+                                    displayEmpty
+                                >
+                                    <MenuItem value="" disabled>
+                                        <em>Select a user role</em>
+                                    </MenuItem>
+                                    {userRoles.map((role) => (
+                                        <MenuItem key={role.id} value={role.id}>
+                                            {role.name.charAt(0).toUpperCase() + role.name.slice(1)}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                                <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
+                                    This determines the user's permissions in the system
+                                </Typography>
+                            </FormControl>
+                            
+                            <Alert severity="info">
+                                A user account will be created for this employee with access to the selected branches. 
+                                Login credentials will be sent via Telegram.
+                            </Alert>
+                        </>
+                    )}
 
                     {/* Error Alert */}
                     {error && (

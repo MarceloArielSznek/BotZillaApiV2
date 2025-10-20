@@ -527,6 +527,73 @@ class MakeWebhookService {
             });
         }
     }
+
+    /**
+     * Enviar credenciales de acceso a un empleado corporate por Telegram
+     * @param {object} data
+     * @param {string} data.telegramId - ID de Telegram del empleado
+     * @param {string} data.fullName - Nombre completo del empleado
+     * @param {string} data.email - Email del empleado (username para login)
+     * @param {string} data.temporaryPassword - Contraseña temporal generada
+     */
+    async sendCredentialsNotification({ telegramId, fullName, email, temporaryPassword }) {
+        const webhookUrl = process.env.MAKE_CREDENTIALS_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.warn('MAKE_CREDENTIALS_WEBHOOK_URL not configured. Skipping credentials notification.');
+            return false;
+        }
+
+        if (!telegramId || !email || !temporaryPassword) {
+            logger.warn('Missing required data for credentials notification');
+            return false;
+        }
+
+        try {
+            const payload = {
+                event: 'corporate_credentials',
+                timestamp: new Date().toISOString(),
+                telegram_id: telegramId,
+                full_name: fullName,
+                email: email,
+                temporary_password: temporaryPassword,
+                login_url: process.env.FRONTEND_URL || 'https://yallaprojects.com',
+                message: `🎉 ¡Welcome to BotZilla, ${fullName}!\n\n` +
+                         `Your account has been activated. Here are your login credentials:\n\n` +
+                         `📧 Email: ${email}\n` +
+                         `🔑 Temporary Password: ${temporaryPassword}\n\n` +
+                         `🌐 Login at: ${process.env.FRONTEND_URL || 'https://yallaprojects.com'}\n\n` +
+                         `⚠️ Please change your password after your first login.`,
+                environment: process.env.NODE_ENV || 'production'
+            };
+
+            logger.info('Sending credentials notification to Make.com', {
+                telegramId,
+                email,
+                fullName
+            });
+
+            await axios.post(webhookUrl, payload, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': uuidv4()
+                },
+                timeout: 10000
+            });
+
+            logger.info('Credentials notification sent successfully');
+            return true;
+
+        } catch (error) {
+            logger.error('Error sending credentials notification', {
+                message: error.message,
+                telegramId,
+                email,
+                responseData: error.response?.data
+            });
+            throw error; // Throw para que el controlador pueda manejarlo
+        }
+    }
 }
 
 module.exports = new MakeWebhookService();

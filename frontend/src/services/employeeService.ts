@@ -58,11 +58,12 @@ const employeeService = {
     },
 
     activate: async (employeeId: number, data: {
-        final_role: 'crew_member' | 'crew_leader' | 'sales_person';
+        final_role: 'crew_member' | 'crew_leader' | 'sales_person' | 'corporate';
         branches: number[];
         is_leader?: boolean;
         animal?: string;
         telegram_groups?: number[];
+        user_role_id?: number;
     }): Promise<{ success: boolean; message: string; data: any }> => {
         const response = await api.post(`/employees/${employeeId}/activate`, data);
         return response.data;

@@ -6,12 +6,15 @@ const {
     CrewMemberBranch,
     SalesPerson,
     SalesPersonBranch,
-    EmployeeTelegramGroup 
+    EmployeeTelegramGroup,
+    User,
+    UserBranch
 } = require('../models');
 const { logger } = require('../utils/logger');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
 const makeWebhookService = require('../services/makeWebhook.service');
+const crypto = require('crypto');
 
 class EmployeeController {
 
@@ -166,18 +169,19 @@ class EmployeeController {
         try {
             const { id } = req.params;
             const { 
-                final_role,      // 'crew_member', 'crew_leader', 'sales_person'
+                final_role,      // 'crew_member', 'crew_leader', 'sales_person', 'corporate'
                 branches,        // [1, 3, 5] - Array de branch IDs
                 is_leader,       // true/false - Solo para crew
                 animal,          // 'Lion', 'Tiger', etc. - Solo para crew
-                telegram_groups  // [2, 4, 6] - Array de telegram group IDs
+                telegram_groups, // [2, 4, 6] - Array de telegram group IDs
+                user_role_id     // ID del rol de usuario (solo para corporate)
             } = req.body;
 
             // Validaciones básicas
-            if (!final_role || !['crew_member', 'crew_leader', 'sales_person'].includes(final_role)) {
+            if (!final_role || !['crew_member', 'crew_leader', 'sales_person', 'corporate'].includes(final_role)) {
                 return res.status(400).json({ 
                     success: false, 
-                    message: 'Invalid final_role. Must be crew_member, crew_leader, or sales_person.' 
+                    message: 'Invalid final_role. Must be crew_member, crew_leader, sales_person, or corporate.' 
                 });
             }
 
@@ -185,6 +189,14 @@ class EmployeeController {
                 return res.status(400).json({ 
                     success: false, 
                     message: 'At least one branch must be selected.' 
+                });
+            }
+
+            // Validar user_role_id para corporate
+            if (final_role === 'corporate' && !user_role_id) {
+                return res.status(400).json({ 
+                    success: false, 
+                    message: 'User role is required for corporate employees.' 
                 });
             }
 
@@ -204,8 +216,9 @@ class EmployeeController {
                 });
             }
 
-            // 2. Crear registro en crew_member o sales_person
+            // 2. Crear registro en crew_member, sales_person o user (corporate)
             let newRecord;
+            let temporaryPassword = null;
             const fullName = `${employee.first_name} ${employee.last_name}`;
             
             if (final_role === 'crew_member' || final_role === 'crew_leader') {
@@ -254,6 +267,34 @@ class EmployeeController {
                     employeeId: employee.id, 
                     salesPersonId: newRecord.id,
                     branches: branches
+                });
+
+            } else if (final_role === 'corporate') {
+                // Crear usuario para empleado corporate
+                // Generar contraseña temporal
+                temporaryPassword = crypto.randomBytes(8).toString('hex'); // 16 caracteres
+                
+                // Crear usuario con el rol seleccionado por el admin
+                newRecord = await User.create({
+                    email: employee.email,
+                    password: temporaryPassword, // Se hasheará automáticamente por el hook del modelo
+                    phone: employee.phone_number,
+                    telegram_id: employee.telegram_id,
+                    rol_id: user_role_id
+                }, { transaction });
+
+                // Insertar en user_branch
+                const branchRecords = branches.map(branchId => ({
+                    user_id: newRecord.id,
+                    branch_id: branchId
+                }));
+                await UserBranch.bulkCreate(branchRecords, { transaction });
+
+                logger.info('Corporate user created successfully', { 
+                    employeeId: employee.id, 
+                    userId: newRecord.id,
+                    branches: branches,
+                    email: employee.email
                 });
             }
 
@@ -305,8 +346,32 @@ class EmployeeController {
                 });
             }
 
-            // 7. Retornar respuesta exitosa
-            res.status(200).json({
+            // 7. Enviar credenciales por Telegram si es corporate
+            if (final_role === 'corporate' && temporaryPassword) {
+                try {
+                    // Enviar mensaje con credenciales por Telegram
+                    await makeWebhookService.sendCredentialsNotification({
+                        telegramId: employee.telegram_id,
+                        fullName: fullName,
+                        email: employee.email,
+                        temporaryPassword: temporaryPassword
+                    });
+                    
+                    logger.info('Credentials sent via Telegram', { 
+                        employeeId: employee.id,
+                        email: employee.email 
+                    });
+                } catch (err) {
+                    logger.error('Failed to send credentials via Telegram', {
+                        employeeId: employee.id,
+                        error: err.message
+                    });
+                    // No bloqueamos la respuesta si falla el envío
+                }
+            }
+
+            // 8. Retornar respuesta exitosa
+            const response = {
                 success: true,
                 message: `Employee ${fullName} activated successfully as ${final_role}.`,
                 data: {
@@ -316,7 +381,16 @@ class EmployeeController {
                     branches: branches,
                     telegram_groups: telegram_groups || []
                 }
-            });
+            };
+
+            // Incluir contraseña temporal SOLO si es corporate (para mostrarla al admin)
+            if (final_role === 'corporate' && temporaryPassword) {
+                response.data.temporary_password = temporaryPassword;
+                response.data.email = employee.email;
+                response.message += ` Login credentials have been sent via Telegram.`;
+            }
+
+            res.status(200).json(response);
 
         } catch (error) {
             await transaction.rollback();

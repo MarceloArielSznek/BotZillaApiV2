@@ -5,19 +5,40 @@ const { v4: uuidv4 } = require('uuid');
 const { Op } = require('sequelize');
 
 /**
+ * Mapeo entre nombres del frontend y nombres en la base de datos
+ */
+const BRANCH_NAME_MAPPING = {
+    'Everett (North Seattle)': 'Everett -WA',
+    'Kent (South Seattle)': 'Kent -WA',
+    'San Diego': 'San Diego',
+    'Orange County': 'Orange County',
+    'San Bernardino': 'San Bernardino',
+    'Los Angeles': 'Los Angeles',
+    'Corporate': 'Corporate'
+};
+
+/**
  * Buscar branch por nombre
  */
 async function findBranchByName(branchName) {
     if (!branchName) return null;
     
     try {
+        // Mapear el nombre del frontend al nombre de la BD si existe un mapeo
+        const dbBranchName = BRANCH_NAME_MAPPING[branchName] || branchName;
+        
         const branch = await Branch.findOne({
             where: {
                 name: {
-                    [Op.iLike]: branchName.trim()
+                    [Op.iLike]: dbBranchName.trim()
                 }
             }
         });
+        
+        if (!branch) {
+            logger.warn('Branch not found', { frontendName: branchName, dbName: dbBranchName });
+        }
+        
         return branch;
     } catch (error) {
         logger.error('Error finding branch by name', { branchName, error: error.message });

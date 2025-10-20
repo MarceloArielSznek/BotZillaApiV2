@@ -93,6 +93,10 @@ const UsersTab = () => {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
 
+  // Estados de filtros
+  const [roleFilter, setRoleFilter] = useState<number | ''>('');
+  const [branchFilter, setBranchFilter] = useState<number | ''>('');
+
   // Estados de modales
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [editModalOpen, setEditModalOpen] = useState(false);
@@ -199,6 +203,27 @@ const UsersTab = () => {
   const handleRefresh = () => {
     fetchUsers();
   };
+
+  // Filtrar usuarios
+  const filteredUsers = users.filter(user => {
+    // Filtro por rol
+    if (roleFilter && user.rol.id !== roleFilter) {
+      return false;
+    }
+    
+    // Filtro por branch
+    if (branchFilter) {
+      const hasBranch = user.branches?.some(b => b.id === branchFilter);
+      if (!hasBranch) return false;
+    }
+    
+    return true;
+  });
+
+  // Reset página cuando cambian los filtros
+  useEffect(() => {
+    setPage(0);
+  }, [roleFilter, branchFilter]);
 
   // Funciones de modal
   const openCreateModal = () => {
@@ -448,6 +473,72 @@ const UsersTab = () => {
         </CardContent>
       </Card>
 
+      {/* Filters */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography variant="subtitle2" sx={{ minWidth: '80px' }}>
+              Filters:
+            </Typography>
+            
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel>Role</InputLabel>
+              <Select
+                value={roleFilter}
+                label="Role"
+                onChange={(e) => setRoleFilter(e.target.value as number | '')}
+              >
+                <MenuItem value="">
+                  <em>All Roles</em>
+                </MenuItem>
+                {roles.map((role) => (
+                  <MenuItem key={role.id} value={role.id}>
+                    {role.name.charAt(0).toUpperCase() + role.name.slice(1)}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel>Branch</InputLabel>
+              <Select
+                value={branchFilter}
+                label="Branch"
+                onChange={(e) => setBranchFilter(e.target.value as number | '')}
+              >
+                <MenuItem value="">
+                  <em>All Branches</em>
+                </MenuItem>
+                {branches.map((branch) => (
+                  <MenuItem key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {(roleFilter || branchFilter) && (
+              <Button
+                size="small"
+                variant="outlined"
+                onClick={() => {
+                  setRoleFilter('');
+                  setBranchFilter('');
+                }}
+              >
+                Clear Filters
+              </Button>
+            )}
+
+            <Box sx={{ flexGrow: 1 }} />
+            
+            <Typography variant="body2" color="text.secondary">
+              {filteredUsers.length} of {users.length} user{users.length !== 1 ? 's' : ''}
+            </Typography>
+          </Box>
+        </CardContent>
+      </Card>
+
       {/* Table */}
       <Card>
         <CardContent sx={{ p: 0 }}>
@@ -470,16 +561,16 @@ const UsersTab = () => {
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {users.length === 0 ? (
+                    {filteredUsers.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
                           <Typography color="text.secondary">
-                            No users found
+                            {users.length === 0 ? 'No users found' : 'No users match the selected filters'}
                           </Typography>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      users.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((user) => (
+                      filteredUsers.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage).map((user) => (
                         <TableRow key={user.id} hover>
                           <TableCell>{user.id}</TableCell>
                           <TableCell>
@@ -566,7 +657,7 @@ const UsersTab = () => {
               {/* Pagination */}
               <TablePagination
                 component="div"
-                count={users.length}
+                count={filteredUsers.length}
                 page={page}
                 onPageChange={(_, newPage) => setPage(newPage)}
                 rowsPerPage={rowsPerPage}

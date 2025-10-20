@@ -92,11 +92,12 @@ const OnboardingTab: React.FC<OnboardingTabProps> = ({ active }) => {
     };
 
     const handleActivateEmployee = async (data: {
-        final_role: 'crew_member' | 'crew_leader' | 'sales_person';
+        final_role: 'crew_member' | 'crew_leader' | 'sales_person' | 'corporate';
         branches: number[];
         is_leader?: boolean;
         animal?: string;
         telegram_groups: number[];
+        user_role_id?: number;
     }) => {
         if (!employeeToActivate) return;
 
