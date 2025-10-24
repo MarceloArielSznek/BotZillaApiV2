@@ -136,8 +136,13 @@ const Estimates: React.FC = () => {
 
 
   // Cargar estimates cuando cambien los filtros o paginación
+  // Debounce para loadEstimates: esperar 500ms después de cambios en filters.search
   useEffect(() => {
-    loadEstimates();
+    const timeoutId = setTimeout(() => {
+      loadEstimates();
+    }, filters.search ? 500 : 0); // Si hay búsqueda, esperar 500ms; si no, cargar inmediatamente
+    
+    return () => clearTimeout(timeoutId);
   }, [filters, page, rowsPerPage]);
 
   const loadInitialData = async () => {

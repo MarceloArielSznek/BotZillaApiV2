@@ -21,13 +21,16 @@
     "express": "^4.18.2",
     "express-rate-limit": "^7.5.1",
     "express-validator": "^7.0.1",
+    "fuzzball": "^2.2.3",
     "helmet": "^7.0.0",
     "joi": "^17.13.3",
     "jsonwebtoken": "^9.0.0",
+    "multer": "^2.0.2",
     "openai": "^4.56.0",
     "pg": "^8.11.0",
     "pg-hstore": "^2.3.4",
-    "sequelize": "^6.31.1"
+    "sequelize": "^6.31.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "jest": "^30.0.4",

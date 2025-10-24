@@ -1,0 +1,469 @@
+============================================================================
+ESTRUCTURA COMPLETA DE BASE DE DATOS - BOTZILLA
+Generado: 2025-10-14
+============================================================================
+
+============================================================================
+LISTA DE TABLAS EN SCHEMA BOTZILLA
+============================================================================
+       table_name        
+-------------------------
+ branch
+ crew_member
+ crew_member_branch
+ employee
+ employee_telegram_group
+ estimate
+ estimate_status
+ group_membership_status
+ inspection_report
+ job
+ job_special_shift
+ job_state_change_log
+ job_status
+ notification
+ notification_templates
+ notification_type
+ sales_person
+ sales_person_branch
+ sheet_column_map
+ shift
+ special_shift
+ telegram_group
+ telegram_group_category
+ user
+ user_branch
+ user_rol
+ warning
+ warning_reason
+(28 rows)
+
+
+============================================================================
+DETALLE DE CADA TABLA
+============================================================================
+
+                                          Table "botzilla.user"
+   Column    |          Type          | Collation | Nullable |                  Default                  
+-------------+------------------------+-----------+----------+-------------------------------------------
+ id          | integer                |           | not null | nextval('botzilla.user_id_seq'::regclass)
+ rol_id      | integer                |           |          | 
+ phone       | character varying(20)  |           |          | 
+ email       | character varying(100) |           | not null | 
+ password    | character varying(100) |           | not null | 
+ telegram_id | character varying(50)  |           |          | 
+Indexes:
+    "user_pkey" PRIMARY KEY, btree (id)
+    "user_email_key" UNIQUE CONSTRAINT, btree (email)
+Foreign-key constraints:
+    "user_rol_id_fkey" FOREIGN KEY (rol_id) REFERENCES botzilla.user_rol(id)
+Referenced by:
+    TABLE "botzilla.employee" CONSTRAINT "employee_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES botzilla."user"(id)
+    TABLE "botzilla.user_branch" CONSTRAINT "user_branch_user_id_fkey" FOREIGN KEY (user_id) REFERENCES botzilla."user"(id) ON UPDATE CASCADE ON DELETE CASCADE
+
+
+                                       Table "botzilla.user_rol"
+ Column |         Type          | Collation | Nullable |                    Default                    
+--------+-----------------------+-----------+----------+-----------------------------------------------
+ id     | integer               |           | not null | nextval('botzilla.user_rol_id_seq'::regclass)
+ name   | character varying(50) |           | not null | 
+Indexes:
+    "user_rol_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "botzilla."user"" CONSTRAINT "user_rol_id_fkey" FOREIGN KEY (rol_id) REFERENCES botzilla.user_rol(id)
+
+
+             Table "botzilla.user_branch"
+  Column   |  Type   | Collation | Nullable | Default 
+-----------+---------+-----------+----------+---------
+ user_id   | integer |           | not null | 
+ branch_id | integer |           | not null | 
+Indexes:
+    "user_branch_pkey" PRIMARY KEY, btree (user_id, branch_id)
+Foreign-key constraints:
+    "user_branch_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id) ON UPDATE CASCADE ON DELETE CASCADE
+    "user_branch_user_id_fkey" FOREIGN KEY (user_id) REFERENCES botzilla."user"(id) ON UPDATE CASCADE ON DELETE CASCADE
+
+
+                                             Table "botzilla.branch"
+      Column       |          Type          | Collation | Nullable |                   Default                   
+-------------------+------------------------+-----------+----------+---------------------------------------------
+ id                | integer                |           | not null | nextval('botzilla.branch_id_seq'::regclass)
+ name              | character varying(100) |           | not null | 
+ address           | text                   |           |          | 
+ telegram_group_id | text                   |           |          | 
+Indexes:
+    "branch_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "botzilla.crew_member_branch" CONSTRAINT "crew_member_branch_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    TABLE "botzilla.estimate" CONSTRAINT "estimate_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    TABLE "botzilla.telegram_group" CONSTRAINT "fk_branch" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id) ON DELETE SET NULL
+    TABLE "botzilla.employee" CONSTRAINT "fk_employee_branch" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id) ON DELETE SET NULL
+    TABLE "botzilla.job" CONSTRAINT "job_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    TABLE "botzilla.sales_person_branch" CONSTRAINT "sales_person_branch_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    TABLE "botzilla.user_branch" CONSTRAINT "user_branch_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id) ON UPDATE CASCADE ON DELETE CASCADE
+
+
+                                              Table "botzilla.employee"
+       Column       |           Type           | Collation | Nullable |                    Default                    
+--------------------+--------------------------+-----------+----------+-----------------------------------------------
+ id                 | integer                  |           | not null | nextval('botzilla.employee_id_seq'::regclass)
+ first_name         | character varying(50)    |           | not null | 
+ last_name          | character varying(50)    |           | not null | 
+ nickname           | character varying(30)    |           |          | 
+ email              | character varying(100)   |           | not null | 
+ phone_number       | character varying(20)    |           |          | 
+ telegram_id        | character varying(20)    |           |          | 
+ status             | character varying(20)    |           | not null | 'pending'::character varying
+ registration_date  | timestamp with time zone |           | not null | CURRENT_TIMESTAMP
+ approved_date      | timestamp with time zone |           |          | 
+ approved_by        | integer                  |           |          | 
+ notes              | text                     |           |          | 
+ employee_code      | character varying(20)    |           |          | 
+ created_at         | timestamp with time zone |           | not null | CURRENT_TIMESTAMP
+ updated_at         | timestamp with time zone |           | not null | CURRENT_TIMESTAMP
+ street             | character varying(200)   |           |          | 
+ city               | character varying(100)   |           |          | 
+ state              | character varying(50)    |           |          | 
+ zip                | character varying(20)    |           |          | 
+ date_of_birth      | date                     |           |          | 
+ role               | character varying(20)    |           |          | 
+ branch_id          | integer                  |           |          | 
+ attic_tech_user_id | integer                  |           |          | 
+Indexes:
+    "employee_pkey" PRIMARY KEY, btree (id)
+    "employee_attic_tech_user_id_key" UNIQUE CONSTRAINT, btree (attic_tech_user_id)
+    "idx_employee_approved_by" btree (approved_by)
+    "idx_employee_attic_tech_user_id" btree (attic_tech_user_id)
+    "idx_employee_branch_id" btree (branch_id)
+    "idx_employee_city_state" btree (city, state)
+    "idx_employee_date_of_birth" btree (date_of_birth)
+    "idx_employee_full_name" btree (first_name, last_name)
+    "idx_employee_registration_date" btree (registration_date)
+    "idx_employee_role" btree (role)
+    "idx_employee_status" btree (status)
+    "unique_employee_code" UNIQUE, btree (employee_code) WHERE employee_code IS NOT NULL
+    "unique_employee_email" UNIQUE, btree (email)
+    "unique_employee_telegram_id" UNIQUE, btree (telegram_id)
+Check constraints:
+    "employee_role_check" CHECK (role::text = ANY (ARRAY['crew_member'::character varying, 'crew_leader'::character varying, 'salesperson'::character varying]::text[]))
+    "employee_status_check" CHECK (status::text = ANY (ARRAY['pending'::character varying::text, 'active'::character varying::text, 'inactive'::character varying::text, 'rejected'::character varying::text]))
+Foreign-key constraints:
+    "employee_approved_by_fkey" FOREIGN KEY (approved_by) REFERENCES botzilla."user"(id)
+    "fk_employee_branch" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id) ON DELETE SET NULL
+Referenced by:
+    TABLE "botzilla.crew_member" CONSTRAINT "crew_member_employee_id_fkey" FOREIGN KEY (employee_id) REFERENCES botzilla.employee(id)
+    TABLE "botzilla.employee_telegram_group" CONSTRAINT "fk_employee" FOREIGN KEY (employee_id) REFERENCES botzilla.employee(id) ON DELETE CASCADE
+    TABLE "botzilla.sales_person" CONSTRAINT "sales_person_employee_id_fkey" FOREIGN KEY (employee_id) REFERENCES botzilla.employee(id)
+Triggers:
+    trigger_update_employee_updated_at BEFORE UPDATE ON botzilla.employee FOR EACH ROW EXECUTE FUNCTION botzilla.update_employee_updated_at()
+
+
+                                          Table "botzilla.crew_member"
+   Column    |          Type          | Collation | Nullable |                     Default                      
+-------------+------------------------+-----------+----------+--------------------------------------------------
+ id          | integer                |           | not null | nextval('botzilla.crew_member_id_seq'::regclass)
+ phone       | character varying(20)  |           |          | 
+ telegram_id | character varying(50)  |           |          | 
+ name        | character varying(100) |           | not null | 
+ is_leader   | boolean                |           |          | false
+ animal      | character varying(50)  |           |          | 
+ employee_id | integer                |           |          | 
+Indexes:
+    "crew_member_pkey" PRIMARY KEY, btree (id)
+    "idx_crew_member_employee_id" btree (employee_id)
+Foreign-key constraints:
+    "crew_member_employee_id_fkey" FOREIGN KEY (employee_id) REFERENCES botzilla.employee(id)
+Referenced by:
+    TABLE "botzilla.crew_member_branch" CONSTRAINT "crew_member_branch_crew_member_id_fkey" FOREIGN KEY (crew_member_id) REFERENCES botzilla.crew_member(id)
+    TABLE "botzilla.job" CONSTRAINT "job_crew_leader_id_fkey" FOREIGN KEY (crew_leader_id) REFERENCES botzilla.crew_member(id)
+    TABLE "botzilla.shift" CONSTRAINT "shift_crew_member_id_fkey" FOREIGN KEY (crew_member_id) REFERENCES botzilla.crew_member(id)
+
+
+            Table "botzilla.crew_member_branch"
+     Column     |  Type   | Collation | Nullable | Default 
+----------------+---------+-----------+----------+---------
+ crew_member_id | integer |           | not null | 
+ branch_id      | integer |           | not null | 
+Indexes:
+    "crew_member_branch_pkey" PRIMARY KEY, btree (crew_member_id, branch_id)
+Foreign-key constraints:
+    "crew_member_branch_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    "crew_member_branch_crew_member_id_fkey" FOREIGN KEY (crew_member_id) REFERENCES botzilla.crew_member(id)
+
+
+                                           Table "botzilla.sales_person"
+    Column     |          Type          | Collation | Nullable |                      Default                      
+---------------+------------------------+-----------+----------+---------------------------------------------------
+ id            | integer                |           | not null | nextval('botzilla.sales_person_id_seq'::regclass)
+ name          | character varying(100) |           | not null | 
+ phone         | character varying(20)  |           |          | 
+ telegram_id   | character varying(50)  |           |          | 
+ warning_count | integer                |           |          | 0
+ is_active     | boolean                |           | not null | true
+ employee_id   | integer                |           |          | 
+Indexes:
+    "sales_person_pkey" PRIMARY KEY, btree (id)
+    "idx_sales_person_employee_id" btree (employee_id)
+Foreign-key constraints:
+    "sales_person_employee_id_fkey" FOREIGN KEY (employee_id) REFERENCES botzilla.employee(id)
+Referenced by:
+    TABLE "botzilla.estimate" CONSTRAINT "estimate_sales_person_id_fkey" FOREIGN KEY (sales_person_id) REFERENCES botzilla.sales_person(id)
+    TABLE "botzilla.sales_person_branch" CONSTRAINT "sales_person_branch_sales_person_id_fkey" FOREIGN KEY (sales_person_id) REFERENCES botzilla.sales_person(id)
+    TABLE "botzilla.warning" CONSTRAINT "warning_sales_person_id_fkey" FOREIGN KEY (sales_person_id) REFERENCES botzilla.sales_person(id)
+
+
+                                    Table "botzilla.sales_person_branch"
+     Column      |  Type   | Collation | Nullable |                         Default                          
+-----------------+---------+-----------+----------+----------------------------------------------------------
+ sales_person_id | integer |           | not null | 
+ branch_id       | integer |           | not null | 
+ id              | integer |           | not null | nextval('botzilla.sales_person_branch_id_seq'::regclass)
+Indexes:
+    "sales_person_branch_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "sales_person_branch_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    "sales_person_branch_sales_person_id_fkey" FOREIGN KEY (sales_person_id) REFERENCES botzilla.sales_person(id)
+
+
+                                           Table "botzilla.telegram_group"
+   Column    |           Type           | Collation | Nullable |                       Default                       
+-------------+--------------------------+-----------+----------+-----------------------------------------------------
+ id          | integer                  |           | not null | nextval('botzilla.telegram_group_id_seq'::regclass)
+ name        | character varying(255)   |           | not null | 
+ branch_id   | integer                  |           |          | 
+ telegram_id | bigint                   |           | not null | 
+ description | text                     |           |          | 
+ created_at  | timestamp with time zone |           |          | CURRENT_TIMESTAMP
+ updated_at  | timestamp with time zone |           |          | CURRENT_TIMESTAMP
+ category_id | integer                  |           |          | 
+ is_default  | boolean                  |           | not null | false
+Indexes:
+    "telegram_group_pkey" PRIMARY KEY, btree (id)
+    "telegram_group_telegram_id_key" UNIQUE CONSTRAINT, btree (telegram_id)
+Foreign-key constraints:
+    "fk_branch" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id) ON DELETE SET NULL
+    "fk_telegram_group_category" FOREIGN KEY (category_id) REFERENCES botzilla.telegram_group_category(id) ON DELETE SET NULL
+Referenced by:
+    TABLE "botzilla.employee_telegram_group" CONSTRAINT "fk_telegram_group" FOREIGN KEY (telegram_group_id) REFERENCES botzilla.telegram_group(id) ON DELETE CASCADE
+
+
+                                           Table "botzilla.telegram_group_category"
+   Column    |           Type           | Collation | Nullable |                           Default                            
+-------------+--------------------------+-----------+----------+--------------------------------------------------------------
+ id          | integer                  |           | not null | nextval('botzilla.telegram_group_category_id_seq'::regclass)
+ name        | character varying(100)   |           | not null | 
+ description | text                     |           |          | 
+ created_at  | timestamp with time zone |           |          | CURRENT_TIMESTAMP
+ updated_at  | timestamp with time zone |           |          | CURRENT_TIMESTAMP
+Indexes:
+    "telegram_group_category_pkey" PRIMARY KEY, btree (id)
+    "telegram_group_category_name_key" UNIQUE CONSTRAINT, btree (name)
+Referenced by:
+    TABLE "botzilla.telegram_group" CONSTRAINT "fk_telegram_group_category" FOREIGN KEY (category_id) REFERENCES botzilla.telegram_group_category(id) ON DELETE SET NULL
+
+
+                                              Table "botzilla.employee_telegram_group"
+      Column       |           Type           | Collation | Nullable |                           Default                            
+-------------------+--------------------------+-----------+----------+--------------------------------------------------------------
+ id                | integer                  |           | not null | nextval('botzilla.employee_telegram_group_id_seq'::regclass)
+ employee_id       | integer                  |           | not null | 
+ telegram_group_id | integer                  |           | not null | 
+ status_id         | integer                  |           | not null | 
+ joined_at         | timestamp with time zone |           |          | CURRENT_TIMESTAMP
+ blocked_at        | timestamp with time zone |           |          | 
+Indexes:
+    "employee_telegram_group_pkey" PRIMARY KEY, btree (id)
+    "employee_telegram_group_employee_id_telegram_group_id_key" UNIQUE CONSTRAINT, btree (employee_id, telegram_group_id)
+Foreign-key constraints:
+    "fk_employee" FOREIGN KEY (employee_id) REFERENCES botzilla.employee(id) ON DELETE CASCADE
+    "fk_status" FOREIGN KEY (status_id) REFERENCES botzilla.group_membership_status(id)
+    "fk_telegram_group" FOREIGN KEY (telegram_group_id) REFERENCES botzilla.telegram_group(id) ON DELETE CASCADE
+
+
+                                                   Table "botzilla.job"
+          Column           |            Type             | Collation | Nullable |                 Default                  
+---------------------------+-----------------------------+-----------+----------+------------------------------------------
+ id                        | integer                     |           | not null | nextval('botzilla.job_id_seq'::regclass)
+ name                      | character varying(100)      |           | not null | 
+ closing_date              | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+ estimate_id               | integer                     |           |          | 
+ crew_leader_id            | integer                     |           |          | 
+ branch_id                 | integer                     |           |          | 
+ note                      | text                        |           |          | 
+ review                    | integer                     |           |          | 
+ attic_tech_hours          | numeric(10,2)               |           |          | 
+ crew_leader_hours         | numeric(10,2)               |           |          | 
+ notification_sent         | boolean                     |           | not null | false
+ cl_estimated_plan_hours   | numeric(10,2)               |           |          | NULL::numeric
+ status_id                 | integer                     |           |          | 
+ attic_tech_job_id         | integer                     |           |          | 
+ last_synced_at            | timestamp without time zone |           |          | 
+ attic_tech_estimate_id    | integer                     |           |          | 
+ last_known_status_id      | integer                     |           |          | 
+ last_notification_sent_at | timestamp without time zone |           |          | 
+Indexes:
+    "job_pkey" PRIMARY KEY, btree (id)
+    "idx_job_attic_tech_estimate_id" btree (attic_tech_estimate_id)
+    "idx_job_attic_tech_job_id" btree (attic_tech_job_id)
+    "idx_job_crew_leader" btree (crew_leader_id)
+    "idx_job_estimate" btree (estimate_id)
+    "idx_job_last_known_status_id" btree (last_known_status_id)
+    "idx_job_last_synced_at" btree (last_synced_at)
+    "job_attic_tech_job_id_key" UNIQUE CONSTRAINT, btree (attic_tech_job_id)
+Check constraints:
+    "job_review_check" CHECK (review >= 0 AND review <= 5)
+Foreign-key constraints:
+    "job_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    "job_crew_leader_id_fkey" FOREIGN KEY (crew_leader_id) REFERENCES botzilla.crew_member(id)
+    "job_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES botzilla.estimate(id)
+    "job_last_known_status_id_fkey" FOREIGN KEY (last_known_status_id) REFERENCES botzilla.job_status(id)
+    "job_status_id_fkey" FOREIGN KEY (status_id) REFERENCES botzilla.job_status(id)
+Referenced by:
+    TABLE "botzilla.job_special_shift" CONSTRAINT "job_special_shift_job_id_fkey" FOREIGN KEY (job_id) REFERENCES botzilla.job(id)
+    TABLE "botzilla.shift" CONSTRAINT "shift_job_id_fkey" FOREIGN KEY (job_id) REFERENCES botzilla.job(id)
+
+
+                                       Table "botzilla.job_status"
+ Column |         Type          | Collation | Nullable |                     Default                     
+--------+-----------------------+-----------+----------+-------------------------------------------------
+ id     | integer               |           | not null | nextval('botzilla.job_status_id_seq'::regclass)
+ name   | character varying(50) |           | not null | 
+Indexes:
+    "job_status_pkey" PRIMARY KEY, btree (id)
+    "job_status_name_key" UNIQUE CONSTRAINT, btree (name)
+Referenced by:
+    TABLE "botzilla.job" CONSTRAINT "job_last_known_status_id_fkey" FOREIGN KEY (last_known_status_id) REFERENCES botzilla.job_status(id)
+    TABLE "botzilla.job_state_change_log" CONSTRAINT "job_state_change_log_new_status_id_fkey" FOREIGN KEY (new_status_id) REFERENCES botzilla.job_status(id)
+    TABLE "botzilla.job_state_change_log" CONSTRAINT "job_state_change_log_previous_status_id_fkey" FOREIGN KEY (previous_status_id) REFERENCES botzilla.job_status(id)
+    TABLE "botzilla.job" CONSTRAINT "job_status_id_fkey" FOREIGN KEY (status_id) REFERENCES botzilla.job_status(id)
+
+
+                                                  Table "botzilla.estimate"
+         Column          |            Type             | Collation | Nullable |                    Default                    
+-------------------------+-----------------------------+-----------+----------+-----------------------------------------------
+ id                      | integer                     |           | not null | nextval('botzilla.estimate_id_seq'::regclass)
+ name                    | character varying(100)      |           | not null | 
+ sales_person_id         | integer                     |           |          | 
+ status_id               | integer                     |           |          | 
+ branch_id               | integer                     |           |          | 
+ price                   | numeric(10,2)               |           |          | 
+ discount                | numeric(10,2)               |           |          | 
+ attic_tech_hours        | numeric(10,2)               |           |          | 
+ attic_tech_estimate_id  | integer                     |           |          | 
+ customer_name           | character varying(200)      |           |          | 
+ customer_address        | text                        |           |          | 
+ crew_notes              | text                        |           |          | 
+ retail_cost             | numeric(10,2)               |           |          | 
+ final_price             | numeric(10,2)               |           |          | 
+ sub_service_retail_cost | numeric(10,2)               |           |          | 
+ at_updated_date         | timestamp without time zone |           |          | 
+ at_created_date         | timestamp without time zone |           |          | 
+ created_at              | timestamp with time zone    |           |          | 
+ updated_at              | timestamp with time zone    |           |          | 
+ customer_email          | character varying(200)      |           |          | 
+ customer_phone          | character varying(50)       |           |          | 
+Indexes:
+    "estimate_pkey" PRIMARY KEY, btree (id)
+    "estimate_attic_tech_estimate_id_key" UNIQUE CONSTRAINT, btree (attic_tech_estimate_id)
+    "idx_estimate_branch" btree (branch_id)
+    "idx_estimate_sales_person" btree (sales_person_id)
+    "idx_estimate_status" btree (status_id)
+Foreign-key constraints:
+    "estimate_branch_id_fkey" FOREIGN KEY (branch_id) REFERENCES botzilla.branch(id)
+    "estimate_sales_person_id_fkey" FOREIGN KEY (sales_person_id) REFERENCES botzilla.sales_person(id)
+    "estimate_status_id_fkey" FOREIGN KEY (status_id) REFERENCES botzilla.estimate_status(id)
+Referenced by:
+    TABLE "botzilla.job" CONSTRAINT "job_estimate_id_fkey" FOREIGN KEY (estimate_id) REFERENCES botzilla.estimate(id)
+
+
+                                       Table "botzilla.estimate_status"
+ Column |         Type          | Collation | Nullable |                       Default                        
+--------+-----------------------+-----------+----------+------------------------------------------------------
+ id     | integer               |           | not null | nextval('botzilla.estimate_status_id_seq'::regclass)
+ name   | character varying(50) |           | not null | 
+Indexes:
+    "estimate_status_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "botzilla.estimate" CONSTRAINT "estimate_status_id_fkey" FOREIGN KEY (status_id) REFERENCES botzilla.estimate_status(id)
+
+
+                                                        Table "botzilla.inspection_report"
+                Column                 |           Type           | Collation | Nullable |                        Default                         
+---------------------------------------+--------------------------+-----------+----------+--------------------------------------------------------
+ id                                    | integer                  |           | not null | nextval('botzilla.inspection_report_id_seq'::regclass)
+ attic_tech_report_id                  | integer                  |           | not null | 
+ attic_tech_estimate_id                | integer                  |           | not null | 
+ estimate_name                         | character varying(255)   |           |          | 
+ salesperson_name                      | character varying(255)   |           |          | 
+ client_name                           | character varying(255)   |           |          | 
+ client_phone                          | character varying(50)    |           |          | 
+ client_email                          | character varying(255)   |           |          | 
+ client_address                        | text                     |           |          | 
+ branch_name                           | character varying(255)   |           |          | 
+ estimate_link                         | text                     |           |          | 
+ roof_material                         | character varying(100)   |           |          | 
+ decking_type                          | character varying(100)   |           |          | 
+ roof_age                              | character varying(50)    |           |          | 
+ walkable_roof                         | character varying(50)    |           |          | 
+ roof_condition                        | character varying(100)   |           |          | 
+ full_roof_inspection_interest         | boolean                  |           |          | false
+ customer_comfort                      | character varying(100)   |           |          | 
+ hvac_age                              | character varying(50)    |           |          | 
+ system_condition                      | character varying(100)   |           |          | 
+ air_ducts_condition                   | character varying(100)   |           |          | 
+ full_hvac_furnace_inspection_interest | boolean                  |           |          | false
+ roof_notification_sent                | boolean                  |           | not null | false
+ hvac_notification_sent                | boolean                  |           | not null | false
+ attic_tech_created_at                 | timestamp with time zone |           |          | 
+ created_at                            | timestamp with time zone |           |          | CURRENT_TIMESTAMP
+ updated_at                            | timestamp with time zone |           |          | CURRENT_TIMESTAMP
+ salesperson_email                     | character varying(255)   |           |          | 
+Indexes:
+    "inspection_report_pkey" PRIMARY KEY, btree (id)
+    "idx_ir_attic_tech_created_at" btree (attic_tech_created_at)
+    "idx_ir_attic_tech_estimate_id" btree (attic_tech_estimate_id)
+    "idx_ir_attic_tech_report_id" btree (attic_tech_report_id)
+    "inspection_report_attic_tech_report_id_key" UNIQUE CONSTRAINT, btree (attic_tech_report_id)
+
+
+                     Table "botzilla.shift"
+     Column     |     Type      | Collation | Nullable | Default 
+----------------+---------------+-----------+----------+---------
+ crew_member_id | integer       |           | not null | 
+ job_id         | integer       |           | not null | 
+ hours          | numeric(10,2) |           | not null | 
+ approved_shift | boolean       |           | not null | false
+Indexes:
+    "shift_pkey" PRIMARY KEY, btree (crew_member_id, job_id)
+    "idx_shift_approved_shift" btree (approved_shift)
+Foreign-key constraints:
+    "shift_crew_member_id_fkey" FOREIGN KEY (crew_member_id) REFERENCES botzilla.crew_member(id)
+    "shift_job_id_fkey" FOREIGN KEY (job_id) REFERENCES botzilla.job(id)
+
+
+                                       Table "botzilla.special_shift"
+ Column |          Type          | Collation | Nullable |                      Default                       
+--------+------------------------+-----------+----------+----------------------------------------------------
+ id     | integer                |           | not null | nextval('botzilla.special_shift_id_seq'::regclass)
+ name   | character varying(100) |           | not null | 
+Indexes:
+    "special_shift_pkey" PRIMARY KEY, btree (id)
+Referenced by:
+    TABLE "botzilla.job_special_shift" CONSTRAINT "job_special_shift_special_shift_id_fkey" FOREIGN KEY (special_shift_id) REFERENCES botzilla.special_shift(id)
+
+
+                                              Table "botzilla.warning"
+     Column      |            Type             | Collation | Nullable |                   Default                    
+-----------------+-----------------------------+-----------+----------+----------------------------------------------
+ id              | integer                     |           | not null | nextval('botzilla.warning_id_seq'::regclass)
+ sales_person_id | integer                     |           |          | 
+ reason_id       | integer                     |           |          | 
+ created_at      | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+Indexes:
+    "warning_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "warning_reason_id_fkey" FOREIGN KEY (reason_id) REFERENCES botzilla.warning_reason(id)
+    "warning_sales_person_id_fkey" FOREIGN KEY (sales_person_id) REFERENCES botzilla.sales_person(id)
+
+

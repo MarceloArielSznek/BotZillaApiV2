@@ -1,7 +1,7 @@
 'use strict';
 
 const OpenAI = require('openai');
-const { Job, Branch, CrewMember, Estimate } = require('../models');
+const { Job, Branch, Employee, Estimate } = require('../models');
 const { calculateJobPerformance } = require('../services/performance.service');
 const { logger } = require('../utils/logger');
 
@@ -224,7 +224,7 @@ exports.generateOperationPost = async (req, res) => {
     const job = await Job.findByPk(jobId, {
       include: [
         { model: Branch, as: 'branch', attributes: ['id', 'name'] },
-        { model: CrewMember, as: 'crewLeader', attributes: ['id', 'name', 'animal'] },
+        { model: Employee, as: 'crewLeader', attributes: ['id', 'first_name', 'last_name', 'animal'] },
         { model: Estimate, as: 'estimate', attributes: ['name'] }
       ]
     });
@@ -237,10 +237,15 @@ exports.generateOperationPost = async (req, res) => {
     if ((Number(metrics.actualSavedPercent) || 0) < MIN_SAVED_PERCENT) {
       return res.json({ success: true, data: { eligible: false, metrics, minSavedPercent: MIN_SAVED_PERCENT } });
     }
+    
+    const crewLeaderName = job.crewLeader 
+      ? `${job.crewLeader.first_name} ${job.crewLeader.last_name}` 
+      : 'N/A';
+    
     const prompt = buildPrompt({
       jobName: job.name || job.estimate?.name || `Job ${job.id}`,
       branchName: job.branch?.name || 'N/A',
-      crewLeaderName: job.crewLeader?.name || 'N/A',
+      crewLeaderName: crewLeaderName,
       crewLeaderAnimal: job.crewLeader?.animal || '',
       metrics,
       notes,

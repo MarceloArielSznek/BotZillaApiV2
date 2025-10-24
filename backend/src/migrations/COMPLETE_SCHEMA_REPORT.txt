@@ -1,0 +1,685 @@
+============================================================================
+TODAS LAS TABLAS EN SCHEMA BOTZILLA
+============================================================================
+       table_name        | column_count 
+-------------------------+--------------
+ branch                  |            4
+ crew_member             |            7
+ crew_member_branch      |            2
+ employee                |           23
+ employee_telegram_group |            6
+ estimate                |           21
+ estimate_status         |            2
+ group_membership_status |            2
+ inspection_report       |           28
+ job                     |           18
+ job_special_shift       |            5
+ job_state_change_log    |           10
+ job_status              |            2
+ notification            |            8
+ notification_templates  |            5
+ notification_type       |            2
+ sales_person            |            7
+ sales_person_branch     |            3
+ sheet_column_map        |            5
+ shift                   |            4
+ special_shift           |            2
+ telegram_group          |            9
+ telegram_group_category |            5
+ user                    |            6
+ user_branch             |            2
+ user_rol                |            2
+ warning                 |            4
+ warning_reason          |            2
+(28 rows)
+
+
+============================================================================
+DETALLE DE COLUMNAS POR TABLA
+============================================================================
+
+       table_name        |              column_name              |          data_type          |          full_type          | is_nullable |                        column_default                        
+-------------------------+---------------------------------------+-----------------------------+-----------------------------+-------------+--------------------------------------------------------------
+ branch                  | id                                    | integer                     | integer                     | NO          | nextval('botzilla.branch_id_seq'::regclass)
+ branch                  | name                                  | character varying           | character varying(100)      | NO          | 
+ branch                  | address                               | text                        | text                        | YES         | 
+ branch                  | telegram_group_id                     | text                        | text                        | YES         | 
+ crew_member             | id                                    | integer                     | integer                     | NO          | nextval('botzilla.crew_member_id_seq'::regclass)
+ crew_member             | phone                                 | character varying           | character varying(20)       | YES         | 
+ crew_member             | telegram_id                           | character varying           | character varying(50)       | YES         | 
+ crew_member             | name                                  | character varying           | character varying(100)      | NO          | 
+ crew_member             | is_leader                             | boolean                     | boolean                     | YES         | false
+ crew_member             | animal                                | character varying           | character varying(50)       | YES         | 
+ crew_member             | employee_id                           | integer                     | integer                     | YES         | 
+ crew_member_branch      | crew_member_id                        | integer                     | integer                     | NO          | 
+ crew_member_branch      | branch_id                             | integer                     | integer                     | NO          | 
+ employee                | id                                    | integer                     | integer                     | NO          | nextval('botzilla.employee_id_seq'::regclass)
+ employee                | first_name                            | character varying           | character varying(50)       | NO          | 
+ employee                | last_name                             | character varying           | character varying(50)       | NO          | 
+ employee                | nickname                              | character varying           | character varying(30)       | YES         | 
+ employee                | email                                 | character varying           | character varying(100)      | NO          | 
+ employee                | phone_number                          | character varying           | character varying(20)       | YES         | 
+ employee                | telegram_id                           | character varying           | character varying(20)       | YES         | 
+ employee                | status                                | character varying           | character varying(20)       | NO          | 'pending'::character varying
+ employee                | registration_date                     | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee                | approved_date                         | timestamp with time zone    | timestamp with time zone    | YES         | 
+ employee                | approved_by                           | integer                     | integer                     | YES         | 
+ employee                | notes                                 | text                        | text                        | YES         | 
+ employee                | employee_code                         | character varying           | character varying(20)       | YES         | 
+ employee                | created_at                            | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee                | updated_at                            | timestamp with time zone    | timestamp with time zone    | NO          | CURRENT_TIMESTAMP
+ employee                | street                                | character varying           | character varying(200)      | YES         | 
+ employee                | city                                  | character varying           | character varying(100)      | YES         | 
+ employee                | state                                 | character varying           | character varying(50)       | YES         | 
+ employee                | zip                                   | character varying           | character varying(20)       | YES         | 
+ employee                | date_of_birth                         | date                        | date                        | YES         | 
+ employee                | role                                  | character varying           | character varying(20)       | YES         | 
+ employee                | branch_id                             | integer                     | integer                     | YES         | 
+ employee                | attic_tech_user_id                    | integer                     | integer                     | YES         | 
+ employee_telegram_group | id                                    | integer                     | integer                     | NO          | nextval('botzilla.employee_telegram_group_id_seq'::regclass)
+ employee_telegram_group | employee_id                           | integer                     | integer                     | NO          | 
+ employee_telegram_group | telegram_group_id                     | integer                     | integer                     | NO          | 
+ employee_telegram_group | status_id                             | integer                     | integer                     | NO          | 
+ employee_telegram_group | joined_at                             | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ employee_telegram_group | blocked_at                            | timestamp with time zone    | timestamp with time zone    | YES         | 
+ estimate                | id                                    | integer                     | integer                     | NO          | nextval('botzilla.estimate_id_seq'::regclass)
+ estimate                | name                                  | character varying           | character varying(100)      | NO          | 
+ estimate                | sales_person_id                       | integer                     | integer                     | YES         | 
+ estimate                | status_id                             | integer                     | integer                     | YES         | 
+ estimate                | branch_id                             | integer                     | integer                     | YES         | 
+ estimate                | price                                 | numeric                     | numeric                     | YES         | 
+ estimate                | discount                              | numeric                     | numeric                     | YES         | 
+ estimate                | attic_tech_hours                      | numeric                     | numeric                     | YES         | 
+ estimate                | attic_tech_estimate_id                | integer                     | integer                     | YES         | 
+ estimate                | customer_name                         | character varying           | character varying(200)      | YES         | 
+ estimate                | customer_address                      | text                        | text                        | YES         | 
+ estimate                | crew_notes                            | text                        | text                        | YES         | 
+ estimate                | retail_cost                           | numeric                     | numeric                     | YES         | 
+ estimate                | final_price                           | numeric                     | numeric                     | YES         | 
+ estimate                | sub_service_retail_cost               | numeric                     | numeric                     | YES         | 
+ estimate                | at_updated_date                       | timestamp without time zone | timestamp without time zone | YES         | 
+ estimate                | at_created_date                       | timestamp without time zone | timestamp without time zone | YES         | 
+ estimate                | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | 
+ estimate                | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | 
+ estimate                | customer_email                        | character varying           | character varying(200)      | YES         | 
+ estimate                | customer_phone                        | character varying           | character varying(50)       | YES         | 
+ estimate_status         | id                                    | integer                     | integer                     | NO          | nextval('botzilla.estimate_status_id_seq'::regclass)
+ estimate_status         | name                                  | character varying           | character varying(50)       | NO          | 
+ group_membership_status | id                                    | integer                     | integer                     | NO          | nextval('botzilla.group_membership_status_id_seq'::regclass)
+ group_membership_status | name                                  | character varying           | character varying(50)       | NO          | 
+ inspection_report       | id                                    | integer                     | integer                     | NO          | nextval('botzilla.inspection_report_id_seq'::regclass)
+ inspection_report       | attic_tech_report_id                  | integer                     | integer                     | NO          | 
+ inspection_report       | attic_tech_estimate_id                | integer                     | integer                     | NO          | 
+ inspection_report       | estimate_name                         | character varying           | character varying(255)      | YES         | 
+ inspection_report       | salesperson_name                      | character varying           | character varying(255)      | YES         | 
+ inspection_report       | client_name                           | character varying           | character varying(255)      | YES         | 
+ inspection_report       | client_phone                          | character varying           | character varying(50)       | YES         | 
+ inspection_report       | client_email                          | character varying           | character varying(255)      | YES         | 
+ inspection_report       | client_address                        | text                        | text                        | YES         | 
+ inspection_report       | branch_name                           | character varying           | character varying(255)      | YES         | 
+ inspection_report       | estimate_link                         | text                        | text                        | YES         | 
+ inspection_report       | roof_material                         | character varying           | character varying(100)      | YES         | 
+ inspection_report       | decking_type                          | character varying           | character varying(100)      | YES         | 
+ inspection_report       | roof_age                              | character varying           | character varying(50)       | YES         | 
+ inspection_report       | walkable_roof                         | character varying           | character varying(50)       | YES         | 
+ inspection_report       | roof_condition                        | character varying           | character varying(100)      | YES         | 
+ inspection_report       | full_roof_inspection_interest         | boolean                     | boolean                     | YES         | false
+ inspection_report       | customer_comfort                      | character varying           | character varying(100)      | YES         | 
+ inspection_report       | hvac_age                              | character varying           | character varying(50)       | YES         | 
+ inspection_report       | system_condition                      | character varying           | character varying(100)      | YES         | 
+ inspection_report       | air_ducts_condition                   | character varying           | character varying(100)      | YES         | 
+ inspection_report       | full_hvac_furnace_inspection_interest | boolean                     | boolean                     | YES         | false
+ inspection_report       | roof_notification_sent                | boolean                     | boolean                     | NO          | false
+ inspection_report       | hvac_notification_sent                | boolean                     | boolean                     | NO          | false
+ inspection_report       | attic_tech_created_at                 | timestamp with time zone    | timestamp with time zone    | YES         | 
+ inspection_report       | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ inspection_report       | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ inspection_report       | salesperson_email                     | character varying           | character varying(255)      | YES         | 
+ job                     | id                                    | integer                     | integer                     | NO          | nextval('botzilla.job_id_seq'::regclass)
+ job                     | name                                  | character varying           | character varying(100)      | NO          | 
+ job                     | closing_date                          | timestamp without time zone | timestamp without time zone | YES         | CURRENT_TIMESTAMP
+ job                     | estimate_id                           | integer                     | integer                     | YES         | 
+ job                     | crew_leader_id                        | integer                     | integer                     | YES         | 
+ job                     | branch_id                             | integer                     | integer                     | YES         | 
+ job                     | note                                  | text                        | text                        | YES         | 
+ job                     | review                                | integer                     | integer                     | YES         | 
+ job                     | attic_tech_hours                      | numeric                     | numeric                     | YES         | 
+ job                     | crew_leader_hours                     | numeric                     | numeric                     | YES         | 
+ job                     | notification_sent                     | boolean                     | boolean                     | NO          | false
+ job                     | cl_estimated_plan_hours               | numeric                     | numeric                     | YES         | NULL::numeric
+ job                     | status_id                             | integer                     | integer                     | YES         | 
+ job                     | attic_tech_job_id                     | integer                     | integer                     | YES         | 
+ job                     | last_synced_at                        | timestamp without time zone | timestamp without time zone | YES         | 
+ job                     | attic_tech_estimate_id                | integer                     | integer                     | YES         | 
+ job                     | last_known_status_id                  | integer                     | integer                     | YES         | 
+ job                     | last_notification_sent_at             | timestamp without time zone | timestamp without time zone | YES         | 
+ job_special_shift       | special_shift_id                      | integer                     | integer                     | NO          | 
+ job_special_shift       | job_id                                | integer                     | integer                     | NO          | 
+ job_special_shift       | date                                  | date                        | date                        | NO          | 
+ job_special_shift       | hours                                 | numeric                     | numeric                     | NO          | 
+ job_special_shift       | approved_shift                        | boolean                     | boolean                     | NO          | false
+ job_state_change_log    | id                                    | integer                     | integer                     | NO          | nextval('botzilla.job_state_change_log_id_seq'::regclass)
+ job_state_change_log    | job_sync_id                           | integer                     | integer                     | YES         | 
+ job_state_change_log    | attic_tech_job_id                     | integer                     | integer                     | NO          | 
+ job_state_change_log    | previous_status_id                    | integer                     | integer                     | YES         | 
+ job_state_change_log    | new_status_id                         | integer                     | integer                     | YES         | 
+ job_state_change_log    | notified_user_type                    | character varying           | character varying(50)       | YES         | 
+ job_state_change_log    | notified_user_id                      | integer                     | integer                     | YES         | 
+ job_state_change_log    | notified_telegram_id                  | character varying           | character varying(20)       | YES         | 
+ job_state_change_log    | changed_at                            | timestamp without time zone | timestamp without time zone | YES         | now()
+ job_state_change_log    | change_metadata                       | jsonb                       | jsonb                       | YES         | 
+ job_status              | id                                    | integer                     | integer                     | NO          | nextval('botzilla.job_status_id_seq'::regclass)
+ job_status              | name                                  | character varying           | character varying(50)       | NO          | 
+ notification            | id                                    | integer                     | integer                     | NO          | nextval('botzilla.notification_id_seq'::regclass)
+ notification            | message                               | text                        | text                        | NO          | 
+ notification            | created_at                            | timestamp without time zone | timestamp without time zone | YES         | CURRENT_TIMESTAMP
+ notification            | recipient_type                        | character varying           | character varying(20)       | NO          | 
+ notification            | recipient_id                          | integer                     | integer                     | NO          | 
+ notification            | read_at                               | timestamp without time zone | timestamp without time zone | YES         | 
+ notification            | sent_to_telegram                      | boolean                     | boolean                     | YES         | false
+ notification            | notification_type_id                  | integer                     | integer                     | YES         | 
+ notification_templates  | id                                    | integer                     | integer                     | NO          | nextval('botzilla.notification_templates_id_seq'::regclass)
+ notification_templates  | name                                  | character varying           | character varying(100)      | NO          | 
+ notification_templates  | notification_type_id                  | integer                     | integer                     | NO          | 
+ notification_templates  | level                                 | integer                     | integer                     | YES         | 
+ notification_templates  | template_text                         | text                        | text                        | NO          | 
+ notification_type       | id                                    | integer                     | integer                     | NO          | nextval('botzilla.notification_type_id_seq'::regclass)
+ notification_type       | name                                  | character varying           | character varying(50)       | NO          | 
+ sales_person            | id                                    | integer                     | integer                     | NO          | nextval('botzilla.sales_person_id_seq'::regclass)
+ sales_person            | name                                  | character varying           | character varying(100)      | NO          | 
+ sales_person            | phone                                 | character varying           | character varying(20)       | YES         | 
+ sales_person            | telegram_id                           | character varying           | character varying(50)       | YES         | 
+ sales_person            | warning_count                         | integer                     | integer                     | YES         | 0
+ sales_person            | is_active                             | boolean                     | boolean                     | NO          | true
+ sales_person            | employee_id                           | integer                     | integer                     | YES         | 
+ sales_person_branch     | sales_person_id                       | integer                     | integer                     | NO          | 
+ sales_person_branch     | branch_id                             | integer                     | integer                     | NO          | 
+ sales_person_branch     | id                                    | integer                     | integer                     | NO          | nextval('botzilla.sales_person_branch_id_seq'::regclass)
+ sheet_column_map        | id                                    | integer                     | integer                     | NO          | nextval('botzilla.sheet_column_map_id_seq'::regclass)
+ sheet_column_map        | sheet_name                            | text                        | text                        | NO          | 
+ sheet_column_map        | field_name                            | text                        | text                        | NO          | 
+ sheet_column_map        | column_index                          | integer                     | integer                     | NO          | 
+ sheet_column_map        | type                                  | text                        | text                        | NO          | 
+ shift                   | crew_member_id                        | integer                     | integer                     | NO          | 
+ shift                   | job_id                                | integer                     | integer                     | NO          | 
+ shift                   | hours                                 | numeric                     | numeric                     | NO          | 
+ shift                   | approved_shift                        | boolean                     | boolean                     | NO          | false
+ special_shift           | id                                    | integer                     | integer                     | NO          | nextval('botzilla.special_shift_id_seq'::regclass)
+ special_shift           | name                                  | character varying           | character varying(100)      | NO          | 
+ telegram_group          | id                                    | integer                     | integer                     | NO          | nextval('botzilla.telegram_group_id_seq'::regclass)
+ telegram_group          | name                                  | character varying           | character varying(255)      | NO          | 
+ telegram_group          | branch_id                             | integer                     | integer                     | YES         | 
+ telegram_group          | telegram_id                           | bigint                      | bigint                      | NO          | 
+ telegram_group          | description                           | text                        | text                        | YES         | 
+ telegram_group          | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ telegram_group          | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ telegram_group          | category_id                           | integer                     | integer                     | YES         | 
+ telegram_group          | is_default                            | boolean                     | boolean                     | NO          | false
+ telegram_group_category | id                                    | integer                     | integer                     | NO          | nextval('botzilla.telegram_group_category_id_seq'::regclass)
+ telegram_group_category | name                                  | character varying           | character varying(100)      | NO          | 
+ telegram_group_category | description                           | text                        | text                        | YES         | 
+ telegram_group_category | created_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ telegram_group_category | updated_at                            | timestamp with time zone    | timestamp with time zone    | YES         | CURRENT_TIMESTAMP
+ user                    | id                                    | integer                     | integer                     | NO          | nextval('botzilla.user_id_seq'::regclass)
+ user                    | rol_id                                | integer                     | integer                     | YES         | 
+ user                    | phone                                 | character varying           | character varying(20)       | YES         | 
+ user                    | email                                 | character varying           | character varying(100)      | NO          | 
+ user                    | password                              | character varying           | character varying(100)      | NO          | 
+ user                    | telegram_id                           | character varying           | character varying(50)       | YES         | 
+ user_branch             | user_id                               | integer                     | integer                     | NO          | 
+ user_branch             | branch_id                             | integer                     | integer                     | NO          | 
+ user_rol                | id                                    | integer                     | integer                     | NO          | nextval('botzilla.user_rol_id_seq'::regclass)
+ user_rol                | name                                  | character varying           | character varying(50)       | NO          | 
+ warning                 | id                                    | integer                     | integer                     | NO          | nextval('botzilla.warning_id_seq'::regclass)
+ warning                 | sales_person_id                       | integer                     | integer                     | YES         | 
+ warning                 | reason_id                             | integer                     | integer                     | YES         | 
+ warning                 | created_at                            | timestamp without time zone | timestamp without time zone | YES         | CURRENT_TIMESTAMP
+ warning_reason          | id                                    | integer                     | integer                     | NO          | nextval('botzilla.warning_reason_id_seq'::regclass)
+ warning_reason          | name                                  | character varying           | character varying(100)      | NO          | 
+(196 rows)
+
+
+============================================================================
+DETALLE ESPECÍFICO POR TABLA
+============================================================================
+
+--- TABLE: user ---
+ column_name |     data_type     | character_maximum_length | is_nullable |              column_default               
+-------------+-------------------+--------------------------+-------------+-------------------------------------------
+ id          | integer           |                          | NO          | nextval('botzilla.user_id_seq'::regclass)
+ rol_id      | integer           |                          | YES         | 
+ phone       | character varying |                       20 | YES         | 
+ email       | character varying |                      100 | NO          | 
+ password    | character varying |                      100 | NO          | 
+ telegram_id | character varying |                       50 | YES         | 
+(6 rows)
+
+
+--- TABLE: user_rol ---
+ column_name |     data_type     | character_maximum_length | is_nullable |                column_default                 
+-------------+-------------------+--------------------------+-------------+-----------------------------------------------
+ id          | integer           |                          | NO          | nextval('botzilla.user_rol_id_seq'::regclass)
+ name        | character varying |                       50 | NO          | 
+(2 rows)
+
+
+--- TABLE: user_branch ---
+ column_name | data_type | character_maximum_length | is_nullable | column_default 
+-------------+-----------+--------------------------+-------------+----------------
+ user_id     | integer   |                          | NO          | 
+ branch_id   | integer   |                          | NO          | 
+(2 rows)
+
+
+--- TABLE: branch ---
+    column_name    |     data_type     | character_maximum_length | is_nullable |               column_default                
+-------------------+-------------------+--------------------------+-------------+---------------------------------------------
+ id                | integer           |                          | NO          | nextval('botzilla.branch_id_seq'::regclass)
+ name              | character varying |                      100 | NO          | 
+ address           | text              |                          | YES         | 
+ telegram_group_id | text              |                          | YES         | 
+(4 rows)
+
+
+--- TABLE: employee ---
+    column_name     |        data_type         | character_maximum_length | is_nullable |                column_default                 
+--------------------+--------------------------+--------------------------+-------------+-----------------------------------------------
+ id                 | integer                  |                          | NO          | nextval('botzilla.employee_id_seq'::regclass)
+ first_name         | character varying        |                       50 | NO          | 
+ last_name          | character varying        |                       50 | NO          | 
+ nickname           | character varying        |                       30 | YES         | 
+ email              | character varying        |                      100 | NO          | 
+ phone_number       | character varying        |                       20 | YES         | 
+ telegram_id        | character varying        |                       20 | YES         | 
+ status             | character varying        |                       20 | NO          | 'pending'::character varying
+ registration_date  | timestamp with time zone |                          | NO          | CURRENT_TIMESTAMP
+ approved_date      | timestamp with time zone |                          | YES         | 
+ approved_by        | integer                  |                          | YES         | 
+ notes              | text                     |                          | YES         | 
+ employee_code      | character varying        |                       20 | YES         | 
+ created_at         | timestamp with time zone |                          | NO          | CURRENT_TIMESTAMP
+ updated_at         | timestamp with time zone |                          | NO          | CURRENT_TIMESTAMP
+ street             | character varying        |                      200 | YES         | 
+ city               | character varying        |                      100 | YES         | 
+ state              | character varying        |                       50 | YES         | 
+ zip                | character varying        |                       20 | YES         | 
+ date_of_birth      | date                     |                          | YES         | 
+ role               | character varying        |                       20 | YES         | 
+ branch_id          | integer                  |                          | YES         | 
+ attic_tech_user_id | integer                  |                          | YES         | 
+(23 rows)
+
+
+--- TABLE: crew_member ---
+ column_name |     data_type     | character_maximum_length | is_nullable |                  column_default                  
+-------------+-------------------+--------------------------+-------------+--------------------------------------------------
+ id          | integer           |                          | NO          | nextval('botzilla.crew_member_id_seq'::regclass)
+ phone       | character varying |                       20 | YES         | 
+ telegram_id | character varying |                       50 | YES         | 
+ name        | character varying |                      100 | NO          | 
+ is_leader   | boolean           |                          | YES         | false
+ animal      | character varying |                       50 | YES         | 
+ employee_id | integer           |                          | YES         | 
+(7 rows)
+
+
+--- TABLE: crew_member_branch ---
+  column_name   | data_type | character_maximum_length | is_nullable | column_default 
+----------------+-----------+--------------------------+-------------+----------------
+ crew_member_id | integer   |                          | NO          | 
+ branch_id      | integer   |                          | NO          | 
+(2 rows)
+
+
+--- TABLE: sales_person ---
+  column_name  |     data_type     | character_maximum_length | is_nullable |                  column_default                   
+---------------+-------------------+--------------------------+-------------+---------------------------------------------------
+ id            | integer           |                          | NO          | nextval('botzilla.sales_person_id_seq'::regclass)
+ name          | character varying |                      100 | NO          | 
+ phone         | character varying |                       20 | YES         | 
+ telegram_id   | character varying |                       50 | YES         | 
+ warning_count | integer           |                          | YES         | 0
+ is_active     | boolean           |                          | NO          | true
+ employee_id   | integer           |                          | YES         | 
+(7 rows)
+
+
+--- TABLE: sales_person_branch ---
+   column_name   | data_type | character_maximum_length | is_nullable |                      column_default                      
+-----------------+-----------+--------------------------+-------------+----------------------------------------------------------
+ sales_person_id | integer   |                          | NO          | 
+ branch_id       | integer   |                          | NO          | 
+ id              | integer   |                          | NO          | nextval('botzilla.sales_person_branch_id_seq'::regclass)
+(3 rows)
+
+
+--- TABLE: telegram_group ---
+ column_name |        data_type         | character_maximum_length | is_nullable |                   column_default                    
+-------------+--------------------------+--------------------------+-------------+-----------------------------------------------------
+ id          | integer                  |                          | NO          | nextval('botzilla.telegram_group_id_seq'::regclass)
+ name        | character varying        |                      255 | NO          | 
+ branch_id   | integer                  |                          | YES         | 
+ telegram_id | bigint                   |                          | NO          | 
+ description | text                     |                          | YES         | 
+ created_at  | timestamp with time zone |                          | YES         | CURRENT_TIMESTAMP
+ updated_at  | timestamp with time zone |                          | YES         | CURRENT_TIMESTAMP
+ category_id | integer                  |                          | YES         | 
+ is_default  | boolean                  |                          | NO          | false
+(9 rows)
+
+
+--- TABLE: telegram_group_category ---
+ column_name |        data_type         | character_maximum_length | is_nullable |                        column_default                        
+-------------+--------------------------+--------------------------+-------------+--------------------------------------------------------------
+ id          | integer                  |                          | NO          | nextval('botzilla.telegram_group_category_id_seq'::regclass)
+ name        | character varying        |                      100 | NO          | 
+ description | text                     |                          | YES         | 
+ created_at  | timestamp with time zone |                          | YES         | CURRENT_TIMESTAMP
+ updated_at  | timestamp with time zone |                          | YES         | CURRENT_TIMESTAMP
+(5 rows)
+
+
+--- TABLE: employee_telegram_group ---
+    column_name    |        data_type         | character_maximum_length | is_nullable |                        column_default                        
+-------------------+--------------------------+--------------------------+-------------+--------------------------------------------------------------
+ id                | integer                  |                          | NO          | nextval('botzilla.employee_telegram_group_id_seq'::regclass)
+ employee_id       | integer                  |                          | NO          | 
+ telegram_group_id | integer                  |                          | NO          | 
+ status_id         | integer                  |                          | NO          | 
+ joined_at         | timestamp with time zone |                          | YES         | CURRENT_TIMESTAMP
+ blocked_at        | timestamp with time zone |                          | YES         | 
+(6 rows)
+
+
+--- TABLE: job ---
+        column_name        |          data_type          | character_maximum_length | is_nullable |              column_default              
+---------------------------+-----------------------------+--------------------------+-------------+------------------------------------------
+ id                        | integer                     |                          | NO          | nextval('botzilla.job_id_seq'::regclass)
+ name                      | character varying           |                      100 | NO          | 
+ closing_date              | timestamp without time zone |                          | YES         | CURRENT_TIMESTAMP
+ estimate_id               | integer                     |                          | YES         | 
+ crew_leader_id            | integer                     |                          | YES         | 
+ branch_id                 | integer                     |                          | YES         | 
+ note                      | text                        |                          | YES         | 
+ review                    | integer                     |                          | YES         | 
+ attic_tech_hours          | numeric                     |                          | YES         | 
+ crew_leader_hours         | numeric                     |                          | YES         | 
+ notification_sent         | boolean                     |                          | NO          | false
+ cl_estimated_plan_hours   | numeric                     |                          | YES         | NULL::numeric
+ status_id                 | integer                     |                          | YES         | 
+ attic_tech_job_id         | integer                     |                          | YES         | 
+ last_synced_at            | timestamp without time zone |                          | YES         | 
+ attic_tech_estimate_id    | integer                     |                          | YES         | 
+ last_known_status_id      | integer                     |                          | YES         | 
+ last_notification_sent_at | timestamp without time zone |                          | YES         | 
+(18 rows)
+
+
+--- TABLE: job_status ---
+ column_name |     data_type     | character_maximum_length | is_nullable |                 column_default                  
+-------------+-------------------+--------------------------+-------------+-------------------------------------------------
+ id          | integer           |                          | NO          | nextval('botzilla.job_status_id_seq'::regclass)
+ name        | character varying |                       50 | NO          | 
+(2 rows)
+
+
+--- TABLE: estimate ---
+       column_name       |          data_type          | character_maximum_length | is_nullable |                column_default                 
+-------------------------+-----------------------------+--------------------------+-------------+-----------------------------------------------
+ id                      | integer                     |                          | NO          | nextval('botzilla.estimate_id_seq'::regclass)
+ name                    | character varying           |                      100 | NO          | 
+ sales_person_id         | integer                     |                          | YES         | 
+ status_id               | integer                     |                          | YES         | 
+ branch_id               | integer                     |                          | YES         | 
+ price                   | numeric                     |                          | YES         | 
+ discount                | numeric                     |                          | YES         | 
+ attic_tech_hours        | numeric                     |                          | YES         | 
+ attic_tech_estimate_id  | integer                     |                          | YES         | 
+ customer_name           | character varying           |                      200 | YES         | 
+ customer_address        | text                        |                          | YES         | 
+ crew_notes              | text                        |                          | YES         | 
+ retail_cost             | numeric                     |                          | YES         | 
+ final_price             | numeric                     |                          | YES         | 
+ sub_service_retail_cost | numeric                     |                          | YES         | 
+ at_updated_date         | timestamp without time zone |                          | YES         | 
+ at_created_date         | timestamp without time zone |                          | YES         | 
+ created_at              | timestamp with time zone    |                          | YES         | 
+ updated_at              | timestamp with time zone    |                          | YES         | 
+ customer_email          | character varying           |                      200 | YES         | 
+ customer_phone          | character varying           |                       50 | YES         | 
+(21 rows)
+
+
+--- TABLE: estimate_status ---
+ column_name |     data_type     | character_maximum_length | is_nullable |                    column_default                    
+-------------+-------------------+--------------------------+-------------+------------------------------------------------------
+ id          | integer           |                          | NO          | nextval('botzilla.estimate_status_id_seq'::regclass)
+ name        | character varying |                       50 | NO          | 
+(2 rows)
+
+
+--- TABLE: inspection_report ---
+              column_name              |        data_type         | character_maximum_length | is_nullable |                     column_default                     
+---------------------------------------+--------------------------+--------------------------+-------------+--------------------------------------------------------
+ id                                    | integer                  |                          | NO          | nextval('botzilla.inspection_report_id_seq'::regclass)
+ attic_tech_report_id                  | integer                  |                          | NO          | 
+ attic_tech_estimate_id                | integer                  |                          | NO          | 
+ estimate_name                         | character varying        |                      255 | YES         | 
+ salesperson_name                      | character varying        |                      255 | YES         | 
+ client_name                           | character varying        |                      255 | YES         | 
+ client_phone                          | character varying        |                       50 | YES         | 
+ client_email                          | character varying        |                      255 | YES         | 
+ client_address                        | text                     |                          | YES         | 
+ branch_name                           | character varying        |                      255 | YES         | 
+ estimate_link                         | text                     |                          | YES         | 
+ roof_material                         | character varying        |                      100 | YES         | 
+ decking_type                          | character varying        |                      100 | YES         | 
+ roof_age                              | character varying        |                       50 | YES         | 
+ walkable_roof                         | character varying        |                       50 | YES         | 
+ roof_condition                        | character varying        |                      100 | YES         | 
+ full_roof_inspection_interest         | boolean                  |                          | YES         | false
+ customer_comfort                      | character varying        |                      100 | YES         | 
+ hvac_age                              | character varying        |                       50 | YES         | 
+ system_condition                      | character varying        |                      100 | YES         | 
+ air_ducts_condition                   | character varying        |                      100 | YES         | 
+ full_hvac_furnace_inspection_interest | boolean                  |                          | YES         | false
+ roof_notification_sent                | boolean                  |                          | NO          | false
+ hvac_notification_sent                | boolean                  |                          | NO          | false
+ attic_tech_created_at                 | timestamp with time zone |                          | YES         | 
+ created_at                            | timestamp with time zone |                          | YES         | CURRENT_TIMESTAMP
+ updated_at                            | timestamp with time zone |                          | YES         | CURRENT_TIMESTAMP
+ salesperson_email                     | character varying        |                      255 | YES         | 
+(28 rows)
+
+
+============================================================================
+TODOS LOS ÍNDICES
+============================================================================
+        tablename        |                         indexname                         |                                                                            indexdef                                                                            
+-------------------------+-----------------------------------------------------------+----------------------------------------------------------------------------------------------------------------------------------------------------------------
+ branch                  | branch_pkey                                               | CREATE UNIQUE INDEX branch_pkey ON botzilla.branch USING btree (id)
+ crew_member             | crew_member_pkey                                          | CREATE UNIQUE INDEX crew_member_pkey ON botzilla.crew_member USING btree (id)
+ crew_member             | idx_crew_member_employee_id                               | CREATE INDEX idx_crew_member_employee_id ON botzilla.crew_member USING btree (employee_id)
+ crew_member_branch      | crew_member_branch_pkey                                   | CREATE UNIQUE INDEX crew_member_branch_pkey ON botzilla.crew_member_branch USING btree (crew_member_id, branch_id)
+ employee                | employee_attic_tech_user_id_key                           | CREATE UNIQUE INDEX employee_attic_tech_user_id_key ON botzilla.employee USING btree (attic_tech_user_id)
+ employee                | employee_pkey                                             | CREATE UNIQUE INDEX employee_pkey ON botzilla.employee USING btree (id)
+ employee                | idx_employee_approved_by                                  | CREATE INDEX idx_employee_approved_by ON botzilla.employee USING btree (approved_by)
+ employee                | idx_employee_attic_tech_user_id                           | CREATE INDEX idx_employee_attic_tech_user_id ON botzilla.employee USING btree (attic_tech_user_id)
+ employee                | idx_employee_branch_id                                    | CREATE INDEX idx_employee_branch_id ON botzilla.employee USING btree (branch_id)
+ employee                | idx_employee_city_state                                   | CREATE INDEX idx_employee_city_state ON botzilla.employee USING btree (city, state)
+ employee                | idx_employee_date_of_birth                                | CREATE INDEX idx_employee_date_of_birth ON botzilla.employee USING btree (date_of_birth)
+ employee                | idx_employee_full_name                                    | CREATE INDEX idx_employee_full_name ON botzilla.employee USING btree (first_name, last_name)
+ employee                | idx_employee_registration_date                            | CREATE INDEX idx_employee_registration_date ON botzilla.employee USING btree (registration_date)
+ employee                | idx_employee_role                                         | CREATE INDEX idx_employee_role ON botzilla.employee USING btree (role)
+ employee                | idx_employee_status                                       | CREATE INDEX idx_employee_status ON botzilla.employee USING btree (status)
+ employee                | unique_employee_code                                      | CREATE UNIQUE INDEX unique_employee_code ON botzilla.employee USING btree (employee_code) WHERE (employee_code IS NOT NULL)
+ employee                | unique_employee_email                                     | CREATE UNIQUE INDEX unique_employee_email ON botzilla.employee USING btree (email)
+ employee                | unique_employee_telegram_id                               | CREATE UNIQUE INDEX unique_employee_telegram_id ON botzilla.employee USING btree (telegram_id)
+ employee_telegram_group | employee_telegram_group_employee_id_telegram_group_id_key | CREATE UNIQUE INDEX employee_telegram_group_employee_id_telegram_group_id_key ON botzilla.employee_telegram_group USING btree (employee_id, telegram_group_id)
+ employee_telegram_group | employee_telegram_group_pkey                              | CREATE UNIQUE INDEX employee_telegram_group_pkey ON botzilla.employee_telegram_group USING btree (id)
+ estimate                | estimate_attic_tech_estimate_id_key                       | CREATE UNIQUE INDEX estimate_attic_tech_estimate_id_key ON botzilla.estimate USING btree (attic_tech_estimate_id)
+ estimate                | estimate_pkey                                             | CREATE UNIQUE INDEX estimate_pkey ON botzilla.estimate USING btree (id)
+ estimate                | idx_estimate_branch                                       | CREATE INDEX idx_estimate_branch ON botzilla.estimate USING btree (branch_id)
+ estimate                | idx_estimate_sales_person                                 | CREATE INDEX idx_estimate_sales_person ON botzilla.estimate USING btree (sales_person_id)
+ estimate                | idx_estimate_status                                       | CREATE INDEX idx_estimate_status ON botzilla.estimate USING btree (status_id)
+ estimate_status         | estimate_status_pkey                                      | CREATE UNIQUE INDEX estimate_status_pkey ON botzilla.estimate_status USING btree (id)
+ group_membership_status | group_membership_status_name_key                          | CREATE UNIQUE INDEX group_membership_status_name_key ON botzilla.group_membership_status USING btree (name)
+ group_membership_status | group_membership_status_pkey                              | CREATE UNIQUE INDEX group_membership_status_pkey ON botzilla.group_membership_status USING btree (id)
+ inspection_report       | idx_ir_attic_tech_created_at                              | CREATE INDEX idx_ir_attic_tech_created_at ON botzilla.inspection_report USING btree (attic_tech_created_at)
+ inspection_report       | idx_ir_attic_tech_estimate_id                             | CREATE INDEX idx_ir_attic_tech_estimate_id ON botzilla.inspection_report USING btree (attic_tech_estimate_id)
+ inspection_report       | idx_ir_attic_tech_report_id                               | CREATE INDEX idx_ir_attic_tech_report_id ON botzilla.inspection_report USING btree (attic_tech_report_id)
+ inspection_report       | inspection_report_attic_tech_report_id_key                | CREATE UNIQUE INDEX inspection_report_attic_tech_report_id_key ON botzilla.inspection_report USING btree (attic_tech_report_id)
+ inspection_report       | inspection_report_pkey                                    | CREATE UNIQUE INDEX inspection_report_pkey ON botzilla.inspection_report USING btree (id)
+ job                     | idx_job_attic_tech_estimate_id                            | CREATE INDEX idx_job_attic_tech_estimate_id ON botzilla.job USING btree (attic_tech_estimate_id)
+ job                     | idx_job_attic_tech_job_id                                 | CREATE INDEX idx_job_attic_tech_job_id ON botzilla.job USING btree (attic_tech_job_id)
+ job                     | idx_job_crew_leader                                       | CREATE INDEX idx_job_crew_leader ON botzilla.job USING btree (crew_leader_id)
+ job                     | idx_job_estimate                                          | CREATE INDEX idx_job_estimate ON botzilla.job USING btree (estimate_id)
+ job                     | idx_job_last_known_status_id                              | CREATE INDEX idx_job_last_known_status_id ON botzilla.job USING btree (last_known_status_id)
+ job                     | idx_job_last_synced_at                                    | CREATE INDEX idx_job_last_synced_at ON botzilla.job USING btree (last_synced_at)
+ job                     | job_attic_tech_job_id_key                                 | CREATE UNIQUE INDEX job_attic_tech_job_id_key ON botzilla.job USING btree (attic_tech_job_id)
+ job                     | job_pkey                                                  | CREATE UNIQUE INDEX job_pkey ON botzilla.job USING btree (id)
+ job_special_shift       | idx_job_special_shift_approved_shift                      | CREATE INDEX idx_job_special_shift_approved_shift ON botzilla.job_special_shift USING btree (approved_shift)
+ job_special_shift       | job_special_shift_pkey                                    | CREATE UNIQUE INDEX job_special_shift_pkey ON botzilla.job_special_shift USING btree (special_shift_id, job_id, date)
+ job_state_change_log    | idx_job_state_log_attic_tech_job_id                       | CREATE INDEX idx_job_state_log_attic_tech_job_id ON botzilla.job_state_change_log USING btree (attic_tech_job_id)
+ job_state_change_log    | idx_job_state_log_changed_at                              | CREATE INDEX idx_job_state_log_changed_at ON botzilla.job_state_change_log USING btree (changed_at)
+ job_state_change_log    | idx_job_state_log_job_sync_id                             | CREATE INDEX idx_job_state_log_job_sync_id ON botzilla.job_state_change_log USING btree (job_sync_id)
+ job_state_change_log    | job_state_change_log_pkey                                 | CREATE UNIQUE INDEX job_state_change_log_pkey ON botzilla.job_state_change_log USING btree (id)
+ job_status              | job_status_name_key                                       | CREATE UNIQUE INDEX job_status_name_key ON botzilla.job_status USING btree (name)
+ job_status              | job_status_pkey                                           | CREATE UNIQUE INDEX job_status_pkey ON botzilla.job_status USING btree (id)
+ notification            | idx_notification_created_at                               | CREATE INDEX idx_notification_created_at ON botzilla.notification USING btree (created_at)
+ notification            | idx_notification_recipient                                | CREATE INDEX idx_notification_recipient ON botzilla.notification USING btree (recipient_type, recipient_id)
+ notification            | notification_pkey                                         | CREATE UNIQUE INDEX notification_pkey ON botzilla.notification USING btree (id)
+ notification_templates  | notification_templates_name_key                           | CREATE UNIQUE INDEX notification_templates_name_key ON botzilla.notification_templates USING btree (name)
+ notification_templates  | notification_templates_pkey                               | CREATE UNIQUE INDEX notification_templates_pkey ON botzilla.notification_templates USING btree (id)
+ notification_type       | notification_type_name_key                                | CREATE UNIQUE INDEX notification_type_name_key ON botzilla.notification_type USING btree (name)
+ notification_type       | notification_type_pkey                                    | CREATE UNIQUE INDEX notification_type_pkey ON botzilla.notification_type USING btree (id)
+ sales_person            | idx_sales_person_employee_id                              | CREATE INDEX idx_sales_person_employee_id ON botzilla.sales_person USING btree (employee_id)
+ sales_person            | sales_person_pkey                                         | CREATE UNIQUE INDEX sales_person_pkey ON botzilla.sales_person USING btree (id)
+ sales_person_branch     | sales_person_branch_pkey                                  | CREATE UNIQUE INDEX sales_person_branch_pkey ON botzilla.sales_person_branch USING btree (id)
+ sheet_column_map        | sheet_column_map_pkey                                     | CREATE UNIQUE INDEX sheet_column_map_pkey ON botzilla.sheet_column_map USING btree (id)
+ sheet_column_map        | sheet_column_map_sheet_name_field_name_key                | CREATE UNIQUE INDEX sheet_column_map_sheet_name_field_name_key ON botzilla.sheet_column_map USING btree (sheet_name, field_name)
+ shift                   | idx_shift_approved_shift                                  | CREATE INDEX idx_shift_approved_shift ON botzilla.shift USING btree (approved_shift)
+ shift                   | shift_pkey                                                | CREATE UNIQUE INDEX shift_pkey ON botzilla.shift USING btree (crew_member_id, job_id)
+ special_shift           | special_shift_pkey                                        | CREATE UNIQUE INDEX special_shift_pkey ON botzilla.special_shift USING btree (id)
+ telegram_group          | telegram_group_pkey                                       | CREATE UNIQUE INDEX telegram_group_pkey ON botzilla.telegram_group USING btree (id)
+ telegram_group          | telegram_group_telegram_id_key                            | CREATE UNIQUE INDEX telegram_group_telegram_id_key ON botzilla.telegram_group USING btree (telegram_id)
+ telegram_group_category | telegram_group_category_name_key                          | CREATE UNIQUE INDEX telegram_group_category_name_key ON botzilla.telegram_group_category USING btree (name)
+ telegram_group_category | telegram_group_category_pkey                              | CREATE UNIQUE INDEX telegram_group_category_pkey ON botzilla.telegram_group_category USING btree (id)
+ user                    | user_email_key                                            | CREATE UNIQUE INDEX user_email_key ON botzilla."user" USING btree (email)
+ user                    | user_pkey                                                 | CREATE UNIQUE INDEX user_pkey ON botzilla."user" USING btree (id)
+ user_branch             | user_branch_pkey                                          | CREATE UNIQUE INDEX user_branch_pkey ON botzilla.user_branch USING btree (user_id, branch_id)
+ user_rol                | user_rol_pkey                                             | CREATE UNIQUE INDEX user_rol_pkey ON botzilla.user_rol USING btree (id)
+ warning                 | warning_pkey                                              | CREATE UNIQUE INDEX warning_pkey ON botzilla.warning USING btree (id)
+ warning_reason          | warning_reason_pkey                                       | CREATE UNIQUE INDEX warning_reason_pkey ON botzilla.warning_reason USING btree (id)
+(74 rows)
+
+
+============================================================================
+TODAS LAS FOREIGN KEYS
+============================================================================
+       table_name        |     column_name      |   foreign_table_name    | foreign_column_name |                 constraint_name                  
+-------------------------+----------------------+-------------------------+---------------------+--------------------------------------------------
+ crew_member             | employee_id          | employee                | id                  | crew_member_employee_id_fkey
+ crew_member_branch      | branch_id            | branch                  | id                  | crew_member_branch_branch_id_fkey
+ crew_member_branch      | crew_member_id       | crew_member             | id                  | crew_member_branch_crew_member_id_fkey
+ employee                | approved_by          | user                    | id                  | employee_approved_by_fkey
+ employee                | branch_id            | branch                  | id                  | fk_employee_branch
+ employee_telegram_group | employee_id          | employee                | id                  | fk_employee
+ employee_telegram_group | status_id            | group_membership_status | id                  | fk_status
+ employee_telegram_group | telegram_group_id    | telegram_group          | id                  | fk_telegram_group
+ estimate                | branch_id            | branch                  | id                  | estimate_branch_id_fkey
+ estimate                | sales_person_id      | sales_person            | id                  | estimate_sales_person_id_fkey
+ estimate                | status_id            | estimate_status         | id                  | estimate_status_id_fkey
+ job                     | branch_id            | branch                  | id                  | job_branch_id_fkey
+ job                     | crew_leader_id       | crew_member             | id                  | job_crew_leader_id_fkey
+ job                     | estimate_id          | estimate                | id                  | job_estimate_id_fkey
+ job                     | last_known_status_id | job_status              | id                  | job_last_known_status_id_fkey
+ job                     | status_id            | job_status              | id                  | job_status_id_fkey
+ job_special_shift       | job_id               | job                     | id                  | job_special_shift_job_id_fkey
+ job_special_shift       | special_shift_id     | special_shift           | id                  | job_special_shift_special_shift_id_fkey
+ job_state_change_log    | new_status_id        | job_status              | id                  | job_state_change_log_new_status_id_fkey
+ job_state_change_log    | previous_status_id   | job_status              | id                  | job_state_change_log_previous_status_id_fkey
+ notification            | notification_type_id | notification_type       | id                  | notification_notification_type_id_fkey
+ notification_templates  | notification_type_id | notification_type       | id                  | notification_templates_notification_type_id_fkey
+ sales_person            | employee_id          | employee                | id                  | sales_person_employee_id_fkey
+ sales_person_branch     | branch_id            | branch                  | id                  | sales_person_branch_branch_id_fkey
+ sales_person_branch     | sales_person_id      | sales_person            | id                  | sales_person_branch_sales_person_id_fkey
+ shift                   | crew_member_id       | crew_member             | id                  | shift_crew_member_id_fkey
+ shift                   | job_id               | job                     | id                  | shift_job_id_fkey
+ telegram_group          | branch_id            | branch                  | id                  | fk_branch
+ telegram_group          | category_id          | telegram_group_category | id                  | fk_telegram_group_category
+ user                    | rol_id               | user_rol                | id                  | user_rol_id_fkey
+ user_branch             | branch_id            | branch                  | id                  | user_branch_branch_id_fkey
+ user_branch             | user_id              | user                    | id                  | user_branch_user_id_fkey
+ warning                 | reason_id            | warning_reason          | id                  | warning_reason_id_fkey
+ warning                 | sales_person_id      | sales_person            | id                  | warning_sales_person_id_fkey
+(34 rows)
+
+
+============================================================================
+TODOS LOS UNIQUE CONSTRAINTS
+============================================================================
+       table_name        |      column_name       |                      constraint_name                      
+-------------------------+------------------------+-----------------------------------------------------------
+ employee                | attic_tech_user_id     | employee_attic_tech_user_id_key
+ employee_telegram_group | employee_id            | employee_telegram_group_employee_id_telegram_group_id_key
+ employee_telegram_group | telegram_group_id      | employee_telegram_group_employee_id_telegram_group_id_key
+ estimate                | attic_tech_estimate_id | estimate_attic_tech_estimate_id_key
+ group_membership_status | name                   | group_membership_status_name_key
+ inspection_report       | attic_tech_report_id   | inspection_report_attic_tech_report_id_key
+ job                     | attic_tech_job_id      | job_attic_tech_job_id_key
+ job_status              | name                   | job_status_name_key
+ notification_templates  | name                   | notification_templates_name_key
+ notification_type       | name                   | notification_type_name_key
+ sheet_column_map        | field_name             | sheet_column_map_sheet_name_field_name_key
+ sheet_column_map        | sheet_name             | sheet_column_map_sheet_name_field_name_key
+ telegram_group          | telegram_id            | telegram_group_telegram_id_key
+ telegram_group_category | name                   | telegram_group_category_name_key
+ user                    | email                  | user_email_key
+(15 rows)
+
+
+============================================================================
+TODAS LAS PRIMARY KEYS
+============================================================================
+       table_name        |   column_name    |       constraint_name        
+-------------------------+------------------+------------------------------
+ branch                  | id               | branch_pkey
+ crew_member             | id               | crew_member_pkey
+ crew_member_branch      | crew_member_id   | crew_member_branch_pkey
+ crew_member_branch      | branch_id        | crew_member_branch_pkey
+ employee                | id               | employee_pkey
+ employee_telegram_group | id               | employee_telegram_group_pkey
+ estimate                | id               | estimate_pkey
+ estimate_status         | id               | estimate_status_pkey
+ group_membership_status | id               | group_membership_status_pkey
+ inspection_report       | id               | inspection_report_pkey
+ job                     | id               | job_pkey
+ job_special_shift       | job_id           | job_special_shift_pkey
+ job_special_shift       | date             | job_special_shift_pkey
+ job_special_shift       | special_shift_id | job_special_shift_pkey
+ job_state_change_log    | id               | job_state_change_log_pkey
+ job_status              | id               | job_status_pkey
+ notification            | id               | notification_pkey
+ notification_templates  | id               | notification_templates_pkey
+ notification_type       | id               | notification_type_pkey
+ sales_person            | id               | sales_person_pkey
+ sales_person_branch     | id               | sales_person_branch_pkey
+ sheet_column_map        | id               | sheet_column_map_pkey
+ shift                   | crew_member_id   | shift_pkey
+ shift                   | job_id           | shift_pkey
+ special_shift           | id               | special_shift_pkey
+ telegram_group          | id               | telegram_group_pkey
+ telegram_group_category | id               | telegram_group_category_pkey
+ user                    | id               | user_pkey
+ user_branch             | user_id          | user_branch_pkey
+ user_branch             | branch_id        | user_branch_pkey
+ user_rol                | id               | user_rol_pkey
+ warning                 | id               | warning_pkey
+ warning_reason          | id               | warning_reason_pkey
+(33 rows)
+
+
+============================================================================
+FIN DEL REPORTE
+============================================================================

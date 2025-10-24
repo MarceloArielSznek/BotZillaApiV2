@@ -76,9 +76,13 @@ const BranchesTab = () => {
   const [formErrors, setFormErrors] = useState<{[key: string]: string}>({});
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // Cargar branches
+  // Cargar branches con debounce para search
   useEffect(() => {
-    loadBranches();
+    const timeoutId = setTimeout(() => {
+      loadBranches();
+    }, search ? 500 : 0); // Si hay búsqueda, esperar 500ms; si no, cargar inmediatamente
+    
+    return () => clearTimeout(timeoutId);
   }, [page, rowsPerPage, search, includeStats]);
 
   const loadBranches = async () => {

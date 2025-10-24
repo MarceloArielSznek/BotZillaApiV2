@@ -31,7 +31,8 @@ import EditIcon from '@mui/icons-material/Edit';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { getJobs, deleteJob, createJob, updateJob, type CreateJobData, type UpdateJobData, addOrUpdateShifts, getJobById } from '../services/jobService';
 import branchService from '../services/branchService';
-import ShiftApproval from './ShiftApproval';
+import Performance from './Performance';
+import PerformanceApproval from '../components/PerformanceApproval';
 import salespersonService from '../services/salespersonService';
 import crewService from '../services/crewService';
 import { getJobStatuses } from '../services/statusService';
@@ -111,8 +112,13 @@ const Jobs: React.FC = () => {
         fetchFilterData();
     }, []);
     
+    // Debounce para fetchJobs: esperar 500ms después de cambios en filters.search
     useEffect(() => {
-        fetchJobs();
+        const timeoutId = setTimeout(() => {
+            fetchJobs();
+        }, filters.search ? 500 : 0); // Si hay búsqueda, esperar 500ms; si no, cargar inmediatamente
+        
+        return () => clearTimeout(timeoutId);
     }, [fetchJobs]);
 
 
@@ -207,7 +213,8 @@ const Jobs: React.FC = () => {
                     aria-label="job tabs"
                 >
                     <Tab label="Jobs List" />
-                    <Tab label="Shift Approval" />
+                    <Tab label="Performance" />
+                    <Tab label="Performance Approval" />
                 </Tabs>
             </Box>
 
@@ -299,6 +306,7 @@ const Jobs: React.FC = () => {
                                             <TableCell sx={{ fontWeight: 'bold' }}>Estimator</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Crew Leader</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Shifts Approved</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Closing Date</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
                                         </TableRow>
@@ -319,6 +327,7 @@ const Jobs: React.FC = () => {
                                                 <TableCell>{job.estimate?.salesperson?.name || 'N/A'}</TableCell>
                                                 <TableCell>{job.crewLeader?.name || 'N/A'}</TableCell>
                                                 <TableCell>{job.status?.name || 'N/A'}</TableCell>
+                                                <TableCell>{(job as any).shifts_status || 'N/A'}</TableCell>
                                                 <TableCell>{job.closing_date ? new Date(job.closing_date).toLocaleDateString() : 'N/A'}</TableCell>
                                                 <TableCell sx={{ textAlign: 'center' }}>
                                                     <Tooltip title="Edit Job">
@@ -368,7 +377,11 @@ const Jobs: React.FC = () => {
             )}
 
             {currentTab === 1 && (
-                <ShiftApproval />
+                <Performance />
+            )}
+
+            {currentTab === 2 && (
+                <PerformanceApproval />
             )}
 
             {/* Modales (disponibles en ambas tabs) */}

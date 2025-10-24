@@ -72,8 +72,17 @@ const StatusesTab = () => {
         limit: rowsPerPage,
         includeStats: true
       });
-      setStatuses(response.statuses);
-      setTotalCount(response.pagination.totalCount);
+      
+      // Validación defensiva de la respuesta
+      if (response && response.statuses && Array.isArray(response.statuses)) {
+        setStatuses(response.statuses);
+        setTotalCount(response.pagination?.totalCount || 0);
+      } else {
+        console.warn('Invalid response from getStatuses:', response);
+        setStatuses([]);
+        setTotalCount(0);
+        setError('Invalid response format from server');
+      }
     } catch (error: any) {
       setError('Error loading statuses: ' + (error.response?.data?.message || error.message || 'Unknown error'));
       setStatuses([]);

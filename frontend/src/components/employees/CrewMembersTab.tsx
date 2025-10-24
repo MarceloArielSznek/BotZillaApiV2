@@ -93,11 +93,11 @@ const CrewMembersTab = () => {
     loadBranches();
   }, []);
 
+  // Debounce para el search: esperar 500ms después de que el usuario deje de escribir
   useEffect(() => {
-    // Agregar un pequeño delay para la carga inicial
     const timeoutId = setTimeout(() => {
       loadCrewMembers();
-    }, 100);
+    }, search ? 500 : 0); // Si hay búsqueda, esperar 500ms; si no, cargar inmediatamente
     
     return () => clearTimeout(timeoutId);
   }, [page, rowsPerPage, search, branchFilter, leaderFilter]);

@@ -17,6 +17,7 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import TelegramGroups from './pages/TelegramGroups'; // Importar nueva página
 import InspectionReports from './pages/InspectionReports'; // Nueva página
+import Performance from './pages/Performance'; // Nueva página
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -50,6 +51,11 @@ function App() {
                 <Route path="inspection-reports" element={
                   <ProtectedRoute allowedRoles={['admin', 'office_manager']}>
                     <InspectionReports />
+                  </ProtectedRoute>
+                } />
+                <Route path="performance" element={
+                  <ProtectedRoute allowedRoles={['admin', 'office_manager']}>
+                    <Performance />
                   </ProtectedRoute>
                 } />
                 <Route path="notifications" element={<Notifications />} />

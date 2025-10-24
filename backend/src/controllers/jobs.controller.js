@@ -1,4 +1,4 @@
-const { Job, Estimate, Branch, SalesPerson, CrewMember, Shift, SpecialShift, JobSpecialShift, JobStatus } = require('../models');
+const { Job, Estimate, Branch, SalesPerson, Employee, Shift, SpecialShift, JobSpecialShift, JobStatus } = require('../models');
 const { logger } = require('../utils/logger');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
@@ -50,14 +50,20 @@ class JobsController {
                         attributes: ['id', 'name']
                     },
                     {
-                        model: CrewMember,
+                        model: Employee,
                         as: 'crewLeader',
-                        attributes: ['id', 'name']
+                        attributes: ['id', 'first_name', 'last_name', 'email']
                     },
                     {
                         model: JobStatus,
                         as: 'status',
                         attributes: ['id', 'name']
+                    },
+                    {
+                        model: Shift,
+                        as: 'shifts',
+                        attributes: ['crew_member_id', 'job_id', 'approved_shift', 'performance_status'],
+                        required: false
                     }
                 ],
                 order: [['closing_date', 'DESC']],
@@ -66,18 +72,29 @@ class JobsController {
                 distinct: true // Necesario para un conteo correcto con joins
             });
 
-            // Log para verificar los crew leaders asignados
-            console.log('👷 Jobs con crew leaders:', jobs.map(job => ({
-                jobId: job.id,
-                jobName: job.name,
-                crewLeaderId: job.crew_leader_id,
-                crewLeaderName: job.crewLeader?.name || 'N/A',
-                hasCrewLeader: !!job.crewLeader
-            })));
+            // Formatear jobs con información de shifts aprobados
+            const formattedJobs = jobs.map(job => {
+                const jobData = job.toJSON();
+                const shifts = jobData.shifts || [];
+                const approvedShifts = shifts.filter(s => s.approved_shift === true).length;
+                const totalShifts = shifts.length;
+                
+                return {
+                    ...jobData,
+                    shifts_approved: approvedShifts,
+                    shifts_total: totalShifts,
+                    shifts_status: totalShifts === 0 ? 'No shifts' : 
+                                   approvedShifts === totalShifts ? 'All approved' :
+                                   approvedShifts === 0 ? 'None approved' :
+                                   `${approvedShifts}/${totalShifts} approved`,
+                    // Remover shifts del response para no enviar data innecesaria
+                    shifts: undefined
+                };
+            });
 
             res.status(200).json({
                 success: true,
-                data: jobs,
+                data: formattedJobs,
                 pagination: {
                     total: count,
                     pages: Math.ceil(count / limit),
@@ -111,17 +128,17 @@ class JobsController {
                         attributes: ['id', 'name']
                     },
                     {
-                        model: CrewMember,
+                        model: Employee,
                         as: 'crewLeader',
-                        attributes: ['id', 'name']
+                        attributes: ['id', 'first_name', 'last_name', 'email']
                     },
                     {
                         model: Shift,
                         as: 'shifts',
                         include: [{
-                            model: CrewMember,
+                            model: Employee,
                             as: 'crewMember',
-                            attributes: ['id', 'name']
+                            attributes: ['id', 'first_name', 'last_name']
                         }]
                     },
                     {
@@ -140,7 +157,25 @@ class JobsController {
                 return res.status(404).json({ success: false, message: 'Job not found.' });
             }
 
-            res.status(200).json({ success: true, data: job });
+            // Formatear shifts para incluir nombre completo
+            const formattedJob = job.toJSON();
+            if (formattedJob.shifts) {
+                formattedJob.shifts = formattedJob.shifts.map(shift => ({
+                    ...shift,
+                    crewMember: shift.crewMember ? {
+                        ...shift.crewMember,
+                        name: `${shift.crewMember.first_name} ${shift.crewMember.last_name}`
+                    } : null
+                }));
+            }
+
+            logger.info('Job details fetched', {
+                job_id: job.id,
+                job_name: job.name,
+                shifts_count: formattedJob.shifts?.length || 0
+            });
+
+            res.status(200).json({ success: true, data: formattedJob });
         } catch (error) {
             logger.error(`Error fetching job with id ${req.params.id}:`, error);
             res.status(500).json({ success: false, message: 'Server error fetching job details.' });
@@ -260,9 +295,9 @@ class JobsController {
                         attributes: ['id', 'name']
                     },
                     {
-                        model: CrewMember,
+                        model: Employee,
                         as: 'crewLeader',
-                        attributes: ['id', 'name']
+                        attributes: ['id', 'first_name', 'last_name', 'email']
                     },
                     {
                         model: JobStatus,

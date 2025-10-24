@@ -96,21 +96,20 @@ const SalespersonsTab: React.FC = () => {
     }, [enqueueSnackbar]);
 
     useEffect(() => {
-        fetchSalespersons();
-    }, [fetchSalespersons]);
-
-    useEffect(() => {
         fetchBranches();
     }, [fetchBranches]);
 
-
-    const debouncedSearch = useCallback(debounce(() => {
-        fetchSalespersons();
-    }, 500), [fetchSalespersons]);
+    // Debounce para fetchSalespersons: esperar 500ms después de cambios en searchTerm
+    useEffect(() => {
+        const timeoutId = setTimeout(() => {
+            fetchSalespersons();
+        }, searchTerm ? 500 : 0); // Si hay búsqueda, esperar 500ms; si no, cargar inmediatamente
+        
+        return () => clearTimeout(timeoutId);
+    }, [fetchSalespersons]);
 
     const handleSearchChange = (event: React.ChangeEvent<HTMLInputElement>) => {
         setSearchTerm(event.target.value);
-        debouncedSearch();
     };
 
     const handleBranchFilterChange = (event: SelectChangeEvent) => {

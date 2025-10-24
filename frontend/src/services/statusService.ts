@@ -91,6 +91,19 @@ const statusService = {
   getStatuses: async (params: StatusListParams = {}): Promise<StatusListResponse> => {
     try {
       const response = await api.get('/estimate-statuses', { params });
+      // Validación defensiva de la respuesta
+      if (!response.data) {
+        console.error('Empty response from /estimate-statuses');
+        return {
+          statuses: [],
+          pagination: {
+            currentPage: 1,
+            totalPages: 0,
+            totalCount: 0,
+            limit: params.limit || 10
+          }
+        };
+      }
       return response.data;
     } catch (error: any) {
       console.error('Error fetching statuses:', error.response?.data || error.message);

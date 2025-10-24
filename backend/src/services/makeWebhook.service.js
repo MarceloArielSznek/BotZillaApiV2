@@ -594,6 +594,182 @@ class MakeWebhookService {
             throw error; // Throw para que el controlador pueda manejarlo
         }
     }
+
+    /**
+     * Enviar solicitud de jobs con status específico a Make.com
+     * @param {object} data
+     * @param {string} data.branchName - Nombre del branch en el spreadsheet
+     * @param {number} data.branchId - ID del branch
+     * @param {string} data.status - Status de los jobs a buscar (Done, Uploading Shifts, Missing Data to Close)
+     * @param {string} data.syncId - UUID para agrupar todos los jobs de este sync
+     */
+    async sendPerformanceJobsRequest({ branchName, branchId, status, syncId }) {
+        const webhookUrl = process.env.MAKE_PERFORMANCE_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.warn('MAKE_PERFORMANCE_WEBHOOK_URL not configured. Skipping performance jobs request.');
+            return false;
+        }
+
+        if (!branchName || !branchId || !status || !syncId) {
+            logger.warn('Missing required data for performance jobs request');
+            return false;
+        }
+
+        try {
+            const payload = {
+                event: 'performance_jobs_request',
+                timestamp: new Date().toISOString(),
+                sync_id: syncId, // UUID para agrupar todos los jobs
+                branch_id: branchId,
+                branch_name: branchName,
+                status: status,
+                status_column_name: 'Status', // Nombre de la columna
+                status_column_index: 2, // Índice de la columna (0-based: A=0, B=1, C=2)
+                status_column_letter: 'C', // Letra de la columna en el spreadsheet
+                environment: process.env.NODE_ENV || 'production'
+            };
+
+            logger.info('Sending performance jobs request to Make.com', {
+                branchId,
+                branchName,
+                status,
+                statusColumnIndex: 2,
+                statusColumnLetter: 'C'
+            });
+
+            const response = await axios.post(webhookUrl, payload, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': uuidv4()
+                },
+                timeout: 30000 // 30 segundos para este proceso
+            });
+
+            logger.info('Performance jobs request sent successfully', {
+                branchName,
+                status,
+                responseData: response.data
+            });
+
+            return {
+                success: true,
+                data: response.data
+            };
+
+        } catch (error) {
+            logger.error('Error sending performance jobs request', {
+                message: error.message,
+                branchName,
+                branchId,
+                status,
+                responseData: error.response?.data
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Enviar datos de shifts procesados para escribir en el spreadsheet
+     * @param {object} data
+     * @param {string} data.syncId - UUID del sync
+     * @param {string} data.branchName - Nombre del branch en el spreadsheet
+     * @param {number} data.branchId - ID del branch
+     * @param {string} data.sheetName - Nombre del sheet/tab
+     * @param {string} data.crewColumnsRange - Rango de columnas de crew members (ej: "V:CC")
+     * @param {Array} data.jobs - Array de jobs con range y values
+     */
+    async sendPerformanceShiftsToSpreadsheet({ syncId, branchName, branchId, sheetName, crewColumnsRange, jobs }) {
+        const webhookUrl = process.env.MAKE_WRITE_PERFORMANCE_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.warn('MAKE_WRITE_PERFORMANCE_WEBHOOK_URL not configured. Skipping spreadsheet write.');
+            return { success: false, message: 'Webhook URL not configured' };
+        }
+
+        if (!syncId || !branchName || !jobs || jobs.length === 0) {
+            logger.warn('Missing required data for spreadsheet write', { syncId, branchName, jobsCount: jobs?.length });
+            return { success: false, message: 'Missing required data' };
+        }
+
+        try {
+            const spreadsheetId = process.env.GOOGLE_SPREADSHEET_ID || '1zUchQPMXHp79-pFtW0fFnGSTd02c2w9liLcGwjzJ7f8';
+            
+            const payload = {
+                event: 'write_performance_hours',
+                timestamp: new Date().toISOString(),
+                sync_id: syncId,
+                branch_id: branchId,
+                branch_name: branchName,
+                sheet_name: sheetName,
+                spreadsheet_id: spreadsheetId,
+                crew_columns_range: crewColumnsRange,
+                jobs_count: jobs.length,
+                jobs: jobs,
+                environment: process.env.NODE_ENV || 'production'
+            };
+
+            const mappedCrewMembers = jobs.reduce((sum, job) => sum + job.mapped_crew_count, 0);
+            const unmappedCrewMembers = jobs.reduce((sum, job) => sum + job.unmapped_crew_count, 0);
+            
+            // Log detallado del primer job para debug
+            if (jobs.length > 0) {
+                const firstJob = jobs[0];
+                const firstRow = firstJob.rows?.[0];
+                logger.info('🔍 First job payload details', {
+                    job_name: firstJob.job_name,
+                    range: firstJob.range,
+                    rows_type: Array.isArray(firstJob.rows) ? 'array' : typeof firstJob.rows,
+                    rows_count: firstJob.rows?.length,
+                    first_row_length: firstRow?.length,
+                    first_5_values: firstRow?.slice(0, 5),
+                    last_5_values: firstRow?.slice(-5)
+                });
+            }
+            
+            logger.info('📤 Sending performance shifts to Make.com for spreadsheet write', {
+                sync_id: syncId,
+                branch: branchName,
+                sheet_name: sheetName,
+                crew_columns_range: crewColumnsRange,
+                jobs_count: jobs.length,
+                mapped_crew_members: mappedCrewMembers,
+                unmapped_crew_members: unmappedCrewMembers
+            });
+
+            const response = await axios.post(webhookUrl, payload, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Request-ID': uuidv4()
+                },
+                timeout: 30000
+            });
+
+            logger.info('✅ Performance shifts sent to Make.com successfully', {
+                sync_id: syncId,
+                status: response.status,
+                jobs_written: jobs.length,
+                crew_members_mapped: mappedCrewMembers,
+                crew_members_unmapped: unmappedCrewMembers
+            });
+
+            return {
+                success: true,
+                data: response.data
+            };
+
+        } catch (error) {
+            logger.error('❌ Error sending performance shifts to Make.com', {
+                sync_id: syncId,
+                error: error.message,
+                response: error.response?.data
+            });
+            return { 
+                success: false, 
+                message: error.message 
+            };
+        }
+    }
 }
 
 module.exports = new MakeWebhookService();

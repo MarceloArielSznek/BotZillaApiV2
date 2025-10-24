@@ -1,6 +1,6 @@
 const { Op, literal, fn, col } = require('sequelize');
 const sequelize = require('../config/database');
-const { Job, Estimate, SalesPerson, Branch, Notification, NotificationType, EstimateStatus, CrewMember, User } = require('../models');
+const { Job, Estimate, SalesPerson, Branch, Notification, NotificationType, EstimateStatus, Employee, User } = require('../models');
 const { calculateJobPerformance } = require('../services/performance.service');
 
 class DashboardController {
@@ -175,7 +175,7 @@ class DashboardController {
         include: [
           { model: Branch, as: 'branch', attributes: ['name'] },
           { model: Estimate, as: 'estimate', attributes: ['name'], include: [{ model: SalesPerson, as: 'salesperson', attributes: ['name'] }] },
-          { model: CrewMember, as: 'crewLeader', attributes: ['name'] }
+          { model: Employee, as: 'crewLeader', attributes: ['id', 'first_name', 'last_name'] }
         ],
         order: [['closing_date', 'DESC']],
         limit: 10
@@ -184,6 +184,10 @@ class DashboardController {
       // Calcular performance para jobs recientes
       const jobsWithPerformance = [];
       for (const job of recentJobs) {
+        const crewLeaderName = job.crewLeader 
+          ? `${job.crewLeader.first_name} ${job.crewLeader.last_name}` 
+          : null;
+        
         try {
           const perf = await calculateJobPerformance(job.id);
           jobsWithPerformance.push({
@@ -191,7 +195,7 @@ class DashboardController {
             name: job.name,
             branch: job.branch?.name || null,
             estimator: job.estimate?.salesperson?.name || null,
-            crewLeader: job.crewLeader?.name || null,
+            crewLeader: crewLeaderName,
             closing_date: job.closing_date,
             review: job.review,
             actualSavedPercent: perf.actualSavedPercent,
@@ -203,7 +207,7 @@ class DashboardController {
             name: job.name,
             branch: job.branch?.name || null,
             estimator: job.estimate?.salesperson?.name || null,
-            crewLeader: job.crewLeader?.name || null,
+            crewLeader: crewLeaderName,
             closing_date: job.closing_date,
             review: job.review,
             actualSavedPercent: 0,
@@ -215,7 +219,7 @@ class DashboardController {
       // === SYSTEM STATS ===
       const [totalSalespersons, totalCrewMembers, totalBranches, totalUsers] = await Promise.all([
         SalesPerson.count({ where: { is_active: true } }),
-        CrewMember.count(),
+        Employee.count({ where: { role: 'crew_member', status: 'active', is_deleted: false } }),
         Branch.count(),
         User.count()
       ]);

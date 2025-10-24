@@ -15,7 +15,13 @@ Job.init({
     allowNull: false
   },
   closing_date: {
-    type: DataTypes.DATE
+    type: DataTypes.DATE,
+    comment: 'Fecha de cierre del job (puede venir de Performance spreadsheet)'
+  },
+  sold_price: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Precio final cobrado al cliente (obtenido de Performance spreadsheet)'
   },
   estimate_id: {
     type: DataTypes.INTEGER,
@@ -40,22 +46,16 @@ Job.init({
       key: 'id'
     }
   },
-  note: {
-    type: DataTypes.TEXT
-  },
   review: {
     type: DataTypes.INTEGER
   },
   attic_tech_hours: {
     type: DataTypes.DECIMAL(10, 2)
   },
-  crew_leader_hours: {
-    type: DataTypes.DECIMAL(10, 2)
-  },
   cl_estimated_plan_hours: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
-    comment: 'Crew Leader Estimated Plan Hours from spreadsheet'
+    comment: 'Crew Leader Estimated Plan Hours from spreadsheet (will come from future job sync)'
   },
   notification_sent: {
     type: DataTypes.BOOLEAN,
@@ -97,6 +97,18 @@ Job.init({
   last_notification_sent_at: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  performance_status: {
+    type: DataTypes.STRING(20),
+    allowNull: false,
+    defaultValue: 'synced',
+    validate: {
+      isIn: {
+        args: [['synced', 'pending_approval', 'approved']],
+        msg: 'performance_status must be synced, pending_approval, or approved'
+      }
+    },
+    comment: 'Estado de aprobación de Performance: synced (normal), pending_approval (esperando), approved (aprobado)'
   }
 }, {
   sequelize,

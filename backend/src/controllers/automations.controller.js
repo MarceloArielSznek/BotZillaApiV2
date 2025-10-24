@@ -1822,7 +1822,7 @@ class AutomationsController {
                     const finalJob = await Job.findByPk(job.id, {
                         include: [
                             { model: Branch, as: 'branch' },
-                            { model: CrewMember, as: 'crewLeader' }
+                            { model: Employee, as: 'crewLeader', attributes: ['id', 'first_name', 'last_name'] }
                         ]
                     });
 
@@ -1832,7 +1832,9 @@ class AutomationsController {
                         const lowPerformanceThreshold = 0.0;
 
                         if (performance.actualSavedPercent < lowPerformanceThreshold) {
-                            const crewLeaderName = finalJob.crewLeader?.name || 'Unknown Leader';
+                            const crewLeaderName = finalJob.crewLeader 
+                                ? `${finalJob.crewLeader.first_name} ${finalJob.crewLeader.last_name}` 
+                                : 'Unknown Leader';
                             const jobString = `${crewLeaderName}: planned to save ${(performance.plannedToSavePercent * 100).toFixed(0)}% | Actual saved ${(performance.actualSavedPercent * 100).toFixed(0)}%`;
                             
                             // Si el % Actual Saved es extremadamente negativo (< -100%), es un error de datos

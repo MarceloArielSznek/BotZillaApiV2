@@ -39,11 +39,25 @@ const TemplatesManagement = () => {
                 notificationTemplateService.getAll(),
                 notificationTypeService.getAll()
             ]);
-            setTemplates(templatesData);
-            setTypes(typesData);
+            // Validación defensiva de las respuestas
+            if (templatesData && Array.isArray(templatesData)) {
+                setTemplates(templatesData);
+            } else {
+                console.warn('Invalid response from getAll notification templates:', templatesData);
+                setTemplates([]);
+            }
+            
+            if (typesData && Array.isArray(typesData)) {
+                setTypes(typesData);
+            } else {
+                console.warn('Invalid response from getAll notification types:', typesData);
+                setTypes([]);
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to fetch data');
             enqueueSnackbar('Failed to load data', { variant: 'error' });
+            setTemplates([]); // Asegurar que sean arrays vacíos en caso de error
+            setTypes([]);
         } finally {
             setLoading(false);
         }
@@ -179,10 +193,18 @@ const TypesManagement = () => {
         setError(null);
         try {
             const data = await notificationTypeService.getAll();
-            setTypes(data);
+            // Validación defensiva de la respuesta
+            if (data && Array.isArray(data)) {
+                setTypes(data);
+            } else {
+                console.warn('Invalid response from getAll notification types:', data);
+                setTypes([]);
+                setError('Invalid response format from server');
+            }
         } catch (err: any) {
             setError(err.message || 'Failed to fetch notification types');
             enqueueSnackbar('Failed to load types', { variant: 'error' });
+            setTypes([]); // Asegurar que types sea un array vacío en caso de error
         } finally {
             setLoading(false);
         }

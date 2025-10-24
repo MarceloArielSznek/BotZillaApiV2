@@ -28,6 +28,8 @@ const GroupMembershipStatus = require('./GroupMembershipStatus');
 const EmployeeTelegramGroup = require('./EmployeeTelegramGroup');
 const TelegramGroupCategory = require('./TelegramGroupCategory'); // Importar nuevo modelo
 const InspectionReport = require('./InspectionReport');
+const PerformanceSyncJob = require('./PerformanceSyncJob');
+const BuilderTrendShift = require('./BuilderTrendShift');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -202,8 +204,9 @@ Notification.belongsTo(NotificationType, { // <-- Añadir esta asociación
 Job.belongsTo(Estimate, { foreignKey: 'estimate_id', as: 'estimate' });
 Estimate.hasOne(Job, { foreignKey: 'estimate_id', as: 'job' });
 
-Job.belongsTo(CrewMember, { foreignKey: 'crew_leader_id', as: 'crewLeader' });
-CrewMember.hasMany(Job, { foreignKey: 'crew_leader_id', as: 'ledJobs' });
+// crew_leader_id ahora apunta a Employee (no CrewMember)
+Job.belongsTo(Employee, { foreignKey: 'crew_leader_id', as: 'crewLeader' });
+Employee.hasMany(Job, { foreignKey: 'crew_leader_id', as: 'ledJobs' });
 
 Job.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
 Branch.hasMany(Job, { foreignKey: 'branch_id', as: 'jobs' });
@@ -215,8 +218,13 @@ JobStatus.hasMany(Job, { foreignKey: 'status_id', as: 'jobs' });
 Shift.belongsTo(Job, { foreignKey: 'job_id', as: 'job', onDelete: 'CASCADE' });
 Job.hasMany(Shift, { foreignKey: 'job_id', as: 'shifts' });
 
-Shift.belongsTo(CrewMember, { foreignKey: 'crew_member_id', as: 'crewMember' });
-CrewMember.hasMany(Shift, { foreignKey: 'crew_member_id', as: 'shifts' });
+// crew_member_id ahora apunta a Employee (para PK)
+Shift.belongsTo(Employee, { foreignKey: 'crew_member_id', as: 'crewMember' });
+Employee.hasMany(Shift, { foreignKey: 'crew_member_id', as: 'shifts' });
+
+// employee_id es una referencia adicional para Performance shifts
+Shift.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+Employee.hasMany(Shift, { foreignKey: 'employee_id', as: 'employeeShifts' });
 
 // Asociaciones para JobSpecialShift (Tabla de unión)
 Job.belongsToMany(SpecialShift, {
@@ -300,6 +308,16 @@ TelegramGroup.hasMany(EmployeeTelegramGroup, { foreignKey: 'telegram_group_id' }
 Branch.hasMany(Employee, { foreignKey: 'branch_id', as: 'employees' });
 Employee.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
 
+// === PERFORMANCE SYNC JOBS ASSOCIATIONS ===
+PerformanceSyncJob.belongsTo(Branch, { foreignKey: 'branch_id', as: 'branch' });
+PerformanceSyncJob.belongsTo(Job, { foreignKey: 'matched_job_id', as: 'matchedJob' });
+Branch.hasMany(PerformanceSyncJob, { foreignKey: 'branch_id', as: 'performanceSyncJobs' });
+Job.hasMany(PerformanceSyncJob, { foreignKey: 'matched_job_id', as: 'performanceSyncJobs' });
+
+// === BUILDERTREND SHIFTS ASSOCIATIONS ===
+BuilderTrendShift.belongsTo(PerformanceSyncJob, { foreignKey: 'matched_sync_job_id', as: 'matchedSyncJob' });
+PerformanceSyncJob.hasMany(BuilderTrendShift, { foreignKey: 'matched_sync_job_id', as: 'builderTrendShifts' });
+
 
 module.exports = {
     User,
@@ -329,5 +347,7 @@ module.exports = {
     GroupMembershipStatus,
     EmployeeTelegramGroup,
     TelegramGroupCategory,
-    InspectionReport
+    InspectionReport,
+    PerformanceSyncJob,
+    BuilderTrendShift
 }; 
