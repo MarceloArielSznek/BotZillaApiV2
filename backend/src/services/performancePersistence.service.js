@@ -591,6 +591,18 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 });
                 
                 for (const shift of shifts) {
+                    // Validar que crew_member_name no sea un precio o valor inválido
+                    if (!shift.crew_member_name || 
+                        shift.crew_member_name.includes('$') || 
+                        shift.crew_member_name.match(/^\d+[,.]?\d*$/)) {
+                        logger.warn('⚠️ INVALID CREW MEMBER NAME - SKIPPING SHIFT', {
+                            job_name: jobName,
+                            crew_member_name: shift.crew_member_name,
+                            hours: shift.total_hours
+                        });
+                        continue; // Skip invalid shift
+                    }
+                    
                     // Si el shift tiene tag QC, contarlo pero no crear shift regular
                     if (shift.is_qc) {
                         qcShiftsCount++;
