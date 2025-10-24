@@ -21,7 +21,7 @@ const sequelize = require('../config/database');
  * @returns {string|null} - 'CA', 'WA', o null
  */
 function getBranchState(branchName) {
-    const caBranches = ['Riverside', 'San Diego', 'Orange County', 'Los Angeles'];
+    const caBranches = ['Riverside', 'San Diego', 'San Bernardino', 'Orange County', 'Los Angeles'];
     const waBranches = ['Kent', 'Everett', 'Seattle'];
     
     if (caBranches.some(ca => branchName.includes(ca))) return 'CA';
@@ -42,7 +42,10 @@ async function findOrCreateEmployee(fullName, branchId) {
         return null;
     }
     
-    const nameParts = fullName.trim().split(/\s+/);
+    // Limpiar nombre: remover paréntesis y su contenido (ej: "Drew Gipson (D)" → "Drew Gipson")
+    const cleanedName = fullName.trim().replace(/\s*\([^)]*\)/g, '').trim();
+    
+    const nameParts = cleanedName.split(/\s+/);
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(' ') || firstName;
     
@@ -591,6 +594,16 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 });
                 
                 for (const shift of shifts) {
+                    // Debug: Log cada shift para ver qué contiene
+                    logger.info('🔍 PROCESSING INDIVIDUAL SHIFT', {
+                        job_name: jobName,
+                        crew_member_name: shift.crew_member_name,
+                        total_hours: shift.total_hours,
+                        tags: shift.tags,
+                        is_qc: shift.is_qc,
+                        full_shift_object: shift
+                    });
+                    
                     // Validar que crew_member_name no sea un precio o valor inválido
                     if (!shift.crew_member_name || 
                         shift.crew_member_name.includes('$') || 

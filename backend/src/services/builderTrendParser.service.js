@@ -69,6 +69,16 @@ async function parseBuilderTrendExcel(fileBuffer, syncId) {
                 notes: String(row[columnMap.Notes] || '').trim()
             };
             
+            // Debug: Log first shift to see what's being parsed
+            if (i === headerRowIndex + 1) {
+                logger.info('🔍 FIRST SHIFT PARSED (DEBUG)', {
+                    excel_row: i + 1,
+                    columnMap: columnMap,
+                    raw_row: row,
+                    parsed_shift: shift
+                });
+            }
+            
             // Skip if job name is empty or is a header-like value
             if (!shift.job_name_raw || shift.job_name_raw.toLowerCase() === 'job') {
                 continue;
