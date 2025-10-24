@@ -355,6 +355,23 @@ class PerformanceController {
                 });
             }
 
+            // Determinar el índice del crew leader según el estado del branch
+            // CA branches: crew_leader en columna H (índice 7)
+            // WA branches: crew_leader en columna I (índice 8)
+            const caBranches = ['Riverside', 'San Diego', 'San Bernardino', 'Orange County', 'Los Angeles'];
+            const waBranches = ['Kent', 'Everett', 'Seattle'];
+            
+            let crewLeaderIndex = 8; // Default WA
+            if (caBranches.some(ca => branchName.includes(ca))) {
+                crewLeaderIndex = 7; // CA
+            }
+
+            logger.info('Crew leader column index determined', {
+                branchName,
+                crewLeaderIndex,
+                state: crewLeaderIndex === 7 ? 'CA' : 'WA'
+            });
+
             // Convertir objetos con claves numéricas a arrays y crear registros para la BD
             const PerformanceSyncJob = require('../models/PerformanceSyncJob');
             
@@ -390,7 +407,8 @@ class PerformanceController {
                 // Extraer más campos del array (basado en posiciones conocidas del spreadsheet)
                 // Posición [2] = Job Name
                 // Posición [3] = Estimator (opcional)
-                // Posición [8] = Crew Leader (opcional)
+                // Posición [7] = Crew Leader (CA)
+                // Posición [8] = Crew Leader (WA)
                 const jobRecord = {
                     sync_id: syncId,
                     branch_name: branchName,
@@ -400,7 +418,7 @@ class PerformanceController {
                     sheet_name: 'Performance Spreadsheet',
                     job_name: jobName,
                     estimator: rowArray[3] || null,
-                    crew_leader: rowArray[8] || null,
+                    crew_leader: rowArray[crewLeaderIndex] || null,
                     raw_data: rowArray // Guardar el array completo
                 };
 

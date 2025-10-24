@@ -2,15 +2,99 @@
 -- PRODUCTION MIGRATION: QC Shifts & Job Structure Updates
 -- Date: 2025-10-24
 -- Description: 
---   1. Add employee_id to shift table
---   2. Fix crew_member_id FK to point to employee
---   3. Add sold_price to job table
---   4. Remove unused columns from job table
---   5. Add performance_status to job and shift tables
---   6. Create QC Special Shift if not exists
+--   1. Create Performance tables (performance_sync_jobs, performance_buildertrend_shifts)
+--   2. Add employee_id to shift table
+--   3. Fix crew_member_id FK to point to employee
+--   4. Add sold_price to job table
+--   5. Remove unused columns from job table
+--   6. Add performance_status to job and shift tables
+--   7. Create QC Special Shift if not exists
 -- =====================================================
 
 BEGIN;
+
+-- =====================================================
+-- STEP 0: Create Performance tables
+-- =====================================================
+
+-- Create performance_sync_jobs table
+CREATE TABLE IF NOT EXISTS botzilla.performance_sync_jobs (
+    id SERIAL PRIMARY KEY,
+    sync_id UUID NOT NULL,
+    branch_id INTEGER REFERENCES botzilla.branch(id),
+    branch_name VARCHAR(100) NOT NULL,
+    status_filter VARCHAR(100) NOT NULL,
+    row_number INTEGER NOT NULL,
+    sheet_name VARCHAR(100) NOT NULL,
+    job_name VARCHAR(255),
+    job_status VARCHAR(100),
+    start_date DATE,
+    finish_date DATE,
+    estimator VARCHAR(255),
+    crew_leader VARCHAR(255),
+    at_estimated_hours DECIMAL(10,2),
+    cl_estimated_hours DECIMAL(10,2),
+    percent_planned_to_save DECIMAL(5,2),
+    actual_percent_saved DECIMAL(5,2),
+    job_bonus_pool DECIMAL(10,2),
+    raw_data JSONB,
+    matched_job_id INTEGER REFERENCES botzilla.job(id),
+    match_status VARCHAR(50) DEFAULT 'pending',
+    match_confidence DECIMAL(3,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP WITH TIME ZONE DEFAULT (CURRENT_TIMESTAMP + INTERVAL '24 hours'),
+    CONSTRAINT unique_sync_row UNIQUE (sync_id, row_number)
+);
+
+CREATE INDEX IF NOT EXISTS idx_performance_sync_jobs_sync_id ON botzilla.performance_sync_jobs(sync_id);
+CREATE INDEX IF NOT EXISTS idx_performance_sync_jobs_branch_id ON botzilla.performance_sync_jobs(branch_id);
+CREATE INDEX IF NOT EXISTS idx_performance_sync_jobs_expires_at ON botzilla.performance_sync_jobs(expires_at);
+CREATE INDEX IF NOT EXISTS idx_performance_sync_jobs_match_status ON botzilla.performance_sync_jobs(match_status);
+
+COMMENT ON TABLE botzilla.performance_sync_jobs IS 'Temporary staging table for jobs synced from Performance spreadsheet. Records auto-expire after 24 hours.';
+
+-- Create performance_buildertrend_shifts table
+CREATE TABLE IF NOT EXISTS botzilla.performance_buildertrend_shifts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    sync_id UUID NOT NULL,
+    upload_id UUID NOT NULL,
+    excel_row_number INTEGER NOT NULL,
+    date DATE,
+    job_name_raw VARCHAR(500),
+    crew_member_name VARCHAR(255),
+    tags TEXT,
+    regular_time_raw VARCHAR(20),
+    ot_raw VARCHAR(20),
+    ot2_raw VARCHAR(20),
+    pto_raw VARCHAR(20),
+    total_work_time_raw VARCHAR(20),
+    notes TEXT,
+    regular_hours NUMERIC(10, 2) DEFAULT 0.0,
+    ot_hours NUMERIC(10, 2) DEFAULT 0.0,
+    ot2_hours NUMERIC(10, 2) DEFAULT 0.0,
+    pto_hours NUMERIC(10, 2) DEFAULT 0.0,
+    total_hours NUMERIC(10, 2) DEFAULT 0.0,
+    is_qc BOOLEAN DEFAULT FALSE,
+    matched_sync_job_id INTEGER,
+    match_confidence NUMERIC(5, 2) DEFAULT 0.0,
+    match_status VARCHAR(50) DEFAULT 'pending',
+    needs_human_review BOOLEAN DEFAULT FALSE,
+    similarity_score NUMERIC(5, 2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP WITH TIME ZONE,
+    CONSTRAINT fk_buildertrend_shift_sync_job
+        FOREIGN KEY (matched_sync_job_id)
+        REFERENCES botzilla.performance_sync_jobs (id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_buildertrend_shifts_sync_id ON botzilla.performance_buildertrend_shifts(sync_id);
+CREATE INDEX IF NOT EXISTS idx_buildertrend_shifts_upload_id ON botzilla.performance_buildertrend_shifts(upload_id);
+CREATE INDEX IF NOT EXISTS idx_buildertrend_shifts_match_status ON botzilla.performance_buildertrend_shifts(match_status);
+CREATE INDEX IF NOT EXISTS idx_buildertrend_shifts_matched_job ON botzilla.performance_buildertrend_shifts(matched_sync_job_id);
+
+COMMENT ON TABLE botzilla.performance_buildertrend_shifts IS 'Stores shifts parsed from BuilderTrend Time Clock Reports for matching with performance spreadsheet jobs';
+
+RAISE NOTICE 'Performance tables created successfully';
 
 -- =====================================================
 -- STEP 1: Add employee_id to shift table
