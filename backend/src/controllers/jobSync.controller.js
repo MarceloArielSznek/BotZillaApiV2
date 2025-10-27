@@ -369,6 +369,21 @@ async function saveJobsToDb(jobsFromAT) {
             // Buscar crew leader en nuestra BD
             const crewLeader = await findCrewLeader(atJob.assignedCrew);
             
+            // Debug log para crew leader
+            if (atJob.assignedCrew && atJob.assignedCrew.length > 0) {
+                logger.info('🔍 DEBUG Crew Leader Search', {
+                    jobName: atJob.name,
+                    assignedCrewCount: atJob.assignedCrew.length,
+                    assignedCrew: atJob.assignedCrew.map(c => ({
+                        name: c.name,
+                        roles: c.roles,
+                        email: c.email
+                    })),
+                    crewLeaderFound: !!crewLeader,
+                    crewLeaderId: crewLeader?.id || null
+                });
+            }
+            
             // Extraer datos del crew leader desde AT (aunque no esté en nuestra BD)
             const crewLeaderFromAT = atJob.assignedCrew?.find(member => {
                 const roles = member.roles || [];
@@ -826,7 +841,7 @@ class JobSyncController {
      * GET/POST /api/job-sync/sync-jobs
      * 
      * Query params opcionales:
-     * - days_back: número de días hacia atrás para buscar (default: 0 = solo hoy)
+     * - days_back: número de días hacia atrás para buscar (default: 14 = últimas 2 semanas)
      *   Ejemplo: ?days_back=7 para traer jobs de los últimos 7 días
      */
     async syncJobs(req, res) {
@@ -835,8 +850,8 @@ class JobSyncController {
         try {
             logger.info('🚀 Starting job sync from Attic Tech...');
 
-            // Parámetro opcional para testing: cuántos días hacia atrás buscar
-            const daysBack = parseInt(req.query.days_back || req.body.days_back || '0', 10);
+            // Parámetro opcional para testing: cuántos días hacia atrás buscar (default 14 días = 2 semanas)
+            const daysBack = parseInt(req.query.days_back || req.body.days_back || '14', 10);
             
             // Calcular fecha desde
             const fromDateObj = new Date();
@@ -844,11 +859,7 @@ class JobSyncController {
             const fromDate = fromDateObj.toISOString().split('T')[0]; // YYYY-MM-DD
             const today = new Date().toISOString().split('T')[0];
 
-            if (daysBack > 0) {
-                logger.info(`📅 Syncing jobs from last ${daysBack} days: ${fromDate} to ${today}`);
-            } else {
-                logger.info(`📅 Syncing jobs updated TODAY: ${today}`);
-            }
+            logger.info(`📅 Syncing jobs from last ${daysBack} days: ${fromDate} to ${today}`);
 
             // 1. Login a Attic Tech
             const apiKey = await loginToAtticTech();
@@ -857,19 +868,16 @@ class JobSyncController {
             const jobsFromAT = await fetchJobsFromAtticTech(apiKey, fromDate);
 
             if (jobsFromAT.length === 0) {
-                const message = daysBack > 0 
-                    ? `No jobs updated in the last ${daysBack} days` 
-                    : 'No jobs updated today';
-                    
                 return res.status(200).json({
                     success: true,
-                    message,
+                    message: `No jobs updated in the last ${daysBack} days`,
                     data: {
                         totalJobs: 0,
                         newJobs: 0,
                         updatedJobs: 0,
                         syncDate: today,
-                        daysBack: daysBack > 0 ? daysBack : undefined
+                        fromDate: fromDate,
+                        daysBack
                     }
                 });
             }
@@ -896,7 +904,8 @@ class JobSyncController {
                     errors: errors.length > 0 ? errors : undefined,
                     duration: `${duration}s`,
                     syncDate: today,
-                    daysBack: daysBack > 0 ? daysBack : undefined
+                    fromDate: fromDate,
+                    daysBack
                 },
                 notifications: notifications.length > 0 ? notifications : undefined
             });

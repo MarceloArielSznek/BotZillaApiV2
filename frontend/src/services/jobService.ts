@@ -94,4 +94,17 @@ export const getJobPerformance = async (id: number): Promise<PerformanceData> =>
 
 export const deleteJob = async (id: number): Promise<void> => {
     await api.delete(`/jobs/${id}`);
+};
+
+export const getOverrunJobs = async (filters: JobFilters = {}): Promise<JobsResponse> => {
+    const params = new URLSearchParams();
+    if (filters.page) params.append('page', filters.page.toString());
+    if (filters.limit) params.append('limit', filters.limit.toString());
+    if (filters.search) params.append('search', filters.search);
+    if (filters.branchId) params.append('branchId', filters.branchId);
+    if (filters.startDate) params.append('startDate', filters.startDate);
+    if (filters.endDate) params.append('endDate', filters.endDate);
+
+    const response = await api.get('/jobs/overrun/list', { params });
+    return response.data;
 }; 

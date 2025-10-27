@@ -38,7 +38,7 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
     };
     
     const loadEstimateDetails = async () => {
-        if (job?.estimate_id && !estimate) {
+        if (job?.estimate_id) {
             setLoadingEstimate(true);
             try {
                 const estimateDetails = await estimateService.getEstimateDetails(job.estimate_id);
@@ -54,6 +54,12 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
     useEffect(() => {
         if (jobId && open) {
             setLoading(true);
+            // Reset states when opening a new job
+            setEstimate(null);
+            setGeneratedPost(null);
+            setNotes('');
+            setTab(0);
+            
             Promise.all([
                 getJobById(jobId),
                 getJobPerformance(jobId)

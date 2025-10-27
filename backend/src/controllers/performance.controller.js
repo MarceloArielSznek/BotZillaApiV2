@@ -1641,7 +1641,7 @@ class PerformanceController {
         try {
             const { branch_id } = req.query;
             
-            const { Job, Shift, Employee, Branch, JobStatus, Estimate, SalesPerson } = require('../models');
+            const { Job, Shift, Employee, Branch, JobStatus, Estimate, SalesPerson, JobSpecialShift, SpecialShift } = require('../models');
             
             // Construir filtro
             const whereClause = {
@@ -1702,6 +1702,18 @@ class PerformanceController {
                                 attributes: ['id', 'first_name', 'last_name']
                             }
                         ]
+                    },
+                    {
+                        model: JobSpecialShift,
+                        as: 'jobSpecialShifts',
+                        required: false,
+                        include: [
+                            {
+                                model: SpecialShift,
+                                as: 'specialShift',
+                                attributes: ['id', 'name']
+                            }
+                        ]
                     }
                 ],
                 order: [
@@ -1717,7 +1729,10 @@ class PerformanceController {
             // Formatear respuesta
             const formattedJobs = pendingJobs.map(job => {
                 const shifts = job.shifts || [];
+                const specialShifts = job.jobSpecialShifts || [];
+                
                 const totalHours = shifts.reduce((sum, shift) => sum + parseFloat(shift.hours || 0), 0);
+                const specialShiftsHours = specialShifts.reduce((sum, ss) => sum + parseFloat(ss.hours || 0), 0);
                 const crewCount = new Set(shifts.map(s => s.employee_id)).size;
                 
                 return {
@@ -1739,15 +1754,26 @@ class PerformanceController {
                     } : null,
                     estimator: job.estimate?.salesperson?.name || null,
                     shifts_count: shifts.length,
-                    total_hours: totalHours,
+                    total_hours: totalHours + specialShiftsHours,
                     crew_count: crewCount,
-                    shifts: shifts.map(shift => ({
-                        crew_member_id: shift.crew_member_id,
-                        employee_id: shift.employee_id,
-                        employee_name: shift.employee ? `${shift.employee.first_name} ${shift.employee.last_name}` : 'Unknown',
-                        hours: parseFloat(shift.hours),
-                        performance_status: shift.performance_status
-                    }))
+                    shifts: [
+                        ...shifts.map(shift => ({
+                            type: 'regular',
+                            crew_member_id: shift.crew_member_id,
+                            employee_id: shift.employee_id,
+                            employee_name: shift.employee ? `${shift.employee.first_name} ${shift.employee.last_name}` : 'Unknown',
+                            hours: parseFloat(shift.hours),
+                            performance_status: shift.performance_status
+                        })),
+                        ...specialShifts.map(ss => ({
+                            type: 'special',
+                            special_shift_id: ss.special_shift_id,
+                            special_shift_name: ss.specialShift ? ss.specialShift.name : 'Unknown',
+                            hours: parseFloat(ss.hours),
+                            approved: ss.approved_shift,
+                            performance_status: 'approved'
+                        }))
+                    ]
                 };
             });
             

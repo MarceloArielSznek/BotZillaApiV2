@@ -24,7 +24,8 @@ import {
     InputLabel,
     TablePagination,
     Tabs,
-    Tab
+    Tab,
+    Chip
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -33,6 +34,7 @@ import { getJobs, deleteJob, createJob, updateJob, type CreateJobData, type Upda
 import branchService from '../services/branchService';
 import Performance from './Performance';
 import PerformanceApproval from '../components/PerformanceApproval';
+import OverrunJobs from './OverrunJobs';
 import salespersonService from '../services/salespersonService';
 import crewService from '../services/crewService';
 import { getJobStatuses } from '../services/statusService';
@@ -215,6 +217,7 @@ const Jobs: React.FC = () => {
                     <Tab label="Jobs List" />
                     <Tab label="Performance" />
                     <Tab label="Performance Approval" />
+                    <Tab label="Overrun Jobs" />
                 </Tabs>
             </Box>
 
@@ -307,6 +310,7 @@ const Jobs: React.FC = () => {
                                             <TableCell sx={{ fontWeight: 'bold' }}>Crew Leader</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Shifts Approved</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold' }}>Overrun</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold' }}>Closing Date</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
                                         </TableRow>
@@ -328,6 +332,13 @@ const Jobs: React.FC = () => {
                                                 <TableCell>{job.crewLeader?.name || 'N/A'}</TableCell>
                                                 <TableCell>{job.status?.name || 'N/A'}</TableCell>
                                                 <TableCell>{(job as any).shifts_status || 'N/A'}</TableCell>
+                                                <TableCell>
+                                                    {(job as any).is_overrun ? (
+                                                        <Chip label="Yes" color="error" size="small" />
+                                                    ) : (
+                                                        <Chip label="No" color="success" size="small" />
+                                                    )}
+                                                </TableCell>
                                                 <TableCell>{job.closing_date ? new Date(job.closing_date).toLocaleDateString() : 'N/A'}</TableCell>
                                                 <TableCell sx={{ textAlign: 'center' }}>
                                                     <Tooltip title="Edit Job">
@@ -382,6 +393,10 @@ const Jobs: React.FC = () => {
 
             {currentTab === 2 && (
                 <PerformanceApproval />
+            )}
+
+            {currentTab === 3 && (
+                <OverrunJobs />
             )}
 
             {/* Modales (disponibles en ambas tabs) */}

@@ -2,7 +2,7 @@ const { Job, Estimate, Branch, SalesPerson, Employee, Shift, SpecialShift, JobSp
 const { logger } = require('../utils/logger');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
-const { calculateJobPerformance } = require('../services/performance.service');
+const { calculateJobPerformance, calculateJobPerformanceFromObject } = require('../services/performance.service');
 const jobCreationService = require('../services/jobCreationService');
 
 class JobsController {
@@ -35,7 +35,7 @@ class JobsController {
                     {
                         model: Estimate,
                         as: 'estimate',
-                        attributes: ['id', 'name'],
+                        attributes: ['id', 'name', 'attic_tech_hours'],
                         where: includeWhereClause.estimate,
                         required: !!salespersonId,
                         include: [{
@@ -62,7 +62,13 @@ class JobsController {
                     {
                         model: Shift,
                         as: 'shifts',
-                        attributes: ['crew_member_id', 'job_id', 'approved_shift', 'performance_status'],
+                        attributes: ['crew_member_id', 'job_id', 'hours', 'approved_shift', 'performance_status'],
+                        required: false
+                    },
+                    {
+                        model: JobSpecialShift,
+                        as: 'jobSpecialShifts',
+                        attributes: ['special_shift_id', 'hours', 'approved_shift'],
                         required: false
                     }
                 ],
@@ -72,12 +78,39 @@ class JobsController {
                 distinct: true // Necesario para un conteo correcto con joins
             });
 
-            // Formatear jobs con información de shifts aprobados
+            // Formatear jobs con información de shifts aprobados y overrun
             const formattedJobs = jobs.map(job => {
                 const jobData = job.toJSON();
                 const shifts = jobData.shifts || [];
+                const specialShifts = jobData.jobSpecialShifts || [];
+                
                 const approvedShifts = shifts.filter(s => s.approved_shift === true).length;
                 const totalShifts = shifts.length;
+                
+                // Calcular si es overrun
+                // Obtener horas estimadas del job o del estimate relacionado
+                const atHours = parseFloat(jobData.attic_tech_hours || jobData.estimate?.attic_tech_hours || 0);
+                const regularHours = shifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+                const specialHours = specialShifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+                const totalWorkedHours = regularHours + specialHours;
+                // Es overrun si trabajaron más horas de las estimadas
+                const isOverrun = totalWorkedHours > atHours && atHours > 0;
+                
+                // Debug log para jobs específicos
+                if (jobData.name && jobData.name.includes('Lorie')) {
+                    logger.info('🔍 DEBUG Overrun Calculation', {
+                        jobName: jobData.name,
+                        attic_tech_hours_job: jobData.attic_tech_hours,
+                        attic_tech_hours_estimate: jobData.estimate?.attic_tech_hours,
+                        atHours: atHours,
+                        regularHours: regularHours,
+                        specialHours: specialHours,
+                        totalWorkedHours: totalWorkedHours,
+                        isOverrun: isOverrun,
+                        shiftsCount: shifts.length,
+                        specialShiftsCount: specialShifts.length
+                    });
+                }
                 
                 return {
                     ...jobData,
@@ -87,8 +120,11 @@ class JobsController {
                                    approvedShifts === totalShifts ? 'All approved' :
                                    approvedShifts === 0 ? 'None approved' :
                                    `${approvedShifts}/${totalShifts} approved`,
+                    is_overrun: isOverrun,
+                    total_worked_hours: totalWorkedHours,
                     // Remover shifts del response para no enviar data innecesaria
-                    shifts: undefined
+                    shifts: undefined,
+                    jobSpecialShifts: undefined
                 };
             });
 
@@ -115,7 +151,7 @@ class JobsController {
                     {
                         model: Estimate,
                         as: 'estimate',
-                        attributes: ['id', 'name'],
+                        attributes: ['id', 'name', 'attic_tech_hours'],
                         include: [{
                             model: SalesPerson,
                             as: 'salesperson',
@@ -442,6 +478,149 @@ class JobsController {
             res.status(500).json({
                 success: false,
                 message: 'Error fetching job status statistics',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Obtener jobs con overrun (% Actual Saved negativo)
+     */
+    async getOverrunJobs(req, res) {
+        try {
+            const { page = 1, limit = 10, branchId, startDate, endDate, search } = req.query;
+            const offset = (page - 1) * limit;
+
+            // Buscar el status "Done"
+            const doneStatus = await JobStatus.findOne({ where: { name: 'Done' } });
+            
+            const whereClause = {};
+            if (doneStatus) {
+                whereClause.status_id = doneStatus.id;
+            }
+            
+            if (branchId) whereClause.branch_id = branchId;
+            if (startDate && endDate) {
+                whereClause.closing_date = { [Op.between]: [new Date(startDate), new Date(endDate)] };
+            }
+            if (search) {
+                whereClause.name = { [Op.iLike]: `%${search}%` };
+            }
+
+            const { count, rows: jobs } = await Job.findAndCountAll({
+                where: whereClause,
+                attributes: [
+                    'id', 'name', 'closing_date', 'sold_price', 
+                    'attic_tech_hours', 'cl_estimated_plan_hours',
+                    'branch_id', 'crew_leader_id', 'status_id', 'estimate_id'
+                ],
+                include: [
+                    {
+                        model: Estimate,
+                        as: 'estimate',
+                        attributes: ['id', 'name', 'attic_tech_hours'],
+                        include: [{
+                            model: SalesPerson,
+                            as: 'salesperson',
+                            attributes: ['id', 'name']
+                        }]
+                    },
+                    {
+                        model: Branch,
+                        as: 'branch',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: Employee,
+                        as: 'crewLeader',
+                        attributes: ['id', 'first_name', 'last_name', 'email']
+                    },
+                    {
+                        model: JobStatus,
+                        as: 'status',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: Shift,
+                        as: 'shifts',
+                        attributes: ['crew_member_id', 'job_id', 'hours', 'approved_shift'],
+                        required: false
+                    },
+                    {
+                        model: JobSpecialShift,
+                        as: 'jobSpecialShifts',
+                        attributes: ['special_shift_id', 'hours', 'approved_shift'],
+                        required: false
+                    }
+                ],
+                order: [['closing_date', 'DESC']],
+                limit: parseInt(limit),
+                offset: parseInt(offset)
+            });
+
+            // Calcular performance y filtrar solo overrun jobs
+            const jobsWithPerformance = jobs.map(job => {
+                const performance = calculateJobPerformanceFromObject(job);
+                return {
+                    id: job.id,
+                    name: job.name,
+                    closing_date: job.closing_date,
+                    sold_price: job.sold_price,
+                    branch: job.branch ? {
+                        id: job.branch.id,
+                        name: job.branch.name
+                    } : null,
+                    crew_leader: job.crewLeader ? {
+                        id: job.crewLeader.id,
+                        name: `${job.crewLeader.first_name} ${job.crewLeader.last_name}`
+                    } : null,
+                    estimator: job.estimate?.salesperson?.name || null,
+                    status: job.status ? {
+                        id: job.status.id,
+                        name: job.status.name
+                    } : null,
+                    at_estimated_hours: performance.atEstimatedHours,
+                    cl_plan_hours: performance.clPlanHours,
+                    total_worked_hours: performance.totalWorkedHours,
+                    total_saved_hours: performance.totalSavedHours,
+                    percent_planned_to_save: performance.percentPlannedToSave,
+                    actual_percent_saved: performance.actualPercentSaved,
+                    potential_bonus_pool: performance.potentialBonusPool,
+                    job_bonus_pool: performance.jobBonusPool,
+                    shifts_approved: performance.shiftsApproved,
+                    shifts_total: performance.shiftsTotal,
+                    shifts_status: performance.shiftsTotal === 0 ? 'No shifts' : 
+                                   performance.shiftsApproved === performance.shiftsTotal ? 'All approved' :
+                                   performance.shiftsApproved === 0 ? 'None approved' :
+                                   `${performance.shiftsApproved}/${performance.shiftsTotal} approved`
+                };
+            }).filter(job => job.total_worked_hours > job.at_estimated_hours); // Solo jobs donde trabajaron más horas de las estimadas
+
+            logger.info('Overrun jobs retrieved', {
+                total: count,
+                overrun_count: jobsWithPerformance.length,
+                page,
+                limit
+            });
+
+            res.status(200).json({
+                success: true,
+                data: jobsWithPerformance,
+                pagination: {
+                    total: jobsWithPerformance.length, // Total de overrun jobs
+                    pages: Math.ceil(jobsWithPerformance.length / limit),
+                    currentPage: parseInt(page)
+                }
+            });
+
+        } catch (error) {
+            logger.error('Error retrieving overrun jobs', {
+                error: error.message,
+                stack: error.stack
+            });
+            res.status(500).json({
+                success: false,
+                message: 'Error retrieving overrun jobs',
                 error: error.message
             });
         }

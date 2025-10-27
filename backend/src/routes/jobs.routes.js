@@ -19,4 +19,7 @@ router.post('/create-from-sold-estimates', authMiddleware.verifyToken, jobsContr
 router.patch('/:id/mark-done', authMiddleware.verifyToken, jobsController.markJobAsDone);
 router.get('/status/stats', authMiddleware.verifyToken, jobsController.getJobStatusStats);
 
+// Ruta para obtener overrun jobs
+router.get('/overrun/list', authMiddleware.verifyToken, jobsController.getOverrunJobs);
+
 module.exports = router; 
