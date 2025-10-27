@@ -132,21 +132,62 @@ async function findCrewLeader(assignedCrew) {
             }
         });
 
-        // Si lo encontramos en CrewMember, buscar su Employee correspondiente por telegram_id
+        // Si lo encontramos en CrewMember, buscar su Employee correspondiente
+        // Un crew_member con is_leader=true SIEMPRE debe tener un employee correspondiente
         if (crewLeaderFromCrewMember) {
             logger.info(`✅ Crew Leader encontrado en CrewMember (activo): ${crewLeaderFromCrewMember.name}`);
             
-            // Buscar el Employee correspondiente usando telegram_id
-            const employeeRecord = await Employee.findOne({
-                where: {
-                    telegram_id: crewLeaderFromCrewMember.telegram_id
-                },
-                attributes: ['id', 'first_name', 'last_name', 'email', 'phone_number', 'telegram_id', 'status', 'role', 'branch_id'],
-                raw: true // Retornar objeto plano
-            });
+            // Buscar el Employee correspondiente usando múltiples criterios
+            let employeeRecord = null;
+            
+            // 1. Intentar por telegram_id (más confiable)
+            if (crewLeaderFromCrewMember.telegram_id) {
+                employeeRecord = await Employee.findOne({
+                    where: {
+                        telegram_id: crewLeaderFromCrewMember.telegram_id
+                    },
+                    attributes: ['id', 'first_name', 'last_name', 'email', 'phone_number', 'telegram_id', 'status', 'role', 'branch_id'],
+                    raw: true
+                });
+            }
+            
+            // 2. Si no se encuentra por telegram_id, buscar por phone
+            if (!employeeRecord && crewLeaderFromCrewMember.phone) {
+                employeeRecord = await Employee.findOne({
+                    where: {
+                        phone_number: crewLeaderFromCrewMember.phone
+                    },
+                    attributes: ['id', 'first_name', 'last_name', 'email', 'phone_number', 'telegram_id', 'status', 'role', 'branch_id'],
+                    raw: true
+                });
+                
+                if (employeeRecord) {
+                    logger.info(`🔍 Employee encontrado por phone: ${crewLeaderFromCrewMember.phone}`);
+                }
+            }
+            
+            // 3. Si aún no se encuentra, buscar por nombre (menos confiable pero necesario)
+            if (!employeeRecord) {
+                employeeRecord = await Employee.findOne({
+                    where: sequelize.where(
+                        sequelize.fn('CONCAT', 
+                            sequelize.col('first_name'), 
+                            ' ', 
+                            sequelize.col('last_name')
+                        ),
+                        { [Op.iLike]: `%${crewLeaderFromCrewMember.name}%` }
+                    ),
+                    attributes: ['id', 'first_name', 'last_name', 'email', 'phone_number', 'telegram_id', 'status', 'role', 'branch_id'],
+                    raw: true
+                });
+                
+                if (employeeRecord) {
+                    logger.info(`🔍 Employee encontrado por nombre: ${crewLeaderFromCrewMember.name}`);
+                }
+            }
 
             if (employeeRecord) {
-                logger.info(`🔍 Debug: Employee encontrado - ID: ${employeeRecord.id}, Status: ${employeeRecord.status}, Telegram: ${employeeRecord.telegram_id}`);
+                logger.info(`✅ Employee encontrado - ID: ${employeeRecord.id}, Status: ${employeeRecord.status}`);
                 
                 // Retornar un objeto combinado con el ID del Employee pero los datos del CrewMember
                 const combinedRecord = {
@@ -165,7 +206,11 @@ async function findCrewLeader(assignedCrew) {
                 logger.info(`✅ Retornando crew leader combinado - ID: ${combinedRecord.id}, Status: ${combinedRecord.status}`);
                 return combinedRecord;
             } else {
-                logger.warn(`⚠️  Crew Leader encontrado en CrewMember pero NO en Employee (telegram_id: ${crewLeaderFromCrewMember.telegram_id})`);
+                logger.error(`❌ PROBLEMA: Crew Leader "${crewLeaderFromCrewMember.name}" encontrado en crew_member pero NO en employee. Esto NO debería ocurrir.`, {
+                    crew_member_id: crewLeaderFromCrewMember.id,
+                    telegram_id: crewLeaderFromCrewMember.telegram_id,
+                    phone: crewLeaderFromCrewMember.phone
+                });
             }
         }
 
@@ -841,7 +886,7 @@ class JobSyncController {
      * GET/POST /api/job-sync/sync-jobs
      * 
      * Query params opcionales:
-     * - days_back: número de días hacia atrás para buscar (default: 14 = últimas 2 semanas)
+     * - days_back: número de días hacia atrás para buscar (default: 1 = último día)
      *   Ejemplo: ?days_back=7 para traer jobs de los últimos 7 días
      */
     async syncJobs(req, res) {
@@ -850,8 +895,8 @@ class JobSyncController {
         try {
             logger.info('🚀 Starting job sync from Attic Tech...');
 
-            // Parámetro opcional para testing: cuántos días hacia atrás buscar (default 14 días = 2 semanas)
-            const daysBack = parseInt(req.query.days_back || req.body.days_back || '14', 10);
+            // Parámetro opcional para testing: cuántos días hacia atrás buscar (default 1 día)
+            const daysBack = parseInt(req.query.days_back || req.body.days_back || '1', 10);
             
             // Calcular fecha desde
             const fromDateObj = new Date();

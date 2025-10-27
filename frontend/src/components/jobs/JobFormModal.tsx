@@ -8,6 +8,8 @@ import type { Branch, CrewMember, SpecialShift, JobDetails } from '../../interfa
 import type { CreateJobData, UpdateJobData, ShiftData } from '../../services/jobService';
 import branchService from '../../services/branchService';
 import crewService from '../../services/crewService';
+import employeeService from '../../services/employeeService';
+import type { Employee } from '../../services/employeeService';
 import { getSpecialShifts } from '../../services/statusService'; 
 import type { SelectChangeEvent } from '@mui/material';
 import estimateService from '../../services/estimateService';
@@ -25,7 +27,7 @@ const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSubmit, jo
     const [formData, setFormData] = useState<Partial<CreateJobData>>({});
     const [branches, setBranches] = useState<Branch[]>([]);
     const [crewLeaders, setCrewLeaders] = useState<CrewMember[]>([]);
-    const [allCrewMembers, setAllCrewMembers] = useState<CrewMember[]>([]);
+    const [allEmployees, setAllEmployees] = useState<Employee[]>([]);
     const [specialShiftTypes, setSpecialShiftTypes] = useState<SpecialShift[]>([]);
     const [soldEstimates, setSoldEstimates] = useState<Estimate[]>([]);
 
@@ -36,7 +38,12 @@ const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSubmit, jo
         if (open) {
             branchService.getBranches({}).then(res => setBranches(res.branches));
             crewService.getCrewMembers({ isLeader: true }).then(res => setCrewLeaders(res.crewMembers));
-            crewService.getCrewMembers({ limit: 1000 }).then(res => setAllCrewMembers(res.crewMembers));
+            // Cargar TODOS los employees (sin filtrar por status para que aparezcan en el dropdown)
+            employeeService.getAll({ limit: 1000 }).then(res => {
+                const allEmployees = res.data || [];
+                console.log('🔍 Loaded employees:', allEmployees.length, allEmployees.map(e => ({ id: e.id, name: `${e.first_name} ${e.last_name}`, status: e.status })));
+                setAllEmployees(allEmployees);
+            });
             getSpecialShifts().then(res => setSpecialShiftTypes(res));
             
             // Cargar los estimados disponibles
@@ -74,13 +81,30 @@ const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSubmit, jo
                 note: job.note || '',
                 estimate_id: job.estimate_id || null,
             });
-            setRegularShifts(job.shifts?.map(s => ({
-                crew_member_id: s.crewMember.id,
-                hours: s.hours,
-                is_leader: s.is_leader
-            })) || []);
+            
+            // Debug: Ver estructura de shifts
+            console.log('🔍 Job shifts data:', job.shifts);
+            
+            const mappedShifts = job.shifts?.map(s => {
+                const crewMemberId = s.crew_member_id || s.crewMember?.id || s.employee_id;
+                console.log('🔍 Shift mapping:', {
+                    crew_member_id: s.crew_member_id,
+                    crewMember: s.crewMember,
+                    employee_id: s.employee_id,
+                    mapped: crewMemberId
+                });
+                return {
+                    crew_member_id: crewMemberId,
+                    hours: s.hours,
+                    is_leader: s.is_leader
+                };
+            }) || [];
+            
+            console.log('🔍 Mapped shifts:', mappedShifts);
+            setRegularShifts(mappedShifts);
+            
             setSpecialShifts(job.jobSpecialShifts?.map(s => ({
-                special_shift_id: s.specialShift.id,
+                special_shift_id: s.special_shift_id || s.specialShift?.id,
                 hours: s.hours
             })) || []);
         } else {
@@ -239,8 +263,14 @@ const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSubmit, jo
                                 <TableRow key={index}>
                                     <TableCell>
                                         <FormControl fullWidth size="small">
-                                            <Select value={shift.crew_member_id} onChange={(e) => handleShiftChange(index, 'crew_member_id', e.target.value, 'regular')}>
-                                                {allCrewMembers.map(cm => <MenuItem key={cm.id} value={cm.id}>{cm.name}</MenuItem>)}
+                                            <Select value={shift.crew_member_id || 0} onChange={(e) => handleShiftChange(index, 'crew_member_id', e.target.value, 'regular')}>
+                                                <MenuItem value={0} disabled>Select Employee</MenuItem>
+                                                {allEmployees.map(emp => (
+                                                    <MenuItem key={emp.id} value={emp.id}>
+                                                        {emp.first_name} {emp.last_name}
+                                                        {emp.status !== 'active' && ` (${emp.status})`}
+                                                    </MenuItem>
+                                                ))}
                                             </Select>
                                         </FormControl>
                                     </TableCell>

@@ -300,19 +300,19 @@ const Jobs: React.FC = () => {
                     {!loading && !error && (
                     <Card>
                         <CardContent sx={{ p: 0 }}>
-                            <TableContainer component={Paper}>
-                                <Table sx={{ minWidth: 650 }} aria-label="jobs table">
+                            <TableContainer component={Paper} sx={{ maxWidth: '100%', overflowX: 'auto' }}>
+                                <Table sx={{ minWidth: 1000 }} aria-label="jobs table">
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Job Name</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Branch</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Estimator</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Crew Leader</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Shifts Approved</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Overrun</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold' }}>Closing Date</TableCell>
-                                            <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 180 }}>Job Name</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Branch</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Estimator</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 120 }}>Crew Leader</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 100 }}>Status</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 130 }}>Shifts Approved</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 80, textAlign: 'center' }}>Overrun</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 110 }}>Closing Date</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 100, textAlign: 'center' }}>Actions</TableCell>
                                         </TableRow>
                                     </TableHead>
                                     <TableBody>

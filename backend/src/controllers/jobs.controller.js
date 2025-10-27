@@ -1,4 +1,4 @@
-const { Job, Estimate, Branch, SalesPerson, Employee, Shift, SpecialShift, JobSpecialShift, JobStatus } = require('../models');
+const { Job, Estimate, Branch, SalesPerson, Employee, Shift, SpecialShift, JobSpecialShift, JobStatus, OverrunReport } = require('../models');
 const { logger } = require('../utils/logger');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
@@ -112,8 +112,18 @@ class JobsController {
                     });
                 }
                 
+                // Formatear crew leader para incluir 'name' concatenado
+                let formattedCrewLeader = null;
+                if (jobData.crewLeader) {
+                    formattedCrewLeader = {
+                        ...jobData.crewLeader,
+                        name: `${jobData.crewLeader.first_name} ${jobData.crewLeader.last_name}`.trim()
+                    };
+                }
+                
                 return {
                     ...jobData,
+                    crewLeader: formattedCrewLeader,
                     shifts_approved: approvedShifts,
                     shifts_total: totalShifts,
                     shifts_status: totalShifts === 0 ? 'No shifts' : 
@@ -484,6 +494,208 @@ class JobsController {
     }
 
     /**
+     * Enviar overrun job alert a Make.com webhook
+     */
+    async sendOverrunAlert(req, res) {
+        try {
+            const { id } = req.params;
+            
+            const job = await Job.findByPk(id, {
+                include: [
+                    {
+                        model: Estimate,
+                        as: 'estimate',
+                        attributes: ['id', 'name', 'attic_tech_hours'],
+                        include: [{
+                            model: SalesPerson,
+                            as: 'salesperson',
+                            attributes: ['id', 'name']
+                        }]
+                    },
+                    {
+                        model: Branch,
+                        as: 'branch',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: Employee,
+                        as: 'crewLeader',
+                        attributes: ['id', 'first_name', 'last_name', 'email']
+                    },
+                    {
+                        model: Shift,
+                        as: 'shifts',
+                        attributes: ['crew_member_id', 'job_id', 'hours', 'approved_shift'],
+                        required: false
+                    },
+                    {
+                        model: JobSpecialShift,
+                        as: 'jobSpecialShifts',
+                        attributes: ['special_shift_id', 'hours', 'approved_shift'],
+                        required: false
+                    }
+                ]
+            });
+            
+            if (!job) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Job not found'
+                });
+            }
+            
+            // Calcular horas trabajadas
+            const shifts = job.shifts || [];
+            const specialShifts = job.jobSpecialShifts || [];
+            const regularHours = shifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+            const specialHours = specialShifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+            const totalWorkedHours = regularHours + specialHours;
+            
+            // AT estimated hours
+            const atEstimatedHours = parseFloat(job.attic_tech_hours || job.estimate?.attic_tech_hours || 0);
+            
+            // CL estimated hours
+            const clEstimatedHours = parseFloat(job.cl_estimated_plan_hours || 0);
+            
+            // Hours saved (negativo si es overrun)
+            const hoursSaved = atEstimatedHours - totalWorkedHours;
+            
+            // Preparar payload para Make.com (con formato de 2 decimales)
+            const payload = {
+                job_id: job.id,
+                branch: job.branch?.name || 'N/A',
+                job_name: job.name,
+                estimator: job.estimate?.salesperson?.name || 'N/A',
+                crew_leader: job.crewLeader ? `${job.crewLeader.first_name} ${job.crewLeader.last_name}` : 'N/A',
+                finish_date: job.closing_date ? new Date(job.closing_date).toLocaleDateString('en-US') : 'N/A',
+                at_estimated_hours: parseFloat(atEstimatedHours.toFixed(2)),
+                cl_estimated_hours: parseFloat(clEstimatedHours.toFixed(2)),
+                total_hours_worked: parseFloat(totalWorkedHours.toFixed(2)),
+                hours_saved: parseFloat(hoursSaved.toFixed(2))
+            };
+            
+            logger.info('Sending overrun alert to Make.com', {
+                job_id: id,
+                job_name: job.name,
+                hours_saved: hoursSaved
+            });
+            
+            // Enviar a Make.com webhook
+            const axios = require('axios');
+            const webhookUrl = process.env.MAKE_OVERRUN_ALERT_WEBHOOK_URL;
+            
+            if (!webhookUrl) {
+                throw new Error('MAKE_OVERRUN_ALERT_WEBHOOK_URL is not configured');
+            }
+            
+            await axios.post(webhookUrl, payload);
+            
+            logger.info('Overrun alert sent successfully', {
+                job_id: id,
+                job_name: job.name
+            });
+            
+            return res.status(200).json({
+                success: true,
+                message: 'Overrun alert sent successfully',
+                data: payload
+            });
+            
+        } catch (error) {
+            logger.error('Error sending overrun alert', {
+                error: error.message,
+                stack: error.stack,
+                job_id: req.params.id
+            });
+            
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to send overrun alert',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Recibir y guardar reporte de overrun desde Make.com (AI Agent)
+     */
+    async saveOverrunReport(req, res) {
+        try {
+            const { job_id, report } = req.body;
+            
+            // Validar campos requeridos
+            if (!job_id) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'job_id is required'
+                });
+            }
+            
+            if (!report) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'report is required'
+                });
+            }
+            
+            // Verificar que el job existe
+            const job = await Job.findByPk(job_id);
+            
+            if (!job) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Job not found'
+                });
+            }
+            
+            logger.info('Receiving overrun report from Make.com', {
+                job_id,
+                job_name: job.name,
+                report_length: report.length
+            });
+            
+            // Crear el overrun report
+            const overrunReport = await OverrunReport.create({
+                report: report
+            });
+            
+            // Actualizar el job con el overrun_report_id
+            await job.update({
+                overrun_report_id: overrunReport.id
+            });
+            
+            logger.info('Overrun report saved successfully', {
+                job_id,
+                job_name: job.name,
+                overrun_report_id: overrunReport.id
+            });
+            
+            return res.status(200).json({
+                success: true,
+                message: 'Overrun report saved successfully',
+                data: {
+                    overrun_report_id: overrunReport.id,
+                    job_id: job_id,
+                    job_name: job.name
+                }
+            });
+            
+        } catch (error) {
+            logger.error('Error saving overrun report', {
+                error: error.message,
+                stack: error.stack,
+                job_id: req.body.job_id
+            });
+            
+            return res.status(500).json({
+                success: false,
+                message: 'Failed to save overrun report',
+                error: error.message
+            });
+        }
+    }
+
+    /**
      * Obtener jobs con overrun (% Actual Saved negativo)
      */
     async getOverrunJobs(req, res) {
@@ -512,7 +724,8 @@ class JobsController {
                 attributes: [
                     'id', 'name', 'closing_date', 'sold_price', 
                     'attic_tech_hours', 'cl_estimated_plan_hours',
-                    'branch_id', 'crew_leader_id', 'status_id', 'estimate_id'
+                    'branch_id', 'crew_leader_id', 'status_id', 'estimate_id',
+                    'overrun_report_id' // Agregado para saber si ya tiene reporte
                 ],
                 include: [
                     {
@@ -550,6 +763,12 @@ class JobsController {
                         model: JobSpecialShift,
                         as: 'jobSpecialShifts',
                         attributes: ['special_shift_id', 'hours', 'approved_shift'],
+                        required: false
+                    },
+                    {
+                        model: OverrunReport,
+                        as: 'overrunReport',
+                        attributes: ['id', 'report', 'created_at'],
                         required: false
                     }
                 ],
@@ -592,7 +811,13 @@ class JobsController {
                     shifts_status: performance.shiftsTotal === 0 ? 'No shifts' : 
                                    performance.shiftsApproved === performance.shiftsTotal ? 'All approved' :
                                    performance.shiftsApproved === 0 ? 'None approved' :
-                                   `${performance.shiftsApproved}/${performance.shiftsTotal} approved`
+                                   `${performance.shiftsApproved}/${performance.shiftsTotal} approved`,
+                    overrun_report_id: job.overrun_report_id,
+                    overrun_report: job.overrunReport ? {
+                        id: job.overrunReport.id,
+                        report: job.overrunReport.report,
+                        created_at: job.overrunReport.created_at
+                    } : null
                 };
             }).filter(job => job.total_worked_hours > job.at_estimated_hours); // Solo jobs donde trabajaron más horas de las estimadas
 

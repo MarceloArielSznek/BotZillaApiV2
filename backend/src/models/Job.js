@@ -109,6 +109,15 @@ Job.init({
       }
     },
     comment: 'Estado de aprobación de Performance: synced (normal), pending_approval (esperando), approved (aprobado)'
+  },
+  overrun_report_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'overrun_report',
+      key: 'id'
+    },
+    comment: 'Foreign key to overrun_report table (nullable)'
   }
 }, {
   sequelize,

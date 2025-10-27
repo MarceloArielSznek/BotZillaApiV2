@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const jobsController = require('../controllers/jobs.controller');
 const authMiddleware = require('../middleware/auth.middleware');
+const apiKeyMiddleware = require('../middleware/apiKey.middleware');
 
 // Middleware para parsear JSON
 router.use(express.json());
@@ -21,5 +22,11 @@ router.get('/status/stats', authMiddleware.verifyToken, jobsController.getJobSta
 
 // Ruta para obtener overrun jobs
 router.get('/overrun/list', authMiddleware.verifyToken, jobsController.getOverrunJobs);
+
+// Ruta para enviar overrun alert a Make.com
+router.post('/overrun/:id/send-alert', authMiddleware.verifyToken, jobsController.sendOverrunAlert);
+
+// Ruta para recibir overrun report desde Make.com (protegida con API key)
+router.post('/overrun/save-report', apiKeyMiddleware, jobsController.saveOverrunReport);
 
 module.exports = router; 

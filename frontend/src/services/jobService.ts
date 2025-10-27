@@ -107,4 +107,9 @@ export const getOverrunJobs = async (filters: JobFilters = {}): Promise<JobsResp
 
     const response = await api.get('/jobs/overrun/list', { params });
     return response.data;
+};
+
+export const sendOverrunAlert = async (jobId: number): Promise<{ success: boolean; message: string }> => {
+    const response = await api.post(`/jobs/overrun/${jobId}/send-alert`);
+    return response.data;
 }; 

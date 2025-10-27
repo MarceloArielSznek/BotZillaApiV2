@@ -30,6 +30,7 @@ const TelegramGroupCategory = require('./TelegramGroupCategory'); // Importar nu
 const InspectionReport = require('./InspectionReport');
 const PerformanceSyncJob = require('./PerformanceSyncJob');
 const BuilderTrendShift = require('./BuilderTrendShift');
+const OverrunReport = require('./OverrunReport');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -214,6 +215,10 @@ Branch.hasMany(Job, { foreignKey: 'branch_id', as: 'jobs' });
 Job.belongsTo(JobStatus, { foreignKey: 'status_id', as: 'status' });
 JobStatus.hasMany(Job, { foreignKey: 'status_id', as: 'jobs' });
 
+// Asociación con OverrunReport
+Job.belongsTo(OverrunReport, { foreignKey: 'overrun_report_id', as: 'overrunReport' });
+OverrunReport.hasMany(Job, { foreignKey: 'overrun_report_id', as: 'jobs' });
+
 // Asociaciones para Shift
 Shift.belongsTo(Job, { foreignKey: 'job_id', as: 'job', onDelete: 'CASCADE' });
 Job.hasMany(Shift, { foreignKey: 'job_id', as: 'shifts' });
@@ -349,5 +354,6 @@ module.exports = {
     TelegramGroupCategory,
     InspectionReport,
     PerformanceSyncJob,
-    BuilderTrendShift
+    BuilderTrendShift,
+    OverrunReport
 }; 
