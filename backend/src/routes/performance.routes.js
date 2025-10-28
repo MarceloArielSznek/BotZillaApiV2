@@ -231,41 +231,5 @@ router.post(
     performanceController.rejectShifts
 );
 
-/**
- * @route   PUT /api/performance/sync-jobs/:syncId/shifts/:shiftId
- * @desc    Update a temporary shift in performance_sync_jobs
- * @access  Private (Admin, Office Manager)
- */
-router.put(
-    '/sync-jobs/:syncId/shifts/:shiftId',
-    verifyToken,
-    isAdminOrOfficeManager,
-    performanceController.updateTempShift
-);
-
-/**
- * @route   DELETE /api/performance/sync-jobs/:syncId/shifts/:shiftId
- * @desc    Delete a temporary shift from performance_sync_jobs
- * @access  Private (Admin, Office Manager)
- */
-router.delete(
-    '/sync-jobs/:syncId/shifts/:shiftId',
-    verifyToken,
-    isAdminOrOfficeManager,
-    performanceController.deleteTempShift
-);
-
-/**
- * @route   POST /api/performance/sync-jobs/:syncId/shifts
- * @desc    Add a new temporary shift to performance_sync_jobs
- * @access  Private (Admin, Office Manager)
- */
-router.post(
-    '/sync-jobs/:syncId/shifts',
-    verifyToken,
-    isAdminOrOfficeManager,
-    performanceController.addTempShift
-);
-
 module.exports = router;
 

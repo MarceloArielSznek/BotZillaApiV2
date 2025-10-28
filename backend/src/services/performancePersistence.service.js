@@ -598,18 +598,42 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
         // 4. Agrupar shifts por job
         const jobsMap = {};
         
-        for (const shift of builderTrendShifts) {
-            const syncJob = shift.matchedSyncJob;
-            const jobName = syncJob.job_name;
-            
-            if (!jobsMap[jobName]) {
-                jobsMap[jobName] = {
-                    syncJob: syncJob,
-                    shifts: []
-                };
+        if (modifiedShifts && modifiedShifts.length > 0) {
+            // Formato de frontend: { job_name, crew_member_name, regular_hours, ot_hours, ot2_hours, has_qc, tags }
+            for (const shift of builderTrendShifts) {
+                const jobName = shift.job_name;
+                
+                if (!jobsMap[jobName]) {
+                    // Buscar el syncJob correspondiente
+                    const syncJob = syncJobs.find(sj => sj.job_name === jobName);
+                    if (!syncJob) {
+                        logger.warn('SyncJob not found for modified shift', { jobName });
+                        continue;
+                    }
+                    
+                    jobsMap[jobName] = {
+                        syncJob: syncJob,
+                        shifts: []
+                    };
+                }
+                
+                jobsMap[jobName].shifts.push(shift);
             }
-            
-            jobsMap[jobName].shifts.push(shift);
+        } else {
+            // Formato de BD: BuilderTrendShift con matchedSyncJob
+            for (const shift of builderTrendShifts) {
+                const syncJob = shift.matchedSyncJob;
+                const jobName = syncJob.job_name;
+                
+                if (!jobsMap[jobName]) {
+                    jobsMap[jobName] = {
+                        syncJob: syncJob,
+                        shifts: []
+                    };
+                }
+                
+                jobsMap[jobName].shifts.push(shift);
+            }
         }
         
         logger.info('Jobs grouped', { jobCount: Object.keys(jobsMap).length });
@@ -678,14 +702,21 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 });
                 
                 for (const shift of shifts) {
+                    // Adaptar formato: si viene de frontend usa regular_hours, sino total_hours
+                    const totalHours = modifiedShifts 
+                        ? (shift.regular_hours || 0) + (shift.ot_hours || 0) + (shift.ot2_hours || 0)
+                        : shift.total_hours;
+                    
+                    const isQC = modifiedShifts ? (shift.has_qc || shift.tags?.toUpperCase().includes('QC')) : shift.is_qc;
+                    
                     // Debug: Log cada shift para ver qué contiene
                     logger.info('🔍 PROCESSING INDIVIDUAL SHIFT', {
                         job_name: jobName,
                         crew_member_name: shift.crew_member_name,
-                        total_hours: shift.total_hours,
+                        total_hours: totalHours,
                         tags: shift.tags,
-                        is_qc: shift.is_qc,
-                        full_shift_object: shift
+                        is_qc: isQC,
+                        from_frontend: !!modifiedShifts
                     });
                     
                     // Validar que crew_member_name no sea un precio o valor inválido
@@ -695,18 +726,20 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                         logger.warn('⚠️ INVALID CREW MEMBER NAME - SKIPPING SHIFT', {
                             job_name: jobName,
                             crew_member_name: shift.crew_member_name,
-                            hours: shift.total_hours
+                            hours: totalHours
                         });
                         continue; // Skip invalid shift
                     }
                     
                     // Si el shift tiene tag QC, contarlo pero no crear shift regular
-                    if (shift.is_qc) {
-                        qcShiftsCount++;
+                    if (isQC) {
+                        // Si viene de frontend, usar las horas especificadas; si no, usar default de 3
+                        const qcHours = modifiedShifts ? totalHours : 3;
+                        qcShiftsCount += qcHours;
                         logger.info('✅ QC SHIFT DETECTED - WILL CREATE SPECIAL SHIFT', {
                             job_name: jobName,
                             crew_member: shift.crew_member_name,
-                            hours: shift.total_hours,
+                            hours: qcHours,
                             tags: shift.tags
                         });
                         continue; // Skip regular shift creation
@@ -718,7 +751,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                     if (employee) {
                         shiftsToSave.push({
                             employee_id: employee.id,
-                            hours: shift.total_hours
+                            hours: totalHours
                         });
                     }
                 }
@@ -731,7 +764,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 
                 // Si hay shifts QC, crear Special Shift QC
                 if (qcShiftsCount > 0) {
-                    const qcHours = qcShiftsCount * 3; // 3 horas por shift QC
+                    const qcHours = modifiedShifts ? qcShiftsCount : (qcShiftsCount * 3); // Si viene de frontend ya tiene horas, sino 3 x count
                     logger.info('🚀 CREATING QC SPECIAL SHIFT', {
                         job_id: savedJob.id,
                         job_name: jobName,
