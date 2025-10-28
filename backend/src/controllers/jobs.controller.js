@@ -448,22 +448,22 @@ class JobsController {
     }
 
     /**
-     * Marcar un job como "Done"
+     * Marcar un job como "Closed Job"
      */
     async markJobAsDone(req, res) {
         try {
             const { id } = req.params;
             
-            const job = await jobCreationService.markJobAsDone(id);
+            const job = await jobCreationService.markJobAsClosedJob(id);
             
             res.status(200).json({
                 success: true,
-                message: `Job ${job.name} marked as Done`,
+                message: `Job ${job.name} marked as Closed Job`,
                 job: job
             });
 
         } catch (error) {
-            logger.error(`❌ Error marcando job ${req.params.id} como Done:`, error);
+            logger.error(`❌ Error marcando job ${req.params.id} como Closed Job:`, error);
             const statusCode = error.message.includes('not found') ? 404 : 500;
             res.status(statusCode).json({
                 success: false,
@@ -704,12 +704,12 @@ class JobsController {
             const { page = 1, limit = 10, branchId, startDate, endDate, search } = req.query;
             const offset = (page - 1) * limit;
 
-            // Buscar el status "Done"
-            const doneStatus = await JobStatus.findOne({ where: { name: 'Done' } });
+            // Buscar el status "Closed Job"
+            const closedJobStatus = await JobStatus.findOne({ where: { name: 'Closed Job' } });
             
             const whereClause = {};
-            if (doneStatus) {
-                whereClause.status_id = doneStatus.id;
+            if (closedJobStatus) {
+                whereClause.status_id = closedJobStatus.id;
             }
             
             if (branchId) whereClause.branch_id = branchId;

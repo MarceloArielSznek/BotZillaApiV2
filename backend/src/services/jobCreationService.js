@@ -111,16 +111,16 @@ class JobCreationService {
     }
 
     /**
-     * Actualiza el status de un job a "Done" y establece la fecha de cierre
+     * Actualiza el status de un job a "Closed Job" y establece la fecha de cierre
      */
-    async markJobAsDone(jobId) {
+    async markJobAsClosedJob(jobId) {
         try {
-            const doneStatus = await JobStatus.findOne({
-                where: { name: 'Done' }
+            const closedJobStatus = await JobStatus.findOne({
+                where: { name: 'Closed Job' }
             });
 
-            if (!doneStatus) {
-                throw new Error('Status "Done" not found');
+            if (!closedJobStatus) {
+                throw new Error('Status "Closed Job" not found');
             }
 
             const job = await Job.findByPk(jobId);
@@ -129,18 +129,25 @@ class JobCreationService {
             }
 
             await job.update({
-                status_id: doneStatus.id,
+                status_id: closedJobStatus.id,
                 closing_date: new Date()
             });
 
-            logger.info(`✅ Job ${job.name} (ID: ${jobId}) marcado como "Done"`);
+            logger.info(`✅ Job ${job.name} (ID: ${jobId}) marcado como "Closed Job"`);
 
             return job;
 
         } catch (error) {
-            logger.error(`❌ Error marcando job ${jobId} como Done:`, error);
+            logger.error(`❌ Error marcando job ${jobId} como Closed Job:`, error);
             throw error;
         }
+    }
+    
+    /**
+     * @deprecated Use markJobAsClosedJob instead. This method exists for backward compatibility.
+     */
+    async markJobAsDone(jobId) {
+        return this.markJobAsClosedJob(jobId);
     }
 
     /**

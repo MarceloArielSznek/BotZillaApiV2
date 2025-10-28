@@ -104,8 +104,9 @@ async function findOrCreateEmployee(fullName, branchId) {
  */
 async function saveOrUpdateJob(jobData, autoApprove = false) {
     const { job_name, closing_date, sold_price, crew_leader_id, branch_id, attic_tech_hours } = jobData;
+    const fuzz = require('fuzzball');
     
-    // Buscar job existente por nombre y branch
+    // Buscar job existente por nombre exacto
     let job = await Job.findOne({
         where: {
             name: job_name,
@@ -113,11 +114,56 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
         }
     });
     
+    // Si no se encuentra exacto, buscar usando fuzzy matching (85%+ similitud)
+    if (!job) {
+        const existingJobs = await Job.findAll({
+            where: { branch_id: branch_id },
+            attributes: ['id', 'name', 'sold_price', 'crew_leader_id', 'attic_tech_hours', 'closing_date']
+        });
+        
+        if (existingJobs.length > 0) {
+            let bestMatch = null;
+            let bestScore = 0;
+            
+            existingJobs.forEach(existingJob => {
+                const ratio = fuzz.ratio(job_name, existingJob.name);
+                const partialRatio = fuzz.partial_ratio(job_name, existingJob.name);
+                const tokenSortRatio = fuzz.token_sort_ratio(job_name, existingJob.name);
+                const tokenSetRatio = fuzz.token_set_ratio(job_name, existingJob.name);
+                
+                const score = Math.max(ratio, partialRatio, tokenSortRatio, tokenSetRatio);
+                
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestMatch = existingJob;
+                }
+            });
+            
+            // Threshold: 85% para evitar duplicados
+            if (bestMatch && bestScore >= 85) {
+                job = bestMatch;
+                logger.info('Existing job found using fuzzy matching (85%+ threshold)', {
+                    job_name,
+                    existing_job_name: job.name,
+                    existing_job_id: job.id,
+                    similarity: bestScore.toFixed(2) + '%'
+                });
+            } else if (bestMatch && bestScore >= 70) {
+                logger.warn('Possible duplicate job detected but below 85% threshold (not matched)', {
+                    job_name,
+                    possible_match: bestMatch.name,
+                    similarity: bestScore.toFixed(2) + '%'
+                });
+            }
+        }
+    }
+    
     if (job) {
         // Job existe → actualizar
         logger.info('Updating existing job from Performance', {
             job_id: job.id,
             job_name,
+            existing_name: job.name,
             old_sold_price: job.sold_price,
             new_sold_price: sold_price
         });
@@ -191,16 +237,16 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
                         job_name,
                         bestMatch: bestMatch?.name || null,
                         score: bestScore.toFixed(2),
-                        threshold: 70
+                        threshold: 85
                     });
                     
-                    // Si el score es >= 70%, usar ese estimate
-                    if (bestMatch && bestScore >= 70) {
+                    // Si el score es >= 85%, usar ese estimate
+                    if (bestMatch && bestScore >= 85) {
                         estimate = bestMatch;
-                        logger.info('Estimate found using fuzzy matching', {
+                        logger.info('Estimate found using fuzzy matching (85%+ threshold)', {
                             job_name,
                             estimate_name: estimate.name,
-                            similarity: bestScore.toFixed(2)
+                            similarity: bestScore.toFixed(2) + '%'
                         });
                     }
                 }

@@ -59,7 +59,7 @@ class PerformanceController {
             }
 
             // Validar que el status sea uno de los permitidos
-            const validStatuses = ['Done', 'Uploading Shifts', 'Missing Data to Close', 'In Payload'];
+            const validStatuses = ['Closed Job', 'Uploading Shifts', 'Missing Data to Close', 'In Payload'];
             if (!validStatuses.includes(status)) {
                 return res.status(400).json({
                     success: false,
