@@ -8,7 +8,7 @@ const jobCreationService = require('../services/jobCreationService');
 class JobsController {
     async getAllJobs(req, res) {
         try {
-            const { page = 1, limit = 10, branchId, salespersonId, crewLeaderId, statusId, startDate, endDate, search } = req.query;
+            const { page = 1, limit = 10, branchId, salespersonId, crewLeaderId, statusId, startDate, endDate, search, inPayload } = req.query;
             const offset = (page - 1) * limit;
 
             const whereClause = {};
@@ -20,6 +20,10 @@ class JobsController {
             }
             if (search) {
                 whereClause.name = { [Op.iLike]: `%${search}%` };
+            }
+            // Filtro de inPayload: convertir string a boolean
+            if (inPayload !== undefined && inPayload !== '') {
+                whereClause.in_payload = inPayload === 'true';
             }
 
             const includeWhereClause = {
