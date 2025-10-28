@@ -118,6 +118,12 @@ Job.init({
       key: 'id'
     },
     comment: 'Foreign key to overrun_report table (nullable)'
+  },
+  in_payload: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Indicates if job is in PayLoad external system. User can toggle this manually.'
   }
 }, {
   sequelize,

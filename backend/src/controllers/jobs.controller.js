@@ -283,7 +283,7 @@ class JobsController {
     async updateJob(req, res) {
         try {
             const { id } = req.params;
-            const { name, closing_date, estimate_id, crew_leader_id, branch_id, note, review, crew_leader_hours, status_id } = req.body;
+            const { name, closing_date, estimate_id, crew_leader_id, branch_id, note, review, crew_leader_hours, status_id, in_payload } = req.body;
 
             const job = await Job.findByPk(id);
             if (!job) {
@@ -300,6 +300,7 @@ class JobsController {
             if (note !== undefined) updateData.note = note;
             if (review !== undefined) updateData.review = review;
             if (crew_leader_hours !== undefined) updateData.crew_leader_hours = crew_leader_hours;
+            if (in_payload !== undefined) updateData.in_payload = in_payload;
             
             // Lógica especial para status_id y closing_date
             if (status_id !== undefined) {

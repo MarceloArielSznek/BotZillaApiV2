@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     Dialog, DialogTitle, DialogContent, DialogActions, Button, TextField, CircularProgress, Box, FormControl, InputLabel, Select, MenuItem, Autocomplete,
-    Typography, IconButton, Table, TableBody, TableCell, TableHead, TableRow, Divider
+    Typography, IconButton, Table, TableBody, TableCell, TableHead, TableRow, Divider, FormControlLabel, Checkbox
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import type { Branch, CrewMember, SpecialShift, JobDetails } from '../../interfaces';
@@ -242,6 +242,19 @@ const JobFormModal: React.FC<JobFormModalProps> = ({ open, onClose, onSubmit, jo
                         fullWidth
                         multiline
                         rows={3}
+                    />
+                    
+                    <FormControlLabel
+                        control={
+                            <Checkbox
+                                checked={!!(formData as any).in_payload}
+                                onChange={(e) => {
+                                    setFormData({ ...formData, in_payload: e.target.checked });
+                                }}
+                                color="primary"
+                            />
+                        }
+                        label="In PayLoad (External System)"
                     />
                 </Box>
                 

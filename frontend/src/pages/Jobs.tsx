@@ -25,7 +25,8 @@ import {
     TablePagination,
     Tabs,
     Tab,
-    Chip
+    Chip,
+    Checkbox
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
@@ -72,6 +73,7 @@ const Jobs: React.FC = () => {
         statusId: '',
         startDate: '',
         endDate: '',
+        inPayload: '', // '' = All, 'true' = In Payload, 'false' = Not in Payload
     });
 
     const fetchJobs = useCallback(async () => {
@@ -197,6 +199,24 @@ const Jobs: React.FC = () => {
         }
     };
 
+    const handleToggleInPayload = async (e: React.ChangeEvent<HTMLInputElement>, jobId: number) => {
+        e.stopPropagation(); // Prevent row click
+        const newInPayload = e.target.checked;
+        
+        try {
+            await updateJob(jobId, { in_payload: newInPayload });
+            // Update local state
+            setJobs(prevJobs => 
+                prevJobs.map(job => 
+                    job.id === jobId ? { ...job, in_payload: newInPayload } as Job : job
+                )
+            );
+        } catch (err) {
+            setError('Failed to update payload status.');
+            console.error(err);
+        }
+    };
+
 
     return (
         <Box sx={{ p: 3 }}>
@@ -240,7 +260,7 @@ const Jobs: React.FC = () => {
                                 <Typography variant="h6">Filters</Typography>
                                 <Button
                                 size="small"
-                                onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '' })}
+                                onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '', inPayload: '' })}
                                 sx={{ ml: 'auto' }}
                                 >
                                 Clear filters
@@ -286,7 +306,15 @@ const Jobs: React.FC = () => {
                                 </FormControl>
                                 <TextField sx={{ flex: '1 1 150px' }} type="date" name="startDate" value={filters.startDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="From Date" size="small" />
                                 <TextField sx={{ flex: '1 1 150px' }} type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} InputLabelProps={{ shrink: true }} label="To Date" size="small" />
-                                <Button variant="outlined" onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '' })}>Clear</Button>
+                                <FormControl fullWidth size="small" sx={{ flex: '1 1 150px' }}>
+                                    <InputLabel>In Payload</InputLabel>
+                                    <Select value={filters.inPayload} name="inPayload" onChange={handleFilterChange} label="In Payload">
+                                        <MenuItem value=""><em>All Jobs</em></MenuItem>
+                                        <MenuItem value="true">In Payload</MenuItem>
+                                        <MenuItem value="false">Not in Payload</MenuItem>
+                                    </Select>
+                                </FormControl>
+                                <Button variant="outlined" onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '', inPayload: '' })}>Clear</Button>
                             </Box>
                         </CardContent>
                     </Card>
@@ -311,6 +339,7 @@ const Jobs: React.FC = () => {
                                             <TableCell sx={{ fontWeight: 'bold', minWidth: 100 }}>Status</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold', minWidth: 130 }}>Shifts Approved</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold', minWidth: 80, textAlign: 'center' }}>Overrun</TableCell>
+                                            <TableCell sx={{ fontWeight: 'bold', minWidth: 100, textAlign: 'center' }}>In Payload</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold', minWidth: 110 }}>Closing Date</TableCell>
                                             <TableCell sx={{ fontWeight: 'bold', minWidth: 100, textAlign: 'center' }}>Actions</TableCell>
                                         </TableRow>
@@ -338,6 +367,17 @@ const Jobs: React.FC = () => {
                                                     ) : (
                                                         <Chip label="No" color="success" size="small" />
                                                     )}
+                                                </TableCell>
+                                                <TableCell sx={{ textAlign: 'center' }}>
+                                                    <Tooltip title={(job as any).in_payload ? "In PayLoad" : "Not in PayLoad"}>
+                                                        <Checkbox
+                                                            checked={(job as any).in_payload || false}
+                                                            onChange={(e) => handleToggleInPayload(e, job.id)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            color="primary"
+                                                            size="small"
+                                                        />
+                                                    </Tooltip>
                                                 </TableCell>
                                                 <TableCell>{job.closing_date ? new Date(job.closing_date).toLocaleDateString() : 'N/A'}</TableCell>
                                                 <TableCell sx={{ textAlign: 'center' }}>
