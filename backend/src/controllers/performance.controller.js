@@ -1818,6 +1818,7 @@ class PerformanceController {
             
             const Job = require('../models/Job');
             const Shift = require('../models/Shift');
+            const JobSpecialShift = require('../models/JobSpecialShift');
             const sequelize = require('../config/database');
             
             const transaction = await sequelize.transaction();
@@ -1854,20 +1855,34 @@ class PerformanceController {
                     }
                 );
                 
+                // Actualizar special shifts (QC) a approved
+                const [specialShiftsUpdated] = await JobSpecialShift.update(
+                    { approved_shift: true },
+                    {
+                        where: {
+                            job_id: job_ids,
+                            approved_shift: false
+                        },
+                        transaction
+                    }
+                );
+                
                 await transaction.commit();
                 
-                logger.info('Jobs and shifts approved', {
+                logger.info('Jobs, shifts and special shifts approved', {
                     job_ids,
                     jobs_updated: jobsUpdated,
-                    shifts_updated: shiftsUpdated
+                    shifts_updated: shiftsUpdated,
+                    special_shifts_updated: specialShiftsUpdated
                 });
                 
                 return res.status(200).json({
                     success: true,
-                    message: 'Jobs and shifts approved successfully',
+                    message: 'Jobs, shifts and special shifts approved successfully',
                     data: {
                         jobs_updated: jobsUpdated,
-                        shifts_updated: shiftsUpdated
+                        shifts_updated: shiftsUpdated,
+                        special_shifts_updated: specialShiftsUpdated
                     }
                 });
                 

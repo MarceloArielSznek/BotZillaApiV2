@@ -52,6 +52,13 @@ interface Shift {
   performance_status: string;
 }
 
+interface SpecialShift {
+  special_shift_id: number;
+  shift_type: string;
+  hours: number;
+  approved_shift: boolean;
+}
+
 interface PendingJob {
   id: number;
   name: string;
@@ -74,6 +81,7 @@ interface PendingJob {
   total_hours: number;
   crew_count: number;
   shifts: Shift[];
+  specialShifts?: SpecialShift[]; // QC shifts
 }
 
 interface Branch {
@@ -95,6 +103,10 @@ interface NewShiftData {
   hours: number;
 }
 
+interface NewQCShiftData {
+  hours: number;
+}
+
 const PerformanceApproval: React.FC = () => {
   const { enqueueSnackbar } = useSnackbar();
   
@@ -111,12 +123,19 @@ const PerformanceApproval: React.FC = () => {
   const [editingShift, setEditingShift] = useState<EditingShift | null>(null);
   const [editFormData, setEditFormData] = useState<EditFormData>({ hours: 0 });
   
-  // Estados para agregar shift
+  // Estados para agregar shift regular
   const [addShiftModalOpen, setAddShiftModalOpen] = useState(false);
   const [selectedJobForNewShift, setSelectedJobForNewShift] = useState<number | null>(null);
   const [newShiftData, setNewShiftData] = useState<NewShiftData>({
     crew_member_name: '',
     hours: 0
+  });
+  
+  // Estados para agregar QC shift
+  const [addQCShiftModalOpen, setAddQCShiftModalOpen] = useState(false);
+  const [selectedJobForNewQC, setSelectedJobForNewQC] = useState<number | null>(null);
+  const [newQCShiftData, setNewQCShiftData] = useState<NewQCShiftData>({
+    hours: 3 // Default 3 hours
   });
 
   useEffect(() => {
@@ -142,7 +161,40 @@ const PerformanceApproval: React.FC = () => {
       const response = await performanceService.getPendingApproval(branchId);
       console.log('Pending approval response:', response);
       if (response && response.data && response.data.jobs) {
-        setPendingJobs(response.data.jobs);
+        // Separar regular shifts y special shifts
+        const processedJobs = response.data.jobs.map((job: any) => {
+          const regularShifts: Shift[] = [];
+          const specialShifts: SpecialShift[] = [];
+          
+          if (job.shifts && Array.isArray(job.shifts)) {
+            job.shifts.forEach((shift: any) => {
+              if (shift.type === 'regular') {
+                regularShifts.push({
+                  crew_member_id: shift.crew_member_id,
+                  employee_id: shift.employee_id,
+                  employee_name: shift.employee_name,
+                  hours: shift.hours,
+                  performance_status: shift.performance_status
+                });
+              } else if (shift.type === 'special') {
+                specialShifts.push({
+                  special_shift_id: shift.special_shift_id,
+                  shift_type: shift.special_shift_name || 'QC',
+                  hours: shift.hours,
+                  approved_shift: shift.approved || false
+                });
+              }
+            });
+          }
+          
+          return {
+            ...job,
+            shifts: regularShifts,
+            specialShifts: specialShifts
+          };
+        });
+        
+        setPendingJobs(processedJobs);
       } else if (response && response.jobs) {
         // Fallback por si el formato cambia
         setPendingJobs(response.jobs);
@@ -301,6 +353,46 @@ const PerformanceApproval: React.FC = () => {
     setPendingJobs(updatedJobs);
     setAddShiftModalOpen(false);
     enqueueSnackbar('Shift added (save changes to persist)', { variant: 'success' });
+  };
+
+  // Agregar QC shift
+  const handleOpenAddQCShift = (jobId: number) => {
+    setSelectedJobForNewQC(jobId);
+    setNewQCShiftData({ hours: 3 }); // Default 3 hours
+    setAddQCShiftModalOpen(true);
+  };
+
+  const handleAddQCShift = () => {
+    if (!selectedJobForNewQC || newQCShiftData.hours <= 0) {
+      enqueueSnackbar('Please enter valid hours', { variant: 'warning' });
+      return;
+    }
+
+    const updatedJobs = pendingJobs.map(job => {
+      if (job.id === selectedJobForNewQC) {
+        const newQCShift: SpecialShift = {
+          special_shift_id: 1, // QC shift ID (assumed to be 1, verify in DB)
+          shift_type: 'QC',
+          hours: newQCShiftData.hours,
+          approved_shift: false
+        };
+        
+        const updatedSpecialShifts = [...(job.specialShifts || []), newQCShift];
+        const qcTotalHours = updatedSpecialShifts.reduce((sum, s) => sum + s.hours, 0);
+        const regularTotalHours = job.shifts.reduce((sum, s) => sum + s.hours, 0);
+        
+        return {
+          ...job,
+          specialShifts: updatedSpecialShifts,
+          total_hours: regularTotalHours + qcTotalHours
+        };
+      }
+      return job;
+    });
+
+    setPendingJobs(updatedJobs);
+    setAddQCShiftModalOpen(false);
+    enqueueSnackbar('QC shift added (save changes to persist)', { variant: 'success' });
   };
 
   const handleApproveSelected = async () => {
@@ -527,14 +619,25 @@ const PerformanceApproval: React.FC = () => {
                               <Typography variant="h6">
                                 Shifts for {job.name}
                               </Typography>
-                              <Button
-                                size="small"
-                                variant="outlined"
-                                startIcon={<AddIcon />}
-                                onClick={() => handleOpenAddShift(job.id)}
-                              >
-                                Add Shift
-                              </Button>
+                              <Stack direction="row" spacing={1}>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  startIcon={<AddIcon />}
+                                  onClick={() => handleOpenAddShift(job.id)}
+                                >
+                                  Add Shift
+                                </Button>
+                                <Button
+                                  size="small"
+                                  variant="outlined"
+                                  color="warning"
+                                  startIcon={<AddIcon />}
+                                  onClick={() => handleOpenAddQCShift(job.id)}
+                                >
+                                  Add QC Shift
+                                </Button>
+                              </Stack>
                             </Stack>
 
                             <TableContainer component={Paper} variant="outlined">
@@ -634,6 +737,46 @@ const PerformanceApproval: React.FC = () => {
                                 Total Hours: {job.total_hours.toFixed(2)}
                               </Typography>
                             </Box>
+
+                            {/* Special Shifts (QC) Section */}
+                            {job.specialShifts && job.specialShifts.length > 0 && (
+                              <Box sx={{ mt: 3 }}>
+                                <Typography variant="h6" sx={{ mb: 1 }}>
+                                  Special Shifts (QC)
+                                </Typography>
+                                <TableContainer component={Paper} variant="outlined">
+                                  <Table size="small">
+                                    <TableHead>
+                                      <TableRow>
+                                        <TableCell>Type</TableCell>
+                                        <TableCell>Hours</TableCell>
+                                        <TableCell>Status</TableCell>
+                                      </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                      {job.specialShifts.map((qcShift, index) => (
+                                        <TableRow key={index}>
+                                          <TableCell>
+                                            <Chip label={qcShift.shift_type} size="small" color="warning" />
+                                          </TableCell>
+                                          <TableCell>{qcShift.hours.toFixed(2)}</TableCell>
+                                          <TableCell>
+                                            {qcShift.approved_shift ? (
+                                              <Chip label="Approved" size="small" color="success" />
+                                            ) : (
+                                              <Chip label="Pending" size="small" color="warning" />
+                                            )}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </TableContainer>
+                                <Typography variant="body2" sx={{ mt: 1, fontWeight: 'bold', color: 'warning.main' }}>
+                                  Total QC Hours: {job.specialShifts.reduce((sum, s) => sum + s.hours, 0).toFixed(2)}
+                                </Typography>
+                              </Box>
+                            )}
                           </Box>
                         </Collapse>
                       </TableCell>
@@ -679,6 +822,41 @@ const PerformanceApproval: React.FC = () => {
             startIcon={<AddIcon />}
           >
             Add Shift
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal para agregar QC shift */}
+      <Dialog open={addQCShiftModalOpen} onClose={() => setAddQCShiftModalOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Add QC Shift</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <Alert severity="info">
+              QC shifts are special shifts for Quality Control. Default is 3 hours per QC shift.
+            </Alert>
+            <TextField
+              label="Hours"
+              type="number"
+              value={newQCShiftData.hours}
+              onChange={(e) => setNewQCShiftData({ hours: Number(e.target.value) })}
+              fullWidth
+              required
+              inputProps={{ min: 0, step: 0.25 }}
+              helperText="Default: 3 hours. Adjust as needed."
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddQCShiftModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={handleAddQCShift}
+            startIcon={<AddIcon />}
+          >
+            Add QC Shift
           </Button>
         </DialogActions>
       </Dialog>
