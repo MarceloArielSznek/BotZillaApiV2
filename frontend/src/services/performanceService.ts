@@ -199,12 +199,13 @@ const performanceService = {
    * Guardar datos de Performance permanentemente
    * Guarda jobs y shifts en las tablas principales (job y shift)
    */
-  savePerformanceDataPermanently: async (syncId: string, selectedJobNames?: string[], autoApprove: boolean = false): Promise<any> => {
+  savePerformanceDataPermanently: async (syncId: string, selectedJobNames?: string[], autoApprove: boolean = false, modifiedShifts?: any[]): Promise<any> => {
     try {
       const response = await api.post('/performance/save-permanently', {
         sync_id: syncId,
         selected_job_names: selectedJobNames,
-        auto_approve: autoApprove
+        auto_approve: autoApprove,
+        modified_shifts: modifiedShifts || null
       });
       return response.data;
     } catch (error: any) {

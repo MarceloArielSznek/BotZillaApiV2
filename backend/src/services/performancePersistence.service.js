@@ -505,16 +505,20 @@ async function saveShifts(jobId, shiftsData, autoApprove = false) {
 /**
  * Procesa y guarda permanentemente los datos de Performance
  * @param {string} syncId - UUID del sync
+ * @param {Array} selectedJobNames - Nombres de jobs seleccionados (opcional)
+ * @param {boolean} autoApprove - Si debe auto-aprobar o requerir aprobación
+ * @param {Array} modifiedShifts - Shifts modificados por el usuario (opcional)
  * @returns {Promise<Object>} - Resultado del proceso
  */
-async function savePerformanceDataPermanently(syncId, selectedJobNames = null, autoApprove = false) {
+async function savePerformanceDataPermanently(syncId, selectedJobNames = null, autoApprove = false, modifiedShifts = null) {
     const transaction = await sequelize.transaction();
     
     try {
         logger.info('Starting permanent save of Performance data', { 
             syncId,
             selectedJobNames: selectedJobNames?.length || 'all',
-            autoApprove
+            autoApprove,
+            hasModifiedShifts: !!modifiedShifts
         });
         
         // 1. Obtener jobs del spreadsheet (PerformanceSyncJob)
@@ -553,34 +557,43 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
         // 2. Obtener IDs de los syncJobs seleccionados
         const syncJobIds = syncJobs.map(sj => sj.id);
         
-        // 3. Obtener shifts del Excel (BuilderTrendShift) que están matched con los jobs seleccionados
-        const builderTrendShifts = await BuilderTrendShift.findAll({
-            where: {
-                sync_id: syncId,
-                match_status: 'matched',
-                matched_sync_job_id: { 
-                    [Op.ne]: null,
-                    [Op.in]: syncJobIds  // Solo shifts de jobs seleccionados
-                }
-            },
-            include: [
-                {
-                    model: PerformanceSyncJob,
-                    as: 'matchedSyncJob',
-                    required: true
-                }
-            ]
-        });
+        // 3. Obtener shifts del Excel (BuilderTrendShift) o usar modifiedShifts si están disponibles
+        let builderTrendShifts = [];
         
-        if (builderTrendShifts.length === 0) {
-            logger.warn('No matched shifts found for selected jobs', { 
-                syncId, 
-                selectedJobsCount: syncJobs.length 
+        if (modifiedShifts && modifiedShifts.length > 0) {
+            // Usar shifts modificados por el usuario
+            logger.info('Using modified shifts from frontend', { count: modifiedShifts.length });
+            builderTrendShifts = modifiedShifts; // Ya vienen agrupados y formateados
+        } else {
+            // Obtener shifts originales de la BD
+            builderTrendShifts = await BuilderTrendShift.findAll({
+                where: {
+                    sync_id: syncId,
+                    match_status: 'matched',
+                    matched_sync_job_id: { 
+                        [Op.ne]: null,
+                        [Op.in]: syncJobIds  // Solo shifts de jobs seleccionados
+                    }
+                },
+                include: [
+                    {
+                        model: PerformanceSyncJob,
+                        as: 'matchedSyncJob',
+                        required: true
+                    }
+                ]
             });
-            // No lanzar error, puede que los jobs seleccionados no tengan shifts (manual entry)
+            
+            if (builderTrendShifts.length === 0) {
+                logger.warn('No matched shifts found for selected jobs', { 
+                    syncId, 
+                    selectedJobsCount: syncJobs.length 
+                });
+                // No lanzar error, puede que los jobs seleccionados no tengan shifts (manual entry)
+            }
+            
+            logger.info('Found matched shifts', { count: builderTrendShifts.length });
         }
-        
-        logger.info('Found matched shifts', { count: builderTrendShifts.length });
         
         // 4. Agrupar shifts por job
         const jobsMap = {};

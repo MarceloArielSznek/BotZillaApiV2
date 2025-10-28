@@ -22,9 +22,35 @@ async function diagnoseDatabase() {
     }
 }
 
+// Heartbeat para mantener la conexión activa
+function setupDatabaseHeartbeat() {
+    const HEARTBEAT_INTERVAL = 30000; // 30 segundos
+    
+    setInterval(async () => {
+        try {
+            await sequelize.query('SELECT 1');
+            console.log('💓 Database heartbeat OK');
+        } catch (error) {
+            console.error('❌ Database heartbeat failed:', error.message);
+            // Intentar reconectar
+            try {
+                await sequelize.authenticate();
+                console.log('✅ Database reconnected successfully');
+            } catch (reconnectError) {
+                console.error('❌ Failed to reconnect to database:', reconnectError.message);
+            }
+        }
+    }, HEARTBEAT_INTERVAL);
+    
+    console.log(`💓 Database heartbeat started (every ${HEARTBEAT_INTERVAL / 1000}s)`);
+}
+
 async function startServer() {
     try {
         await diagnoseDatabase();
+        
+        // Iniciar heartbeat para mantener conexión viva
+        setupDatabaseHeartbeat();
         
         app.listen(PORT, () => {
             console.log(`🚀 Server is running on port ${PORT}`);

@@ -744,7 +744,18 @@ const Performance: React.FC = () => {
     try {
       setSavingForApproval(true);
       const selectedJobNames = Array.from(selectedJobsForSpreadsheet);
-      const response = await performanceService.savePerformanceDataPermanently(currentSyncId, selectedJobNames, false); // false = no auto-approve
+      
+      // Filtrar shifts de los jobs seleccionados
+      const selectedShifts = aggregatedShifts.filter(shift => 
+        selectedJobNames.includes(shift.job_name)
+      );
+      
+      const response = await performanceService.savePerformanceDataPermanently(
+        currentSyncId, 
+        selectedJobNames, 
+        false, // false = no auto-approve
+        selectedShifts // Enviar los shifts actuales (con modificaciones del usuario)
+      );
 
       if (response.success) {
         const data = response.data;
@@ -787,7 +798,18 @@ const Performance: React.FC = () => {
     try {
       setSavingPermanently(true);
       const selectedJobNames = Array.from(selectedJobsForSpreadsheet);
-      const response = await performanceService.savePerformanceDataPermanently(currentSyncId, selectedJobNames, true); // true = auto-approve
+      
+      // Filtrar shifts de los jobs seleccionados
+      const selectedShifts = aggregatedShifts.filter(shift => 
+        selectedJobNames.includes(shift.job_name)
+      );
+      
+      const response = await performanceService.savePerformanceDataPermanently(
+        currentSyncId, 
+        selectedJobNames, 
+        true, // true = auto-approve
+        selectedShifts // Enviar los shifts actuales (con modificaciones del usuario)
+      );
 
       if (response.success) {
         const data = response.data;

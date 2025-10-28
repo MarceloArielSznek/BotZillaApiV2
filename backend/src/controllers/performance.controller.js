@@ -1556,7 +1556,7 @@ class PerformanceController {
      */
     async savePerformanceDataPermanently(req, res) {
         try {
-            const { sync_id, selected_job_names, auto_approve } = req.body;
+            const { sync_id, selected_job_names, auto_approve, modified_shifts } = req.body;
             
             if (!sync_id) {
                 return res.status(400).json({
@@ -1568,14 +1568,16 @@ class PerformanceController {
             logger.info('Saving Performance data permanently', { 
                 sync_id,
                 selected_jobs_count: selected_job_names?.length || 'all',
-                auto_approve: auto_approve || false
+                auto_approve: auto_approve || false,
+                has_modified_shifts: !!modified_shifts
             });
             
             const performancePersistenceService = require('../services/performancePersistence.service');
             const result = await performancePersistenceService.savePerformanceDataPermanently(
                 sync_id, 
                 selected_job_names,
-                auto_approve || false
+                auto_approve || false,
+                modified_shifts || null
             );
             
             return res.status(200).json({
