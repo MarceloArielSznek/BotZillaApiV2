@@ -1,6 +1,6 @@
 const { Job, Estimate, Branch, SalesPerson, Employee, Shift, SpecialShift, JobSpecialShift, JobStatus, OverrunReport } = require('../models');
 const { logger } = require('../utils/logger');
-const { Op } = require('sequelize');
+const { Op, Transaction } = require('sequelize');
 const sequelize = require('../config/database');
 const { calculateJobPerformance, calculateJobPerformanceFromObject } = require('../services/performance.service');
 const jobCreationService = require('../services/jobCreationService');
@@ -240,8 +240,8 @@ class JobsController {
 
     async deleteJob(req, res) {
         const transaction = await sequelize.transaction({
-            isolationLevel: sequelize.Transaction.ISOLATION_LEVELS.READ_COMMITTED,
-            lock: sequelize.Transaction.LOCK.UPDATE
+            isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED,
+            lock: Transaction.LOCK.UPDATE
         });
         
         try {
