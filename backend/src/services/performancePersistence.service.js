@@ -106,19 +106,33 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
     const { job_name, closing_date, sold_price, crew_leader_id, branch_id, attic_tech_hours } = jobData;
     const fuzz = require('fuzzball');
     
-    // Buscar job existente por nombre exacto
+    // Función para normalizar nombres (quitar sufijos comunes)
+    const normalizeJobName = (name) => {
+        if (!name) return '';
+        return name
+            .replace(/\s*-\s*(ARL|REVISED|SM|CLI|PM|SD|LAK|WA|CA)\s*$/i, '') // Quitar sufijos comunes
+            .replace(/\s+/g, ' ') // Normalizar espacios
+            .trim();
+    };
+    
+    const normalizedJobName = normalizeJobName(job_name);
+    
+    // Buscar job existente por nombre exacto o normalizado
     let job = await Job.findOne({
         where: {
-            name: job_name,
+            [Op.or]: [
+                { name: job_name },
+                { name: normalizedJobName }
+            ],
             branch_id: branch_id
         }
     });
     
-    // Si no se encuentra exacto, buscar usando fuzzy matching (85%+ similitud)
+    // Si no se encuentra exacto, buscar usando fuzzy matching (85%+ similitud) con nombres normalizados
     if (!job) {
         const existingJobs = await Job.findAll({
             where: { branch_id: branch_id },
-            attributes: ['id', 'name', 'sold_price', 'crew_leader_id', 'attic_tech_hours', 'closing_date']
+            attributes: ['id', 'name', 'sold_price', 'crew_leader_id', 'attic_tech_hours', 'closing_date', 'performance_status']
         });
         
         if (existingJobs.length > 0) {
@@ -126,10 +140,13 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
             let bestScore = 0;
             
             existingJobs.forEach(existingJob => {
-                const ratio = fuzz.ratio(job_name, existingJob.name);
-                const partialRatio = fuzz.partial_ratio(job_name, existingJob.name);
-                const tokenSortRatio = fuzz.token_sort_ratio(job_name, existingJob.name);
-                const tokenSetRatio = fuzz.token_set_ratio(job_name, existingJob.name);
+                // Normalizar ambos nombres para comparar
+                const normalizedExistingName = normalizeJobName(existingJob.name);
+                
+                const ratio = fuzz.ratio(normalizedJobName, normalizedExistingName);
+                const partialRatio = fuzz.partial_ratio(normalizedJobName, normalizedExistingName);
+                const tokenSortRatio = fuzz.token_sort_ratio(normalizedJobName, normalizedExistingName);
+                const tokenSetRatio = fuzz.token_set_ratio(normalizedJobName, normalizedExistingName);
                 
                 const score = Math.max(ratio, partialRatio, tokenSortRatio, tokenSetRatio);
                 
@@ -160,19 +177,27 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
     
     if (job) {
         // Job existe → actualizar
+        // Si el job ya está 'synced' (aprobado anteriormente), mantenerlo así y no pedir aprobación nuevamente
+        const shouldKeepSynced = job.performance_status === 'synced';
+        const newPerformanceStatus = shouldKeepSynced ? 'synced' : (autoApprove ? 'synced' : 'pending_approval');
+        
         logger.info('Updating existing job from Performance', {
             job_id: job.id,
             job_name,
             existing_name: job.name,
             old_sold_price: job.sold_price,
-            new_sold_price: sold_price
+            new_sold_price: sold_price,
+            old_performance_status: job.performance_status,
+            new_performance_status: newPerformanceStatus,
+            kept_synced: shouldKeepSynced
         });
         
         await job.update({
             closing_date,
             sold_price,
             crew_leader_id,
-            attic_tech_hours: attic_tech_hours || job.attic_tech_hours // Mantener el existente si no viene nuevo
+            attic_tech_hours: attic_tech_hours || job.attic_tech_hours, // Mantener el existente si no viene nuevo
+            performance_status: newPerformanceStatus // Mantener 'synced' si ya estaba aprobado
         });
     } else {
         // Job no existe → crear nuevo
@@ -261,18 +286,18 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
                     sales_person_id: estimate.sales_person_id
                 });
                 
-                // Buscar status "Done" o "Closed" para jobs de Performance
+                // Buscar status "Closed Job" para jobs de Performance
                 const status = await JobStatus.findOne({
                     where: { 
                         name: {
-                            [Op.iLike]: 'Done'
+                            [Op.iLike]: 'Closed Job'
                         }
                     }
                 });
                 
                 if (status) {
                     statusId = status.id;
-                    logger.info('Status "Done" assigned to Performance job', {
+                    logger.info('Status "Closed Job" assigned to Performance job', {
                         status_id: statusId,
                         job_name
                     });

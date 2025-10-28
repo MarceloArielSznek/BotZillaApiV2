@@ -147,14 +147,14 @@ SELECT '
 ║        ✅ DONE STATUS REMOVED - CLOSED JOB ONLY ✅           ║
 ║                                                              ║
 ║  Changes:                                                    ║
-║  - All jobs with "Done" status migrated to "Closed Job"     ║
-║  - "Done" status removed from job_status table              ║
-║  - Only "Closed Job" should be used for completed jobs      ║
+║  - All jobs with "Done" status migrated to "Closed Job"      ║
+║  - "Done" status removed from job_status table               ║
+║  - Only "Closed Job" should be used for completed jobs       ║
 ║                                                              ║
 ║  Code Changes Needed:                                        ║
-║  - Update performance.controller.js to use "Closed Job"     ║
-║  - Remove "Done" from validStatuses array                   ║
-║  - Update any hardcoded "Done" references                   ║
+║  - Update performance.controller.js to use "Closed Job"      ║
+║  - Remove "Done" from validStatuses array                    ║
+║  - Update any hardcoded "Done" references                    ║
 ║                                                              ║
 ╚══════════════════════════════════════════════════════════════╝
 ' as migration_status;

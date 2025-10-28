@@ -28,6 +28,7 @@ import {
   DialogActions,
   IconButton,
   TextField,
+  Autocomplete,
   Checkbox,
   FormControlLabel
 } from '@mui/material';
@@ -47,6 +48,7 @@ import {
 } from '@mui/icons-material';
 import { useSnackbar } from 'notistack';
 import performanceService, { Branch } from '../services/performanceService';
+import employeeService from '../services/employeeService';
 import { v4 as uuidv4 } from 'uuid';
 
 interface SyncJob {
@@ -133,13 +135,23 @@ const Performance: React.FC = () => {
     has_qc: false,
     tags: ''
   });
+  
+  // Estados para agregar QC shift
+  const [addQCShiftModalOpen, setAddQCShiftModalOpen] = useState(false);
+  const [selectedJobForQC, setSelectedJobForQC] = useState<string>('');
+  const [qcShiftHours, setQcShiftHours] = useState<number>(3);
+  
+  // Estados para employees (crew members)
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
 
   // Statuses disponibles
-  const availableStatuses = ['Done', 'Uploading Shifts', 'Missing Data to Close', 'In Payload'];
+  const availableStatuses = ['Closed Job', 'Uploading Shifts', 'Missing Data to Close', 'In Payload'];
 
-  // Cargar branches al montar el componente
+  // Cargar branches y employees al montar el componente
   useEffect(() => {
     loadBranches();
+    loadEmployees();
   }, []);
 
   const loadBranches = async () => {
@@ -161,6 +173,28 @@ const Performance: React.FC = () => {
       setBranches([]); // Asegurar que branches sea un array vacío en caso de error
     } finally {
       setLoadingBranches(false);
+    }
+  };
+
+  const loadEmployees = async () => {
+    try {
+      setLoadingEmployees(true);
+      const response = await employeeService.getAll({ limit: 1000 });
+      if (response && response.data && Array.isArray(response.data)) {
+        // Filtrar solo crew_member y crew_leader
+        const crewMembers = response.data.filter(
+          emp => emp.role === 'crew_member' || emp.role === 'crew_leader'
+        );
+        setAllEmployees(crewMembers);
+      } else {
+        console.warn('Invalid employees data:', response);
+        setAllEmployees([]);
+      }
+    } catch (error: any) {
+      console.error('Error loading employees:', error);
+      setAllEmployees([]);
+    } finally {
+      setLoadingEmployees(false);
     }
   };
 
@@ -571,6 +605,38 @@ const Performance: React.FC = () => {
     setAddShiftModalOpen(true);
   };
 
+  // Funciones para agregar QC shift
+  const handleOpenAddQCShift = (jobName: string) => {
+    setSelectedJobForQC(jobName);
+    setQcShiftHours(3); // Default 3 hours
+    setAddQCShiftModalOpen(true);
+  };
+
+  const handleAddQCShift = async () => {
+    if (!selectedJobForQC || qcShiftHours <= 0) {
+      enqueueSnackbar('Please enter valid hours for QC shift', { variant: 'warning' });
+      return;
+    }
+
+    // Agregar QC shift a la lista de shifts agregados
+    const newQCShift: AggregatedShift = {
+      job_id: 0, // Temporal, se asignará al guardar
+      job_name: selectedJobForQC,
+      crew_member_name: 'QC Special Shift',
+      shifts_count: 1,
+      regular_hours: qcShiftHours,
+      ot_hours: 0,
+      ot2_hours: 0,
+      total_hours: qcShiftHours,
+      has_qc: true,
+      tags: 'QC'
+    };
+
+    setAggregatedShifts(prev => [...prev, newQCShift]);
+    setAddQCShiftModalOpen(false);
+    enqueueSnackbar('QC shift added successfully', { variant: 'success' });
+  };
+
   const handleAddShift = () => {
     if (!newShiftData.crew_member_name || !newShiftData.crew_member_name.trim()) {
       enqueueSnackbar('Crew member name is required', { variant: 'error' });
@@ -686,6 +752,11 @@ const Performance: React.FC = () => {
           `✅ ${data.jobs_created || 0} jobs saved for approval! Go to Performance Approval tab to review.`,
           { variant: 'success' }
         );
+        
+        // Limpiar jobs guardados de la lista
+        const savedJobNames = Array.from(selectedJobsForSpreadsheet);
+        setAggregatedShifts(prev => prev.filter(shift => !savedJobNames.includes(shift.job_name)));
+        setSelectedJobsForSpreadsheet(new Set());
       }
     } catch (error: any) {
       console.error('Error saving for approval:', error);
@@ -724,6 +795,11 @@ const Performance: React.FC = () => {
           `✅ Data saved! ${data.jobs_created} jobs created, ${data.jobs_updated} updated, ${data.shifts_created} shifts created.`,
           { variant: 'success' }
         );
+        
+        // Limpiar jobs guardados de la lista
+        const savedJobNames = Array.from(selectedJobsForSpreadsheet);
+        setAggregatedShifts(prev => prev.filter(shift => !savedJobNames.includes(shift.job_name)));
+        setSelectedJobsForSpreadsheet(new Set());
       }
     } catch (error: any) {
       console.error('Error saving permanently:', error);
@@ -1075,15 +1151,6 @@ const Performance: React.FC = () => {
                 >
                   {savingPermanently ? 'Saving...' : `Save ${selectedJobsForSpreadsheet.size} & Approve`}
                 </Button>
-                <Button
-                  variant="contained"
-                  color="success"
-                  startIcon={sendingToSpreadsheet ? <CircularProgress size={20} color="inherit" /> : <PublishIcon />}
-                  onClick={handleSendToSpreadsheet}
-                  disabled={sendingToSpreadsheet || selectedJobsForSpreadsheet.size === 0}
-                >
-                  {sendingToSpreadsheet ? 'Sending...' : `Send ${selectedJobsForSpreadsheet.size} Job(s)`}
-                </Button>
               </Stack>
             </Box>
 
@@ -1174,6 +1241,18 @@ const Performance: React.FC = () => {
                             }}
                           >
                             Add Shift
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="warning"
+                            startIcon={<AddIcon />}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenAddQCShift(jobName);
+                            }}
+                          >
+                            Add QC Shift
                           </Button>
                           <IconButton size="small" onClick={toggleExpanded}>
                             {isExpanded ? '▲' : '▼'}
@@ -1362,13 +1441,43 @@ const Performance: React.FC = () => {
               disabled
               fullWidth
             />
-            <TextField
-              label="Crew Member Name"
-              value={newShiftData.crew_member_name}
-              onChange={(e) => setNewShiftData({...newShiftData, crew_member_name: e.target.value})}
-              required
+            <Autocomplete
+              options={allEmployees}
+              getOptionLabel={(option) => {
+                if (typeof option === 'string') return option;
+                const statusLabel = option.status !== 'active' ? ` (${option.status})` : '';
+                return `${option.first_name} ${option.last_name}${statusLabel}`;
+              }}
+              loading={loadingEmployees}
+              value={allEmployees.find(emp => `${emp.first_name} ${emp.last_name}` === newShiftData.crew_member_name) || null}
+              onChange={(_, newValue) => {
+                if (newValue) {
+                  setNewShiftData({
+                    ...newShiftData, 
+                    crew_member_name: `${newValue.first_name} ${newValue.last_name}`
+                  });
+                } else {
+                  setNewShiftData({...newShiftData, crew_member_name: ''});
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Crew Member"
+                  required
+                  autoFocus
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {loadingEmployees ? <CircularProgress color="inherit" size={20} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
               fullWidth
-              autoFocus
             />
             <TextField
               label="Number of Shifts"
@@ -1427,6 +1536,53 @@ const Performance: React.FC = () => {
             startIcon={<AddIcon />}
           >
             Add Shift
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal para agregar QC shift */}
+      <Dialog open={addQCShiftModalOpen} onClose={() => setAddQCShiftModalOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>
+          Add QC Shift
+          <IconButton
+            onClick={() => setAddQCShiftModalOpen(false)}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Job Name"
+              value={selectedJobForQC}
+              disabled
+              fullWidth
+            />
+            <TextField
+              label="QC Hours"
+              type="number"
+              value={qcShiftHours}
+              onChange={(e) => setQcShiftHours(Number(e.target.value))}
+              fullWidth
+              required
+              autoFocus
+              inputProps={{ min: 0.25, step: 0.25 }}
+              helperText="Enter the number of hours for this QC shift"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddQCShiftModalOpen(false)}>
+            Cancel
+          </Button>
+          <Button 
+            variant="contained" 
+            color="warning"
+            onClick={handleAddQCShift}
+            startIcon={<AddIcon />}
+          >
+            Add QC Shift
           </Button>
         </DialogActions>
       </Dialog>

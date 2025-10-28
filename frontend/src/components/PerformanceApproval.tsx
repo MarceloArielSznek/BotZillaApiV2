@@ -26,7 +26,8 @@ import {
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Autocomplete
 } from '@mui/material';
 import {
   KeyboardArrowDown as ExpandMoreIcon,
@@ -43,6 +44,7 @@ import {
 import { useSnackbar } from 'notistack';
 import performanceService from '../services/performanceService';
 import branchService from '../services/branchService';
+import employeeService from '../services/employeeService';
 
 interface Shift {
   crew_member_id: number;
@@ -137,11 +139,27 @@ const PerformanceApproval: React.FC = () => {
   const [newQCShiftData, setNewQCShiftData] = useState<NewQCShiftData>({
     hours: 3 // Default 3 hours
   });
+  
+  // Estados para employees (crew members)
+  const [allEmployees, setAllEmployees] = useState<any[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
 
   useEffect(() => {
     loadBranches();
     loadPendingJobs();
+    loadEmployees();
   }, []);
+
+  // Helper para formatear el performance status
+  const formatPerformanceStatus = (status: string) => {
+    const statusMap: { [key: string]: { label: string; color: 'warning' | 'success' | 'error' | 'default' } } = {
+      'pending_approval': { label: 'Pending Approval', color: 'warning' },
+      'approved': { label: 'Approved', color: 'success' },
+      'rejected': { label: 'Rejected', color: 'error' },
+      'synced': { label: 'Synced', color: 'success' }
+    };
+    return statusMap[status] || { label: status, color: 'default' };
+  };
 
   const loadBranches = async () => {
     try {
@@ -152,6 +170,28 @@ const PerformanceApproval: React.FC = () => {
       }
     } catch (error) {
       console.error('Error loading branches:', error);
+    }
+  };
+
+  const loadEmployees = async () => {
+    try {
+      setLoadingEmployees(true);
+      const response = await employeeService.getAll({ limit: 1000 });
+      if (response && response.data && Array.isArray(response.data)) {
+        // Filtrar solo crew_member y crew_leader
+        const crewMembers = response.data.filter(
+          emp => emp.role === 'crew_member' || emp.role === 'crew_leader'
+        );
+        setAllEmployees(crewMembers);
+      } else {
+        console.warn('Invalid employees data:', response);
+        setAllEmployees([]);
+      }
+    } catch (error: any) {
+      console.error('Error loading employees:', error);
+      setAllEmployees([]);
+    } finally {
+      setLoadingEmployees(false);
     }
   };
 
@@ -681,11 +721,16 @@ const PerformanceApproval: React.FC = () => {
                                           )}
                                         </TableCell>
                                         <TableCell>
-                                          <Chip
-                                            label={shift.performance_status}
-                                            size="small"
-                                            color="warning"
-                                          />
+                                          {(() => {
+                                            const statusInfo = formatPerformanceStatus(shift.performance_status);
+                                            return (
+                                              <Chip
+                                                label={statusInfo.label}
+                                                size="small"
+                                                color={statusInfo.color}
+                                              />
+                                            );
+                                          })()}
                                         </TableCell>
                                         <TableCell align="right">
                                           {isEditing ? (
@@ -794,12 +839,43 @@ const PerformanceApproval: React.FC = () => {
         <DialogTitle>Add New Shift</DialogTitle>
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
-            <TextField
-              label="Crew Member Name"
-              value={newShiftData.crew_member_name}
-              onChange={(e) => setNewShiftData({ ...newShiftData, crew_member_name: e.target.value })}
+            <Autocomplete
+              options={allEmployees}
+              getOptionLabel={(option) => {
+                if (typeof option === 'string') return option;
+                const statusLabel = option.status !== 'active' ? ` (${option.status})` : '';
+                return `${option.first_name} ${option.last_name}${statusLabel}`;
+              }}
+              loading={loadingEmployees}
+              value={allEmployees.find(emp => `${emp.first_name} ${emp.last_name}` === newShiftData.crew_member_name) || null}
+              onChange={(_, newValue) => {
+                if (newValue) {
+                  setNewShiftData({
+                    ...newShiftData, 
+                    crew_member_name: `${newValue.first_name} ${newValue.last_name}`
+                  });
+                } else {
+                  setNewShiftData({...newShiftData, crew_member_name: ''});
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Crew Member"
+                  required
+                  autoFocus
+                  InputProps={{
+                    ...params.InputProps,
+                    endAdornment: (
+                      <>
+                        {loadingEmployees ? <CircularProgress color="inherit" size={20} /> : null}
+                        {params.InputProps.endAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
               fullWidth
-              required
             />
             <TextField
               label="Hours"

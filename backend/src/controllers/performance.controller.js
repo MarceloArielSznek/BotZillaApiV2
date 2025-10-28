@@ -1643,7 +1643,8 @@ class PerformanceController {
             
             const { Job, Shift, Employee, Branch, JobStatus, Estimate, SalesPerson, JobSpecialShift, SpecialShift } = require('../models');
             
-            // Construir filtro
+            // Construir filtro - Solo jobs pendientes de aprobación
+            // NO mostrar jobs 'synced' (ya aprobados) ni 'approved' (ya procesados)
             const whereClause = {
                 performance_status: 'pending_approval'
             };
