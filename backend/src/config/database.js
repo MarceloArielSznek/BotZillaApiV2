@@ -36,9 +36,9 @@ const sequelize = new Sequelize({
     pool: {
         max: 20, // Aumentar conexiones máximas para operaciones concurrentes
         min: 5,  // Mantener más conexiones activas
-        acquire: 60000, // 60 segundos para adquirir conexión
-        idle: 10000,    // 10 segundos idle antes de liberar
-        evict: 1000,    // Intervalo para verificar conexiones
+        acquire: 120000, // 120 segundos para adquirir conexión (aumentado para operaciones pesadas)
+        idle: 10000,     // 10 segundos idle antes de liberar
+        evict: 1000,     // Intervalo para verificar conexiones
         handleDisconnects: true
     },
     // Retry automático en caso de error de conexión

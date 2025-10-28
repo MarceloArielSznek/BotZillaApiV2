@@ -239,9 +239,15 @@ class JobsController {
     }
 
     async deleteJob(req, res) {
-        const transaction = await sequelize.transaction();
+        const transaction = await sequelize.transaction({
+            isolationLevel: sequelize.Transaction.ISOLATION_LEVELS.READ_COMMITTED,
+            lock: sequelize.Transaction.LOCK.UPDATE
+        });
+        
         try {
             const { id } = req.params;
+            logger.info(`🗑️ Iniciando eliminación del job ${id}`);
+            
             const job = await Job.findByPk(id);
 
             if (!job) {
@@ -249,18 +255,31 @@ class JobsController {
                 return res.status(404).json({ success: false, message: 'Job not found.' });
             }
 
-            // Manually delete related shifts due to composite keys
-            await Shift.destroy({ where: { job_id: id }, transaction });
-            await JobSpecialShift.destroy({ where: { job_id: id }, transaction });
+            logger.info(`🗑️ Job encontrado: ${job.name}. Eliminando shifts relacionados...`);
             
+            // Manually delete related shifts due to composite keys
+            const shiftsDeleted = await Shift.destroy({ where: { job_id: id }, transaction });
+            logger.info(`✅ ${shiftsDeleted} regular shifts eliminados`);
+            
+            const specialShiftsDeleted = await JobSpecialShift.destroy({ where: { job_id: id }, transaction });
+            logger.info(`✅ ${specialShiftsDeleted} special shifts eliminados`);
+            
+            logger.info(`🗑️ Eliminando job ${id}...`);
             await job.destroy({ transaction });
             
             await transaction.commit();
+            logger.info(`✅ Job ${id} eliminado exitosamente`);
+            
             res.status(200).json({ success: true, message: 'Job and associated shifts deleted successfully.' });
         } catch (error) {
-            await transaction.rollback();
-            logger.error(`Error deleting job with id ${req.params.id}:`, error);
-            res.status(500).json({ success: false, message: 'Server error deleting job.' });
+            try {
+                await transaction.rollback();
+                logger.error(`❌ Rollback exitoso para job ${req.params.id}`);
+            } catch (rollbackError) {
+                logger.error(`❌ Error en rollback para job ${req.params.id}:`, rollbackError);
+            }
+            logger.error(`❌ Error eliminando job ${req.params.id}:`, error);
+            res.status(500).json({ success: false, message: 'Server error deleting job.', error: error.message });
         }
     }
 
