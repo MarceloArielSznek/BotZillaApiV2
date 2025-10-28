@@ -11,6 +11,7 @@ interface JobFilters {
     statusId?: string;
     startDate?: string;
     endDate?: string;
+    inPayload?: string;
 }
 
 export interface JobsResponse {
@@ -33,6 +34,7 @@ export const getJobs = async (filters: JobFilters = {}): Promise<JobsResponse> =
     if (filters.statusId) params.append('statusId', filters.statusId);
     if (filters.startDate) params.append('startDate', filters.startDate);
     if (filters.endDate) params.append('endDate', filters.endDate);
+    if (filters.inPayload) params.append('inPayload', filters.inPayload);
 
     const response = await api.get('/jobs', { params });
     return response.data;

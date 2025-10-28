@@ -23,7 +23,13 @@ class JobsController {
             }
             // Filtro de inPayload: convertir string a boolean
             if (inPayload !== undefined && inPayload !== '') {
-                whereClause.in_payload = inPayload === 'true';
+                const boolValue = inPayload === 'true';
+                whereClause.in_payload = boolValue;
+                logger.info('Filtering by inPayload', { 
+                    inPayload_received: inPayload, 
+                    inPayload_type: typeof inPayload,
+                    inPayload_boolean: boolValue 
+                });
             }
 
             const includeWhereClause = {
