@@ -563,26 +563,26 @@ async function saveJobsToDb(jobsFromAT) {
                         shouldNotify = true;
                         logger.info(`🔔 Escenario 1: Estado cambió a "Plans In Progress" con Crew Leader asignado: ${atJob.name}`);
                         
-                        // Verificar si el crew leader tiene telegram_id
+                        // Verificar si el crew leader tiene telegram_id - ANTI-SPAM: enviar solo 1 vez
                         if (!crewLeader.telegram_id) {
-                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" no tiene telegram_id. Enviando alerta de registro...`);
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" no tiene telegram_id. Enviando alerta de registro (1x)...`);
                             
-                            // Enviar webhook de alerta (crew leader debe registrarse)
-                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                            // Enviar webhook de alerta (crew leader debe registrarse) - SOLO 1 VEZ
+                            await sendRegistrationAlertOnce(existingJob, {
                                 crewLeaderId: crewLeader.id,
                                 crewLeaderName: getCrewLeaderName(crewLeader),
                                 crewLeaderEmail: crewLeader.email || 'No email',
                                 jobName: atJob.name,
                                 branchName: branch?.name || 'Unknown',
                                 registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                                activeUser: false, // No tiene telegram_id
-                                hasTelegramId: false // NO completó el registro
-                            });
+                                activeUser: false,
+                                hasTelegramId: false
+                            }, atJob.name);
                         } else if (crewLeader.status !== 'active') {
-                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta...`);
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta (1x)...`);
                             
-                            // Enviar webhook de alerta (crew leader pendiente de aprobación)
-                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                            // Enviar webhook de alerta (crew leader pendiente de aprobación) - SOLO 1 VEZ
+                            await sendRegistrationAlertOnce(existingJob, {
                                 crewLeaderId: crewLeader.id,
                                 crewLeaderName: getCrewLeaderName(crewLeader),
                                 crewLeaderEmail: crewLeader.email || 'No email',
@@ -591,66 +591,66 @@ async function saveJobsToDb(jobsFromAT) {
                                 registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
                                 activeUser: false,
                                 hasTelegramId: true
-                            });
+                            }, atJob.name);
                         }
                     } else if (crewLeaderFromAT) {
                         // Crew leader existe en AT pero NO en nuestra BD
-                        logger.warn(`⚠️  Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD. Enviando alerta de registro...`);
+                        logger.warn(`⚠️  Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD. Enviando alerta de registro (1x)...`);
                         
-                        // Enviar webhook de alerta usando datos de AT
-                        await makeWebhookService.sendCrewLeaderRegistrationAlert({
-                            crewLeaderId: null, // No existe en nuestra BD
+                        // Enviar webhook de alerta usando datos de AT - SOLO 1 VEZ
+                        await sendRegistrationAlertOnce(existingJob, {
+                            crewLeaderId: null,
                             crewLeaderName: crewLeaderFromAT.name,
                             crewLeaderEmail: crewLeaderFromAT.email || 'No email',
                             jobName: atJob.name,
                             branchName: branch?.name || 'Unknown',
                             registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                            notInDatabase: true, // Flag para indicar que no está en BD
-                            activeUser: false, // NO está activo (no está en BD)
-                            hasTelegramId: false // NO está en BD = no tiene telegram_id
-                        });
+                            notInDatabase: true,
+                            activeUser: false,
+                            hasTelegramId: false
+                        }, atJob.name);
                     } else {
                         logger.warn(`⚠️  Job cambió a "Plans In Progress" pero NO tiene Crew Leader asignado: ${atJob.name}`);
                     }
                 }
                 
-                // RECORDATORIO CONTINUO: Si el job tiene crew leader sin telegram_id, enviar alerta en cada sync
+                // RECORDATORIO CONTINUO: Si el job tiene crew leader sin telegram_id - ANTI-SPAM: solo 1 vez
                 if (!statusChanged && crewLeader && !crewLeader.telegram_id && newStatusName === 'Plans In Progress') {
-                    logger.warn(`🔄 Recordatorio: Crew Leader "${getCrewLeaderName(crewLeader)}" aún no tiene telegram_id. Enviando alerta...`);
+                    logger.warn(`🔄 Recordatorio: Crew Leader "${getCrewLeaderName(crewLeader)}" aún no tiene telegram_id. Enviando alerta (1x)...`);
                     
-                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                    await sendRegistrationAlertOnce(existingJob, {
                         crewLeaderId: crewLeader.id,
                         crewLeaderName: getCrewLeaderName(crewLeader),
                         crewLeaderEmail: crewLeader.email || 'No email',
                         jobName: atJob.name,
                         branchName: branch?.name || 'Unknown',
                         registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                        activeUser: false, // No está activo (sin telegram_id)
-                        hasTelegramId: false // NO completó el registro
-                    });
+                        activeUser: false,
+                        hasTelegramId: false
+                    }, atJob.name);
                 }
                 
-                // RECORDATORIO CONTINUO: Si el crew leader tiene telegram_id pero NO está aprobado (status != 'active')
+                // RECORDATORIO CONTINUO: Si el crew leader tiene telegram_id pero NO está aprobado - ANTI-SPAM: solo 1 vez
                 if (!statusChanged && crewLeader && crewLeader.telegram_id && crewLeader.status !== 'active' && newStatusName === 'Plans In Progress') {
-                    logger.warn(`🔄 Recordatorio: Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero aún no está aprobado (status: ${crewLeader.status}). Enviando alerta...`);
+                    logger.warn(`🔄 Recordatorio: Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero aún no está aprobado (status: ${crewLeader.status}). Enviando alerta (1x)...`);
                     
-                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                    await sendRegistrationAlertOnce(existingJob, {
                         crewLeaderId: crewLeader.id,
                         crewLeaderName: getCrewLeaderName(crewLeader),
                         crewLeaderEmail: crewLeader.email || 'No email',
                         jobName: atJob.name,
                         branchName: branch?.name || 'Unknown',
                         registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                        activeUser: false, // Tiene telegram_id pero NO está aprobado
-                        hasTelegramId: true // Flag para indicar que completó el registro
-                    });
+                        activeUser: false,
+                        hasTelegramId: true
+                    }, atJob.name);
                 }
                 
-                // RECORDATORIO CONTINUO: Si el job tiene crew leader de AT pero NO en BD
+                // RECORDATORIO CONTINUO: Si el job tiene crew leader de AT pero NO en BD - ANTI-SPAM: solo 1 vez
                 if (!statusChanged && !crewLeader && crewLeaderFromAT && newStatusName === 'Plans In Progress') {
-                    logger.warn(`🔄 Recordatorio: Crew Leader "${crewLeaderFromAT.name}" aún NO está en BD. Enviando alerta...`);
+                    logger.warn(`🔄 Recordatorio: Crew Leader "${crewLeaderFromAT.name}" aún NO está en BD. Enviando alerta (1x)...`);
                     
-                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                    await sendRegistrationAlertOnce(existingJob, {
                         crewLeaderId: null,
                         crewLeaderName: crewLeaderFromAT.name,
                         crewLeaderEmail: crewLeaderFromAT.email || 'No email',
@@ -658,9 +658,9 @@ async function saveJobsToDb(jobsFromAT) {
                         branchName: branch?.name || 'Unknown',
                         registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
                         notInDatabase: true,
-                        activeUser: false, // NO está en BD
-                        hasTelegramId: false // NO está en BD = no tiene telegram_id
-                    });
+                        activeUser: false,
+                        hasTelegramId: false
+                    }, atJob.name);
                 }
                 
                 // ESCENARIO 2: Job ya está en "Plans In Progress" pero se le asignó crew leader ahora
@@ -675,26 +675,26 @@ async function saveJobsToDb(jobsFromAT) {
                         shouldNotify = true;
                         logger.info(`🔔 Escenario 2: Crew Leader asignado a job existente en "Plans In Progress": ${atJob.name}`);
                         
-                        // Verificar si el crew leader tiene telegram_id
+                        // Verificar si el crew leader tiene telegram_id - ANTI-SPAM: solo 1 vez
                         if (!crewLeader.telegram_id) {
-                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" no tiene telegram_id. Enviando alerta de registro...`);
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" no tiene telegram_id. Enviando alerta de registro (1x)...`);
                             
-                            // Enviar webhook de alerta (crew leader debe registrarse)
-                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                            // Enviar webhook de alerta (crew leader debe registrarse) - SOLO 1 VEZ
+                            await sendRegistrationAlertOnce(existingJob, {
                                 crewLeaderId: crewLeader.id,
                                 crewLeaderName: getCrewLeaderName(crewLeader),
                                 crewLeaderEmail: crewLeader.email || 'No email',
                                 jobName: atJob.name,
                                 branchName: branch?.name || 'Unknown',
                                 registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                                activeUser: false, // No tiene telegram_id
-                                hasTelegramId: false // NO completó el registro
-                            });
+                                activeUser: false,
+                                hasTelegramId: false
+                            }, atJob.name);
                         } else if (crewLeader.status !== 'active') {
-                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta...`);
+                            logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta (1x)...`);
                             
-                            // Enviar webhook de alerta (crew leader pendiente de aprobación)
-                            await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                            // Enviar webhook de alerta (crew leader pendiente de aprobación) - SOLO 1 VEZ
+                            await sendRegistrationAlertOnce(existingJob, {
                                 crewLeaderId: crewLeader.id,
                                 crewLeaderName: getCrewLeaderName(crewLeader),
                                 crewLeaderEmail: crewLeader.email || 'No email',
@@ -703,24 +703,24 @@ async function saveJobsToDb(jobsFromAT) {
                                 registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
                                 activeUser: false,
                                 hasTelegramId: true
-                            });
+                            }, atJob.name);
                         }
                     } else if (nowHasCrewLeaderFromAT) {
                         // Crew leader existe en AT pero NO en nuestra BD
-                        logger.warn(`⚠️  Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD (Escenario 2). Enviando alerta de registro...`);
+                        logger.warn(`⚠️  Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD (Escenario 2). Enviando alerta de registro (1x)...`);
                         
-                        // Enviar webhook de alerta usando datos de AT
-                        await makeWebhookService.sendCrewLeaderRegistrationAlert({
-                            crewLeaderId: null, // No existe en nuestra BD
+                        // Enviar webhook de alerta usando datos de AT - SOLO 1 VEZ
+                        await sendRegistrationAlertOnce(existingJob, {
+                            crewLeaderId: null,
                             crewLeaderName: crewLeaderFromAT.name,
                             crewLeaderEmail: crewLeaderFromAT.email || 'No email',
                             jobName: atJob.name,
                             branchName: branch?.name || 'Unknown',
                             registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                            notInDatabase: true, // Flag para indicar que no está en BD
-                            activeUser: false, // NO está activo (no está en BD)
-                            hasTelegramId: false // NO está en BD = no tiene telegram_id
-                        });
+                            notInDatabase: true,
+                            activeUser: false,
+                            hasTelegramId: false
+                        }, atJob.name);
                     }
                 }
 
@@ -785,10 +785,10 @@ async function saveJobsToDb(jobsFromAT) {
                         logger.info(`✅ Marcado notification_sent = true para job: ${atJob.name}`);
                     }
                 } else if (needsNotification && !existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status !== 'active') {
-                    // Crew leader tiene telegram_id pero NO está aprobado → Enviar webhook de alerta
-                    logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta al admin...`);
+                    // Crew leader tiene telegram_id pero NO está aprobado → Enviar webhook de alerta - ANTI-SPAM: solo 1 vez
+                    logger.warn(`⚠️  Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta al admin (1x)...`);
                     
-                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
+                    await sendRegistrationAlertOnce(existingJob, {
                         crewLeaderId: crewLeader.id,
                         crewLeaderName: getCrewLeaderName(crewLeader),
                         crewLeaderEmail: crewLeader.email || 'No email',
@@ -797,7 +797,7 @@ async function saveJobsToDb(jobsFromAT) {
                         registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
                         activeUser: false,
                         hasTelegramId: true
-                    });
+                    }, atJob.name);
                 }
             } else {
                 // Crear nuevo job
@@ -811,21 +811,26 @@ async function saveJobsToDb(jobsFromAT) {
                 const newStatus = status?.name;
                 
                 // ESCENARIO 1 (Job Nuevo): Si el job viene con crew leader en AT pero NO está en nuestra BD
+                // NOTA: Para jobs nuevos, no hay existingJob, así que usamos newJob después de crear
                 if (newStatus === 'Plans In Progress' && !crewLeader && crewLeaderFromAT) {
-                    logger.warn(`⚠️  Nuevo job con Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD. Enviando alerta...`);
+                    logger.warn(`⚠️  Nuevo job con Crew Leader "${crewLeaderFromAT.name}" NO encontrado en BD. Enviando alerta (1x)...`);
                     
-                    // Enviar webhook de alerta usando datos de AT
-                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
-                        crewLeaderId: null,
-                        crewLeaderName: crewLeaderFromAT.name,
-                        crewLeaderEmail: crewLeaderFromAT.email || 'No email',
-                        jobName: atJob.name,
-                        branchName: branch?.name || 'Unknown',
-                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                        notInDatabase: true,
-                        activeUser: false, // NO está en BD
-                        hasTelegramId: false // NO está en BD = no tiene telegram_id
-                    });
+                    // Para jobs nuevos, necesitamos buscar el job recién creado
+                    const newJob = await Job.findOne({ where: { attic_tech_job_id: atJob.id } });
+                    if (newJob) {
+                        // Enviar webhook de alerta usando datos de AT - SOLO 1 VEZ
+                        await sendRegistrationAlertOnce(newJob, {
+                            crewLeaderId: null,
+                            crewLeaderName: crewLeaderFromAT.name,
+                            crewLeaderEmail: crewLeaderFromAT.email || 'No email',
+                            jobName: atJob.name,
+                            branchName: branch?.name || 'Unknown',
+                            registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                            notInDatabase: true,
+                            activeUser: false,
+                            hasTelegramId: false
+                        }, atJob.name);
+                    }
                 }
                 
                 // NOTIFICACIÓN AL OPERATION MANAGER: Nuevo job con "Requires Crew Lead"
@@ -846,18 +851,22 @@ async function saveJobsToDb(jobsFromAT) {
                     }
                 } else if (newStatus === 'Plans In Progress' && crewLeader && crewLeader.telegram_id && crewLeader.status !== 'active') {
                     // Crew leader tiene telegram_id pero NO está aprobado
-                    logger.warn(`⚠️  Nuevo job con Crew Leader "${getCrewLeaderName(crewLeader)}" pendiente de aprobación (status: ${crewLeader.status}). Enviando alerta...`);
+                    logger.warn(`⚠️  Nuevo job con Crew Leader "${getCrewLeaderName(crewLeader)}" pendiente de aprobación (status: ${crewLeader.status}). Enviando alerta (1x)...`);
                     
-                    await makeWebhookService.sendCrewLeaderRegistrationAlert({
-                        crewLeaderId: crewLeader.id,
-                        crewLeaderName: getCrewLeaderName(crewLeader),
-                        crewLeaderEmail: crewLeader.email || 'No email',
-                        jobName: atJob.name,
-                        branchName: branch?.name || 'Unknown',
-                        registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
-                        activeUser: false,
-                        hasTelegramId: true
-                    });
+                    // Para jobs nuevos, buscar el job recién creado
+                    const newJob = await Job.findOne({ where: { attic_tech_job_id: atJob.id } });
+                    if (newJob) {
+                        await sendRegistrationAlertOnce(newJob, {
+                            crewLeaderId: crewLeader.id,
+                            crewLeaderName: getCrewLeaderName(crewLeader),
+                            crewLeaderEmail: crewLeader.email || 'No email',
+                            jobName: atJob.name,
+                            branchName: branch?.name || 'Unknown',
+                            registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                            activeUser: false,
+                            hasTelegramId: true
+                        }, atJob.name);
+                    }
                 }
             }
 
