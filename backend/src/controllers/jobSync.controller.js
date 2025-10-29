@@ -346,6 +346,29 @@ async function findOperationManager(branchId) {
 }
 
 /**
+ * Helper: Send registration alert webhook ONLY if not already sent
+ * Prevents spam by checking registration_alert_sent flag
+ */
+async function sendRegistrationAlertOnce(existingJob, alertData, jobName) {
+    if (existingJob.registration_alert_sent) {
+        logger.info(`ℹ️  Registration alert already sent for job "${jobName}", skipping to prevent spam`);
+        return false;
+    }
+    
+    // Send webhook
+    await makeWebhookService.sendCrewLeaderRegistrationAlert(alertData);
+    
+    // Mark as sent
+    await Job.update(
+        { registration_alert_sent: true },
+        { where: { id: existingJob.id } }
+    );
+    
+    logger.info(`✅ Registration alert sent (1x) for job: ${jobName}`);
+    return true;
+}
+
+/**
  * Generar notificación para Operation Manager (nuevo job con "Requires Crew Lead")
  */
 async function generateOperationManagerNotification(atJob, branch, estimate) {
@@ -485,11 +508,12 @@ async function saveJobsToDb(jobsFromAT) {
                 // ⚠️  RESETEAR NOTIFICACIÓN: Si el job regresa a "Requires Crew Leader"
                 // Esto permite que el NUEVO crew leader reciba una notificación cuando sea asignado
                 if (statusChanged && newStatusName === 'Requires Crew Lead') {
-                    logger.info(`🔄 Job "${atJob.name}" regresó a "Requires Crew Leader". Reseteando notification_sent y crew_leader_id...`);
+                    logger.info(`🔄 Job "${atJob.name}" regresó a "Requires Crew Leader". Reseteando notification_sent, registration_alert_sent y crew_leader_id...`);
                     await Job.update(
                         { 
                             notification_sent: false,
                             last_notification_sent_at: null,
+                            registration_alert_sent: false, // Resetear alerta de registro también
                             crew_leader_id: null // Remover crew leader anterior
                         },
                         { where: { id: existingJob.id } }
@@ -500,18 +524,20 @@ async function saveJobsToDb(jobsFromAT) {
                 // ⚠️  RESETEAR NOTIFICACIÓN: Si el crew_leader_id cambió (fue removido o cambiado a otro CL)
                 // Esto asegura que el nuevo crew leader reciba su notificación
                 const crewLeaderIdChanged = existingJob.crew_leader_id !== (crewLeader ? crewLeader.id : null);
-                if (crewLeaderIdChanged && existingJob.notification_sent) {
-                    logger.info(`🔄 Crew Leader cambió para job "${atJob.name}": ${existingJob.crew_leader_id} → ${crewLeader ? crewLeader.id : null}. Reseteando notification_sent...`);
+                if (crewLeaderIdChanged && (existingJob.notification_sent || existingJob.registration_alert_sent)) {
+                    logger.info(`🔄 Crew Leader cambió para job "${atJob.name}": ${existingJob.crew_leader_id} → ${crewLeader ? crewLeader.id : null}. Reseteando notification_sent y registration_alert_sent...`);
                     await Job.update(
                         { 
                             notification_sent: false,
-                            last_notification_sent_at: null
+                            last_notification_sent_at: null,
+                            registration_alert_sent: false // Resetear alerta de registro también
                         },
                         { where: { id: existingJob.id } }
                     );
                     // Actualizar el registro en memoria para que el resto del código lo vea actualizado
                     existingJob.notification_sent = false;
                     existingJob.last_notification_sent_at = null;
+                    existingJob.registration_alert_sent = false;
                     logger.info(`✅ Notification reset completado por cambio de crew leader para job: ${atJob.name}`);
                 }
 

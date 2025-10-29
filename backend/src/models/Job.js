@@ -124,6 +124,12 @@ Job.init({
     allowNull: false,
     defaultValue: false,
     comment: 'Indicates if job is in PayLoad external system. User can toggle this manually.'
+  },
+  registration_alert_sent: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Indicates if a Make.com registration alert has been sent for this job. Prevents spam. Reset when CL changes or completes registration.'
   }
 }, {
   sequelize,
