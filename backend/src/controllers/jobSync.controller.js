@@ -557,6 +557,23 @@ async function saveJobsToDb(jobsFromAT) {
                     logger.info(`✅ Limpieza completada para job: ${atJob.name}`);
                 }
                 
+                // ⚠️  RESETEAR NOTIFICACIÓN: Si el job cambia A "Plans In Progress" desde CUALQUIER estado
+                // Esto permite re-notificar al CL cuando hay cambios en el estimate/plan
+                if (statusChanged && newStatusName === 'Plans In Progress' && oldStatusName !== 'Plans In Progress') {
+                    logger.info(`🔄 Job "${atJob.name}" cambió a "Plans In Progress" desde "${oldStatusName}". Reseteando notification_sent para permitir nueva notificación...`);
+                    await Job.update(
+                        { 
+                            notification_sent: false,
+                            last_notification_sent_at: null
+                            // NO resetear registration_alert_sent aquí (solo para cambios de CL)
+                        },
+                        { where: { id: existingJob.id } }
+                    );
+                    existingJob.notification_sent = false;
+                    existingJob.last_notification_sent_at = null;
+                    logger.info(`✅ Notification reset completado - CL será re-notificado sobre cambios en el job`);
+                }
+                
                 // ESCENARIO 1: Detectar si cambió a "Plans In Progress" desde "Requires Crew Lead"
                 if (statusChanged && oldStatusName === 'Requires Crew Lead' && newStatusName === 'Plans In Progress') {
                     if (crewLeader) {
@@ -766,7 +783,7 @@ async function saveJobsToDb(jobsFromAT) {
                     (!existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active' && newStatusName === 'Plans In Progress');
                 
                 if (needsNotification && !existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active') {
-                    const notification = await generateNotification(atJob, crewLeader, branch, estimate);
+                    const notification = await generateNotification(atJob, crewLeader, branch, estimate, oldStatusName);
                     if (notification) {
                         // Agregar a la lista de notificaciones
                         // El sistema existente (que se ejecuta cada 15 min) las procesará
@@ -844,7 +861,8 @@ async function saveJobsToDb(jobsFromAT) {
                 
                 // NOTIFICACIÓN AL CREW LEADER: Nuevo job con "Plans In Progress" y crew leader activo
                 if (newStatus === 'Plans In Progress' && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active') {
-                    const notification = await generateNotification(atJob, crewLeader, branch, estimate);
+                    // Para jobs nuevos, el previousStatus es 'Requires Crew Lead' por defecto (nueva asignación)
+                    const notification = await generateNotification(atJob, crewLeader, branch, estimate, 'Requires Crew Lead');
                     if (notification) {
                         notifications.push(notification);
                         logger.info(`📨 Notificación generada para Crew Leader activo (nuevo job): ${getCrewLeaderName(crewLeader)}`);
@@ -885,9 +903,31 @@ async function saveJobsToDb(jobsFromAT) {
 
 /**
  * Generar notificación para Crew Leader asignado
+ * @param {Object} atJob - Job from Attic Tech
+ * @param {Object} crewLeader - Crew Leader from our DB
+ * @param {Object} branch - Branch from our DB
+ * @param {Object} estimate - Estimate from our DB
+ * @param {String} previousStatus - Previous job status (optional, for contextual messages)
  */
-async function generateNotification(atJob, crewLeader, branch, estimate) {
+async function generateNotification(atJob, crewLeader, branch, estimate, previousStatus = null) {
     try {
+        // Determinar tipo de notificación y mensaje contextual
+        let notificationType = 'Crew Leader Assigned';
+        let contextMessage = null;
+        
+        if (previousStatus) {
+            if (previousStatus === 'Pending Review') {
+                notificationType = 'Job Plan Changes Required';
+                contextMessage = 'Changes detected in the estimate. Please recreate the plan.';
+            } else if (previousStatus === 'Requires Crew Lead') {
+                notificationType = 'New Job Assigned';
+                contextMessage = 'New job assigned! Please create the plan.';
+            } else {
+                notificationType = 'Job Returned to Planning';
+                contextMessage = 'Job returned to planning phase. Please review and update the plan.';
+            }
+        }
+        
         // Priorizar datos de NUESTRA BD si el estimate existe
         const notification = {
             job_name: atJob.name,
@@ -899,11 +939,12 @@ async function generateNotification(atJob, crewLeader, branch, estimate) {
             client_email: estimate?.customer_email || atJob.job_estimate?.customer?.email || null,
             crew_leader_name: getCrewLeaderName(crewLeader), // Nombre del crew leader asignado
             job_link: `https://www.attic-tech.com/jobs/${atJob.id}`,
-            notification_type: 'Crew Leader Assigned',
+            notification_type: notificationType,
+            context_message: contextMessage, // Mensaje contextual para el CL
             telegram_id: crewLeader.telegram_id
         };
 
-        logger.info(`📨 Notificación generada para Crew Leader: ${getCrewLeaderName(crewLeader)} (Job: ${atJob.name})`);
+        logger.info(`📨 Notificación generada para Crew Leader: ${getCrewLeaderName(crewLeader)} (Job: ${atJob.name}, Type: ${notificationType})`);
         return notification;
     } catch (error) {
         logger.error(`Error generando notificación para job ${atJob.id}:`, error);
