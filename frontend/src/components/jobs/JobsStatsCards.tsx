@@ -21,6 +21,14 @@ interface JobsStatsCardsProps {
 }
 
 const JobsStatsCards: React.FC<JobsStatsCardsProps> = ({ jobs, totalJobs, loading }) => {
+    // Debug logs
+    console.log('📊 JobsStatsCards render:', {
+        jobsCount: jobs?.length || 0,
+        totalJobs,
+        loading,
+        hasJobs: Array.isArray(jobs) && jobs.length > 0
+    });
+
     if (loading) {
         return (
             <Box sx={{ 
@@ -41,6 +49,12 @@ const JobsStatsCards: React.FC<JobsStatsCardsProps> = ({ jobs, totalJobs, loadin
                 ))}
             </Box>
         );
+    }
+
+    // Si no hay jobs, no mostrar nada o mostrar mensaje
+    if (!jobs || !Array.isArray(jobs) || jobs.length === 0) {
+        console.warn('⚠️ No jobs data available for stats');
+        return null;
     }
 
     // Calcular estadísticas

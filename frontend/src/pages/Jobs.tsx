@@ -106,9 +106,14 @@ const Jobs: React.FC = () => {
             setStatsLoading(true);
             // Obtener todos los jobs sin paginación (límite alto)
             const response = await getJobs({ limit: 10000, page: 1 });
-            setAllJobs(response.data);
+            console.log('📊 Stats data loaded:', { 
+                jobsCount: response.data?.length || 0,
+                totalFromPagination: response.pagination?.total || 0 
+            });
+            setAllJobs(response.data || []);
         } catch (err) {
             console.error('Failed to fetch all jobs for stats:', err);
+            setAllJobs([]); // Set empty array on error
         } finally {
             setStatsLoading(false);
         }
@@ -402,7 +407,11 @@ const Jobs: React.FC = () => {
                                                         />
                                                     </Tooltip>
                                                 </TableCell>
-                                                <TableCell>{job.closing_date ? new Date(job.closing_date).toLocaleDateString() : 'N/A'}</TableCell>
+                                                <TableCell>
+                                                    {job.status?.name === 'Closed Job' 
+                                                        ? (job.closing_date ? new Date(job.closing_date).toLocaleDateString() : 'N/A')
+                                                        : '-'}
+                                                </TableCell>
                                                 <TableCell sx={{ textAlign: 'center' }}>
                                                     <Tooltip title="Edit Job">
                                                         <IconButton
