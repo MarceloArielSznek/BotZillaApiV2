@@ -305,11 +305,22 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
             
             // Determinar el estado del job basado en la información disponible
             // Si el job viene de Performance con shifts, debería tener un estado apropiado
-            let statusName = 'In Progress'; // Estado por defecto
+            let statusName;
             
-            // Si no tiene crew_leader_id, necesita un crew leader
-            if (!crew_leader_id) {
+            // Si autoApprove es true, significa que los shifts ya fueron aprobados
+            // Por lo tanto, el job debería crearse directamente como "Closed Job"
+            if (autoApprove) {
+                statusName = 'Closed Job';
+                logger.info(`Job will be created with "Closed Job" status (shifts auto-approved)`, {
+                    job_name,
+                    autoApprove
+                });
+            } else if (!crew_leader_id) {
+                // Si no tiene crew_leader_id, necesita un crew leader
                 statusName = 'Requires Crew Lead';
+            } else {
+                // Estado por defecto para jobs con shifts pendientes
+                statusName = 'In Progress';
             }
             
             const status = await JobStatus.findOne({
@@ -325,7 +336,8 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
                 logger.info(`Status "${statusName}" assigned to Performance job`, {
                     status_id: statusId,
                     job_name,
-                    has_crew_leader: !!crew_leader_id
+                    has_crew_leader: !!crew_leader_id,
+                    autoApprove
                 });
             } else {
                 logger.error(`Status "${statusName}" not found in database`, {

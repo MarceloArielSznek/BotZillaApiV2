@@ -464,12 +464,29 @@ async function saveJobsToDb(jobsFromAT) {
             // Buscar estimate en NUESTRA BD por su attic_tech_estimate_id
             const estimate = await findEstimateInOurDb(atJob.job_estimate?.id);
 
+            // Determinar el status_id a usar
+            // Si el job ya existe y está en "Closed Job", NO sobrescribir el status
+            // porque significa que todos los shifts ya fueron aprobados
+            let statusIdToUse = status?.id || null;
+            
+            if (existingJob) {
+                const closedJobStatus = await JobStatus.findOne({
+                    where: { name: 'Closed Job' }
+                });
+                
+                // Si el job está en "Closed Job", preservar ese estado
+                if (closedJobStatus && existingJob.status_id === closedJobStatus.id) {
+                    statusIdToUse = existingJob.status_id; // Mantener "Closed Job"
+                    logger.info(`🔒 Job "${atJob.name}" está en "Closed Job" (shifts aprobados). Status preservado, NO sobrescrito por sync.`);
+                }
+            }
+
             const jobData = {
                 name: atJob.name,
                 attic_tech_job_id: atJob.id,
                 attic_tech_estimate_id: atJob.job_estimate?.id || null,
                 estimate_id: estimate?.id || null,
-                status_id: status?.id || null,
+                status_id: statusIdToUse,
                 crew_leader_id: crewLeader?.id || null,
                 branch_id: branch?.id || null,
                 last_synced_at: new Date()
