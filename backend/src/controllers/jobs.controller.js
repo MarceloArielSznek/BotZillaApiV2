@@ -1,4 +1,5 @@
 const { Job, Estimate, Branch, SalesPerson, Employee, Shift, SpecialShift, JobSpecialShift, JobStatus, OverrunReport } = require('../models');
+const OperationCommandPost = require('../models/OperationCommandPost');
 const { logger } = require('../utils/logger');
 const { Op, Transaction } = require('sequelize');
 const sequelize = require('../config/database');
@@ -205,6 +206,11 @@ class JobsController {
                             as: 'specialShift',
                             attributes: ['id', 'name']
                         }]
+                    },
+                    {
+                        model: OperationCommandPost,
+                        as: 'operationPost',
+                        required: false
                     }
                 ]
             });
@@ -730,7 +736,7 @@ class JobsController {
      */
     async getOverrunJobs(req, res) {
         try {
-            const { page = 1, limit = 10, branchId, startDate, endDate, search } = req.query;
+            const { page = 1, limit = 1000, branchId, startDate, endDate, search } = req.query;
             const offset = (page - 1) * limit;
 
             // Buscar el status "Closed Job"
@@ -755,7 +761,8 @@ class JobsController {
                     'id', 'name', 'closing_date', 'sold_price', 
                     'attic_tech_hours', 'cl_estimated_plan_hours',
                     'branch_id', 'crew_leader_id', 'status_id', 'estimate_id',
-                    'overrun_report_id' // Agregado para saber si ya tiene reporte
+                    'overrun_report_id', // Agregado para saber si ya tiene reporte
+                    'operation_post_id' // Agregado para saber si ya tiene operation post
                 ],
                 include: [
                     {
@@ -800,6 +807,12 @@ class JobsController {
                         as: 'overrunReport',
                         attributes: ['id', 'report', 'created_at'],
                         required: false
+                    },
+                    {
+                        model: OperationCommandPost,
+                        as: 'operationPost',
+                        attributes: ['id', 'post', 'created_at'],
+                        required: false
                     }
                 ],
                 order: [['closing_date', 'DESC']],
@@ -807,7 +820,7 @@ class JobsController {
                 offset: parseInt(offset)
             });
 
-            // Calcular performance y filtrar solo overrun jobs
+            // Calcular performance para todos los closed jobs
             const jobsWithPerformance = jobs.map(job => {
                 const performance = calculateJobPerformanceFromObject(job);
                 return {
@@ -847,13 +860,24 @@ class JobsController {
                         id: job.overrunReport.id,
                         report: job.overrunReport.report,
                         created_at: job.overrunReport.created_at
-                    } : null
+                    } : null,
+                    operation_post_id: job.operation_post_id,
+                    operation_post: job.operationPost ? {
+                        id: job.operationPost.id,
+                        post: job.operationPost.post,
+                        created_at: job.operationPost.created_at
+                    } : null,
+                    crew_leader_name: job.crewLeader 
+                        ? (job.crewLeader.last_name && job.crewLeader.last_name.trim() !== '' 
+                            ? `${job.crewLeader.first_name} ${job.crewLeader.last_name}`.trim()
+                            : job.crewLeader.first_name)
+                        : null
                 };
-            }).filter(job => job.total_worked_hours > job.at_estimated_hours); // Solo jobs donde trabajaron más horas de las estimadas
+            }); // Retornar TODOS los closed jobs para que el frontend filtre por overrun o operation command
 
-            logger.info('Overrun jobs retrieved', {
+            logger.info('Job analysis data retrieved', {
                 total: count,
-                overrun_count: jobsWithPerformance.length,
+                jobs_count: jobsWithPerformance.length,
                 page,
                 limit
             });
@@ -862,7 +886,7 @@ class JobsController {
                 success: true,
                 data: jobsWithPerformance,
                 pagination: {
-                    total: jobsWithPerformance.length, // Total de overrun jobs
+                    total: jobsWithPerformance.length,
                     pages: Math.ceil(jobsWithPerformance.length / limit),
                     currentPage: parseInt(page)
                 }

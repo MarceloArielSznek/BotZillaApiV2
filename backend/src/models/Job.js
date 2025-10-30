@@ -119,6 +119,15 @@ Job.init({
     },
     comment: 'Foreign key to overrun_report table (nullable)'
   },
+  operation_post_id: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'operation_command_post',
+      key: 'id'
+    },
+    comment: 'Foreign key to operation_command_post table (nullable)'
+  },
   in_payload: {
     type: DataTypes.BOOLEAN,
     allowNull: false,

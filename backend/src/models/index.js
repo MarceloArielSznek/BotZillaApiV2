@@ -31,6 +31,7 @@ const InspectionReport = require('./InspectionReport');
 const PerformanceSyncJob = require('./PerformanceSyncJob');
 const BuilderTrendShift = require('./BuilderTrendShift');
 const OverrunReport = require('./OverrunReport');
+const OperationCommandPost = require('./OperationCommandPost');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -219,6 +220,10 @@ JobStatus.hasMany(Job, { foreignKey: 'status_id', as: 'jobs' });
 Job.belongsTo(OverrunReport, { foreignKey: 'overrun_report_id', as: 'overrunReport' });
 OverrunReport.hasMany(Job, { foreignKey: 'overrun_report_id', as: 'jobs' });
 
+// Asociación con OperationCommandPost
+Job.belongsTo(OperationCommandPost, { foreignKey: 'operation_post_id', as: 'operationPost' });
+OperationCommandPost.hasMany(Job, { foreignKey: 'operation_post_id', as: 'jobs' });
+
 // Asociaciones para Shift
 Shift.belongsTo(Job, { foreignKey: 'job_id', as: 'job', onDelete: 'CASCADE' });
 Job.hasMany(Shift, { foreignKey: 'job_id', as: 'shifts' });
@@ -355,5 +360,6 @@ module.exports = {
     InspectionReport,
     PerformanceSyncJob,
     BuilderTrendShift,
-    OverrunReport
+    OverrunReport,
+    OperationCommandPost
 }; 

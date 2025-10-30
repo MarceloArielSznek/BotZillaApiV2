@@ -1,23 +1,21 @@
 import React, { useEffect, useState } from 'react';
 import {
-    Dialog, DialogTitle, DialogContent, DialogActions, Button, CircularProgress, Typography, Box, Table, TableBody, TableCell, TableRow, Paper, Chip, Tabs, Tab, TableContainer, TableHead, Divider
+    Dialog, DialogTitle, DialogContent, DialogActions, Button, CircularProgress, Typography, Box, Table, TableBody, TableCell, TableRow, Paper, Chip, Tabs, Tab, TableContainer, TableHead
 } from '@mui/material';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getJobById } from '../../services/jobService';
 import { getJobPerformance, type PerformanceData } from '../../services/jobService';
 import type { JobDetails } from '../../interfaces';
-import { generateOperationPost } from '../../services/systemService';
-import TextField from '@mui/material/TextField';
 import { useNavigate } from 'react-router-dom';
 import estimateService, { type Estimate } from '../../services/estimateService';
 
-interface JobDetailsModalProps {
+interface JobDetailsModalSimpleProps {
     jobId: number | null;
     open: boolean;
     onClose: () => void;
 }
 
-const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose }) => {
+const JobDetailsModalSimple: React.FC<JobDetailsModalSimpleProps> = ({ jobId, open, onClose }) => {
     const navigate = useNavigate();
     const [job, setJob] = useState<JobDetails | null>(null);
     const [performance, setPerformance] = useState<PerformanceData | null>(null);
@@ -25,10 +23,6 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
     const [loading, setLoading] = useState<boolean>(false);
     const [loadingEstimate, setLoadingEstimate] = useState<boolean>(false);
     const [tab, setTab] = useState(0);
-    const [generating, setGenerating] = useState(false);
-    const [generatedPost, setGeneratedPost] = useState<string | null>(null);
-    const [notes, setNotes] = useState<string>('');
-    const MIN_SAVED_PERCENT = 0.15; // client rule; backend también valida
     
     const handleViewEstimate = () => {
         if (job?.estimate_id) {
@@ -56,8 +50,6 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
             setLoading(true);
             // Reset states when opening a new job
             setEstimate(null);
-            setGeneratedPost(null);
-            setNotes('');
             setTab(0);
             
             Promise.all([
@@ -66,11 +58,6 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
             ]).then(([jobDetails, performanceData]) => {
                 setJob(jobDetails);
                 setPerformance(performanceData);
-                
-                // Si el job tiene un operation post guardado, mostrarlo
-                if (jobDetails.operationPost?.post) {
-                    setGeneratedPost(jobDetails.operationPost.post);
-                }
             }).finally(() => {
                 setLoading(false);
             });
@@ -109,7 +96,6 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
                                     <Tab label="Details" />
                                     <Tab label="Estimate" disabled={!job.estimate_id} />
                                     <Tab label="Performance Summary" />
-                                    <Tab label="Operation Command" />
                                 </Tabs>
                             </Box>
 
@@ -326,107 +312,6 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
                                     </Table>
                                 </TableContainer>
                             )}
-
-                            {tab === 3 && (
-                                <Box>
-                                    {!performance ? (
-                                        <CircularProgress />
-                                    ) : (
-                                        <>
-                                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, gap: 2, flexWrap: 'wrap' }}>
-                                                <Typography variant="body2" color="text.secondary">
-                                                    To post: minimum 15% Actual Saved. Current: {(performance.actualSavedPercent * 100).toFixed(2)}%
-                                                </Typography>
-                                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                                                    <Chip label={`Branch: ${job?.branch?.name || 'N/A'}`} size="small" />
-                                                    <Chip label={`Crew Leader: ${job?.crewLeader?.name || 'N/A'}`} size="small" />
-                                                    <Chip label={`Actual: ${(performance.actualSavedPercent * 100).toFixed(2)}%`} color={performance.actualSavedPercent >= MIN_SAVED_PERCENT ? 'success' : 'default'} size="small" />
-                                                </Box>
-                                            </Box>
-                                            <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                                                <TextField
-                                                    label="Special request (optional)"
-                                                    placeholder="e.g., emphasize speed, mention 2 Day Banger"
-                                                    size="small"
-                                                    fullWidth
-                                                    value={notes}
-                                                    onChange={(e) => setNotes(e.target.value)}
-                                                />
-                                                <Button
-                                                    variant="contained"
-                                                    color="secondary"
-                                                    disabled={generating || performance.actualSavedPercent < MIN_SAVED_PERCENT}
-                                                    onClick={async () => {
-                                                        if (!jobId) return;
-                                                        try {
-                                                            setGenerating(true);
-                                                            const resp = await generateOperationPost(jobId, notes);
-                                                            if (!resp.eligible) {
-                                                                setGeneratedPost('This job does not meet the minimum % to post.');
-                                                            } else {
-                                                                setGeneratedPost(resp.post || '');
-                                                            }
-                                                        } catch (e) {
-                                                            setGeneratedPost('The post could not be generated automatically.');
-                                                        } finally {
-                                                            setGenerating(false);
-                                                        }
-                                                    }}
-                                                >
-                                                    {generating ? 'Generating…' : 'Generate Operation Post'}
-                                                </Button>
-                                                <Button
-                                                    variant="outlined"
-                                                    disabled={generating || performance.actualSavedPercent < MIN_SAVED_PERCENT}
-                                                    onClick={async () => {
-                                                        if (!jobId) return;
-                                                        try {
-                                                            setGenerating(true);
-                                                            const resp = await generateOperationPost(jobId, notes);
-                                                            if (!resp.eligible) {
-                                                                setGeneratedPost('This job does not meet the minimum % to post.');
-                                                            } else {
-                                                                setGeneratedPost(resp.post || '');
-                                                            }
-                                                        } catch (e) {
-                                                            setGeneratedPost('The post could not be generated automatically.');
-                                                        } finally {
-                                                            setGenerating(false);
-                                                        }
-                                                    }}
-                                                >
-                                                    Regenerate
-                                                </Button>
-                                                <Button
-                                                    variant="outlined"
-                                                    disabled={!generatedPost}
-                                                    onClick={() => navigator.clipboard.writeText(generatedPost || '')}
-                                                >
-                                                    Copy Post
-                                                </Button>
-                                            </Box>
-                                            {generatedPost && (
-                                                <>
-                                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                                                        <Typography variant="subtitle2">Post preview</Typography>
-                                                        {job?.operationPost && (
-                                                            <Chip 
-                                                                label="Saved Post" 
-                                                                size="small" 
-                                                                color="success" 
-                                                                variant="outlined"
-                                                            />
-                                                        )}
-                                                    </Box>
-                                                    <Paper variant="outlined" sx={{ p: 2, whiteSpace: 'pre-wrap', fontFamily: 'inherit', bgcolor: 'background.default' }}>
-                                                        {generatedPost}
-                                                    </Paper>
-                                                </>
-                                            )}
-                                        </>
-                                    )}
-                                </Box>
-                            )}
                         </>
                     )
                 )}
@@ -438,4 +323,5 @@ const JobDetailsModal: React.FC<JobDetailsModalProps> = ({ jobId, open, onClose 
     );
 };
 
-export default JobDetailsModal; 
+export default JobDetailsModalSimple;
+

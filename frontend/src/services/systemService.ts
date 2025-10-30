@@ -16,8 +16,13 @@ export interface GenerateOperationPostResponse {
   minSavedPercent?: number;
 }
 
-export async function generateOperationPost(jobId: number, notes?: string): Promise<GenerateOperationPostResponse> {
-  const resp = await api.post('/ai/generate-operation-post', { jobId, notes });
+export async function generateOperationPost(
+  jobId: number, 
+  notes?: string,
+  crewLeaderName?: string,
+  animal?: string
+): Promise<GenerateOperationPostResponse> {
+  const resp = await api.post('/ai/generate-operation-post', { jobId, notes, crewLeaderName, animal });
   return resp.data.data;
 }
 

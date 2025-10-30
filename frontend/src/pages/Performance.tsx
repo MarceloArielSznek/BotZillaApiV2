@@ -759,6 +759,15 @@ const Performance: React.FC = () => {
 
       if (response.success) {
         const data = response.data;
+        
+        // Advertencia sobre duplicados si existen
+        if (data.shifts_duplicates_approved && data.shifts_duplicates_approved > 0) {
+          enqueueSnackbar(
+            `⚠️ Warning: ${data.shifts_duplicates_approved} shift(s) were already approved and were not duplicated. These jobs were already processed previously.`,
+            { variant: 'warning', autoHideDuration: 8000 }
+          );
+        }
+        
         enqueueSnackbar(
           `✅ ${data.jobs_created || 0} jobs saved for approval! Go to Performance Approval tab to review.`,
           { variant: 'success' }
@@ -813,10 +822,19 @@ const Performance: React.FC = () => {
 
       if (response.success) {
         const data = response.data;
-        enqueueSnackbar(
-          `✅ Data saved! ${data.jobs_created} jobs created, ${data.jobs_updated} updated, ${data.shifts_created} shifts created.`,
-          { variant: 'success' }
-        );
+        
+        // Mensaje principal de éxito
+        let successMessage = `✅ Data saved! ${data.jobs_created} jobs created, ${data.jobs_updated} updated, ${data.shifts_created} shifts created.`;
+        
+        // Advertencia sobre duplicados si existen
+        if (data.shifts_duplicates_approved && data.shifts_duplicates_approved > 0) {
+          enqueueSnackbar(
+            `⚠️ Warning: ${data.shifts_duplicates_approved} shift(s) were already approved and were not duplicated. These jobs were already processed previously.`,
+            { variant: 'warning', autoHideDuration: 8000 }
+          );
+        }
+        
+        enqueueSnackbar(successMessage, { variant: 'success' });
         
         // Limpiar jobs guardados de la lista
         const savedJobNames = Array.from(selectedJobsForSpreadsheet);

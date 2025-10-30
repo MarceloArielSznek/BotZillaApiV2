@@ -42,13 +42,18 @@ import { getJobStatuses } from '../services/statusService';
 import type { Job, Branch, SalesPerson, CrewMember, JobDetails } from '../interfaces';
 import JobDetailsModal from '../components/jobs/JobDetailsModal';
 import JobFormModal from '../components/jobs/JobFormModal';
+import JobsStatsCards from '../components/jobs/JobsStatsCards';
 
 const Jobs: React.FC = () => {
-    // Estado para las tabs
+    // Estado para las tabs principales
     const [currentTab, setCurrentTab] = useState(0);
+    // Estado para las sub-tabs de Performance
+    const [performanceTab, setPerformanceTab] = useState(0);
     
     const [jobs, setJobs] = useState<Job[]>([]);
+    const [allJobs, setAllJobs] = useState<Job[]>([]); // Todos los jobs para stats
     const [loading, setLoading] = useState<boolean>(true);
+    const [statsLoading, setStatsLoading] = useState<boolean>(true);
     const [formLoading, setFormLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedJobDetails, setSelectedJobDetails] = useState<JobDetails | null>(null);
@@ -96,6 +101,19 @@ const Jobs: React.FC = () => {
         }
     }, [page, rowsPerPage, filters]);
 
+    const fetchAllJobsForStats = useCallback(async () => {
+        try {
+            setStatsLoading(true);
+            // Obtener todos los jobs sin paginación (límite alto)
+            const response = await getJobs({ limit: 10000, page: 1 });
+            setAllJobs(response.data);
+        } catch (err) {
+            console.error('Failed to fetch all jobs for stats:', err);
+        } finally {
+            setStatsLoading(false);
+        }
+    }, []);
+
     useEffect(() => {
         const fetchFilterData = async () => {
             try {
@@ -114,7 +132,9 @@ const Jobs: React.FC = () => {
             }
         };
         fetchFilterData();
-    }, []);
+        // Fetch all jobs for stats on mount
+        fetchAllJobsForStats();
+    }, [fetchAllJobsForStats]);
     
     // Debounce para fetchJobs: esperar 500ms después de cambios en filters.search
     useEffect(() => {
@@ -227,7 +247,7 @@ const Jobs: React.FC = () => {
                 </Typography>
             </Box>
 
-            {/* Tabs */}
+            {/* Tabs principales */}
             <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
                 <Tabs 
                     value={currentTab} 
@@ -236,35 +256,38 @@ const Jobs: React.FC = () => {
                 >
                     <Tab label="Jobs List" />
                     <Tab label="Performance" />
-                    <Tab label="Performance Approval" />
-                    <Tab label="Overrun Jobs" />
+                    <Tab label="Jobs Analysis" />
                 </Tabs>
             </Box>
 
             {/* Tab Content */}
             {currentTab === 0 && (
                 <>
-                    {/* Refresh button para la tab de Jobs */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', mb: 2 }}>
-                        <Tooltip title="Refresh Jobs">
-                            <IconButton onClick={fetchJobs}>
-                                <RefreshIcon />
-                            </IconButton>
-                        </Tooltip>
-                    </Box>
+                    {/* Statistics Cards */}
+                    <JobsStatsCards 
+                        jobs={allJobs} 
+                        totalJobs={allJobs.length} 
+                        loading={statsLoading}
+                    />
 
                     {/* Filter Section */}
                     <Card sx={{ mb: 3 }}>
                         <CardContent>
                              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                 <Typography variant="h6">Filters</Typography>
-                                <Button
-                                size="small"
-                                onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '', inPayload: '' })}
-                                sx={{ ml: 'auto' }}
-                                >
-                                Clear filters
-                                </Button>
+                                <Box sx={{ ml: 'auto', display: 'flex', gap: 1 }}>
+                                    <Button
+                                        size="small"
+                                        onClick={() => setFilters({ search: '', branchId: '', salespersonId: '', crewLeaderId: '', statusId: '', startDate: '', endDate: '', inPayload: '' })}
+                                    >
+                                        Clear filters
+                                    </Button>
+                                    <Tooltip title="Refresh Jobs">
+                                        <IconButton onClick={fetchJobs} size="small">
+                                            <RefreshIcon />
+                                        </IconButton>
+                                    </Tooltip>
+                                </Box>
                             </Box>
                             <Divider sx={{ mb: 2 }} />
                             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'center' }}>
@@ -428,14 +451,26 @@ const Jobs: React.FC = () => {
             )}
 
             {currentTab === 1 && (
-                <Performance />
+                <Box>
+                    {/* Sub-tabs de Performance */}
+                    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+                        <Tabs 
+                            value={performanceTab} 
+                            onChange={(_, newValue) => setPerformanceTab(newValue)}
+                            aria-label="performance tabs"
+                        >
+                            <Tab label="Jobs Sync" />
+                            <Tab label="Shifts Approvals" />
+                        </Tabs>
+                    </Box>
+
+                    {/* Sub-tab Content */}
+                    {performanceTab === 0 && <Performance />}
+                    {performanceTab === 1 && <PerformanceApproval />}
+                </Box>
             )}
 
             {currentTab === 2 && (
-                <PerformanceApproval />
-            )}
-
-            {currentTab === 3 && (
                 <OverrunJobs />
             )}
 

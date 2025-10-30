@@ -116,4 +116,11 @@ export interface JobDetails extends Job {
     crew_leader_hours?: string;
     cl_estimated_plan_hours?: string;
     estimate_id?: number;
+    operation_post_id?: number;
+    operationPost?: {
+        id: number;
+        post: string;
+        created_at: string;
+        updated_at: string;
+    };
 } 

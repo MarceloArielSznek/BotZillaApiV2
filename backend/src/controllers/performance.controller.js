@@ -405,10 +405,38 @@ class PerformanceController {
                 }
 
                 // Extraer más campos del array (basado en posiciones conocidas del spreadsheet)
-                // Posición [2] = Job Name
-                // Posición [3] = Estimator (opcional)
-                // Posición [7] = Crew Leader (CA)
-                // Posición [8] = Crew Leader (WA)
+                // Posición [1] = Job Closing Date (columna B)
+                // Posición [2] = Job Name (columna C)
+                // Posición [3] = Estimator (columna D - opcional)
+                // Posición [7] = Crew Leader (columna H - CA)
+                // Posición [8] = Crew Leader (columna I - WA)
+                
+                // Parsear fecha de cierre de la columna B (índice 1)
+                let finishDate = null;
+                if (rowArray[1]) {
+                    try {
+                        // Intentar parsear la fecha (puede venir en varios formatos)
+                        const dateStr = rowArray[1].toString().trim();
+                        if (dateStr) {
+                            finishDate = new Date(dateStr);
+                            // Validar que sea una fecha válida
+                            if (isNaN(finishDate.getTime())) {
+                                logger.warn('Invalid finish_date format', { 
+                                    job_name: jobName,
+                                    raw_date: dateStr 
+                                });
+                                finishDate = null;
+                            }
+                        }
+                    } catch (error) {
+                        logger.error('Error parsing finish_date', {
+                            job_name: jobName,
+                            raw_date: rowArray[1],
+                            error: error.message
+                        });
+                    }
+                }
+                
                 const jobRecord = {
                     sync_id: syncId,
                     branch_name: branchName,
@@ -417,6 +445,7 @@ class PerformanceController {
                     row_number: index + 1,
                     sheet_name: 'Performance Spreadsheet',
                     job_name: jobName,
+                    finish_date: finishDate, // Fecha de cierre del job (columna B)
                     estimator: rowArray[3] || null,
                     crew_leader: rowArray[crewLeaderIndex] || null,
                     raw_data: rowArray // Guardar el array completo

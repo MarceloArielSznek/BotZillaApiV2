@@ -42,20 +42,31 @@ async function findOrCreateEmployee(fullName, branchId) {
         return null;
     }
     
-    // Limpiar nombre: remover paréntesis y su contenido (ej: "Drew Gipson (D)" → "Drew Gipson")
-    const cleanedName = fullName.trim().replace(/\s*\([^)]*\)/g, '').trim();
+    // Limpiar nombre: 
+    // 1. Remover paréntesis y su contenido (ej: "Drew Gipson (D)" → "Drew Gipson")
+    // 2. Remover comillas dobles y su contenido (ej: 'Malik "Fatu" Richardson' → "Malik Richardson")
+    let cleanedName = fullName.trim();
+    cleanedName = cleanedName.replace(/\s*\([^)]*\)/g, '').trim(); // Remover (texto)
+    cleanedName = cleanedName.replace(/\s*"[^"]*"\s*/g, ' ').trim(); // Remover "texto"
+    cleanedName = cleanedName.replace(/\s+/g, ' '); // Normalizar espacios múltiples
     
     const nameParts = cleanedName.split(/\s+/);
     const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(' ') || firstName;
+    const lastName = nameParts.slice(1).join(' ') || ''; // Si no hay apellido, dejar vacío
     
     // Buscar employee existente por nombre
+    const whereClause = {
+        first_name: { [Op.iLike]: firstName },
+        is_deleted: false
+    };
+    
+    // Solo agregar condición de last_name si existe
+    if (lastName && lastName.trim() !== '') {
+        whereClause.last_name = { [Op.iLike]: lastName };
+    }
+    
     let employee = await Employee.findOne({
-        where: {
-            first_name: { [Op.iLike]: firstName },
-            last_name: { [Op.iLike]: lastName },
-            is_deleted: false
-        }
+        where: whereClause
     });
     
     // Si no existe, crear uno nuevo (pendiente de aprobación)
@@ -437,6 +448,7 @@ async function saveShifts(jobId, shiftsData, autoApprove = false) {
     const results = {
         created: 0,
         skipped: 0,
+        duplicates_approved: 0, // Shifts que ya existen y ya fueron aprobados
         errors: []
     };
     
@@ -459,8 +471,22 @@ async function saveShifts(jobId, shiftsData, autoApprove = false) {
             });
             
             if (existingShift) {
-                // Shift ya existe → actualizar horas (sumar o reemplazar según necesites)
-                logger.info('Shift already exists, updating hours', {
+                // Si el shift ya fue aprobado, NO permitir duplicación
+                if (existingShift.approved_shift === true) {
+                    logger.warn('Shift already approved, skipping to prevent duplication', {
+                        job_id: jobId,
+                        employee_id,
+                        existing_hours: existingShift.hours,
+                        attempted_hours: hours,
+                        approved_shift: existingShift.approved_shift
+                    });
+                    
+                    results.duplicates_approved++;
+                    continue; // NO crear ni actualizar
+                }
+                
+                // Si existe pero NO está aprobado, actualizar las horas
+                logger.info('Shift exists but not approved yet, updating hours', {
                     job_id: jobId,
                     employee_id,
                     old_hours: existingShift.hours,
@@ -468,7 +494,7 @@ async function saveShifts(jobId, shiftsData, autoApprove = false) {
                 });
                 
                 await existingShift.update({
-                    hours: parseFloat(existingShift.hours) + parseFloat(hours) // Sumar horas
+                    hours: parseFloat(hours) // Reemplazar (no sumar) las horas
                 });
                 
                 results.skipped++;
@@ -645,6 +671,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
             jobs_updated: 0,
             shifts_created: 0,
             shifts_skipped: 0,
+            shifts_duplicates_approved: 0, // Shifts que ya fueron aprobados (prevención de duplicación)
             errors: []
         };
         
@@ -668,14 +695,22 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 }
                 
                 // Guardar o actualizar job
+                const closingDate = syncJob.finish_date || new Date();
                 const jobData = {
                     job_name: jobName,
-                    closing_date: new Date(), // Usar fecha actual o parsear del spreadsheet
+                    closing_date: closingDate, // Usar finish_date del spreadsheet (columna B), o fecha actual si no existe
                     sold_price: soldPrice,
                     crew_leader_id: crewLeaderId,
                     branch_id: branchId,
                     attic_tech_hours: syncJob.at_estimated_hours
                 };
+                
+                logger.info('Job closing date determined', {
+                    job_name: jobName,
+                    finish_date_from_spreadsheet: syncJob.finish_date,
+                    closing_date_to_save: closingDate,
+                    using_spreadsheet_date: !!syncJob.finish_date
+                });
                 
                 const savedJob = await saveOrUpdateJob(jobData, autoApprove);
                 
@@ -760,6 +795,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 const shiftResults = await saveShifts(savedJob.id, shiftsToSave, autoApprove);
                 results.shifts_created += shiftResults.created;
                 results.shifts_skipped += shiftResults.skipped;
+                results.shifts_duplicates_approved += (shiftResults.duplicates_approved || 0);
                 results.errors.push(...shiftResults.errors);
                 
                 // Si hay shifts QC, crear Special Shift QC
