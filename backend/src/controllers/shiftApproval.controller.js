@@ -1,4 +1,4 @@
-const { Shift, Job, CrewMember, Branch, Estimate, JobSpecialShift, SpecialShift } = require('../models');
+const { Shift, Job, CrewMember, Branch, Estimate, JobSpecialShift, SpecialShift, JobStatus } = require('../models');
 const { Op } = require('sequelize');
 const { logger } = require('../utils/logger');
 
@@ -226,19 +226,87 @@ const approveShifts = async (req, res) => {
 
         const totalUpdated = regularUpdatedCount + specialUpdatedCount;
 
+        // Obtener todos los job_ids únicos afectados
+        const affectedJobIds = new Set();
+        if (shifts && shifts.length > 0) {
+            shifts.forEach(shift => affectedJobIds.add(shift.job_id));
+        }
+        if (specialShifts && specialShifts.length > 0) {
+            specialShifts.forEach(shift => affectedJobIds.add(shift.job_id));
+        }
+
+        // Para cada job, verificar si TODOS los shifts están aprobados y actualizar el estado
+        let jobsUpdatedToClosedCount = 0;
+        for (const jobId of affectedJobIds) {
+            try {
+                // Contar shifts regulares pendientes
+                const pendingRegularShifts = await Shift.count({
+                    where: {
+                        job_id: jobId,
+                        approved_shift: false
+                    }
+                });
+
+                // Contar special shifts pendientes
+                const pendingSpecialShifts = await JobSpecialShift.count({
+                    where: {
+                        job_id: jobId,
+                        approved_shift: false
+                    }
+                });
+
+                // Si NO hay shifts pendientes, actualizar el job a "Closed Job"
+                if (pendingRegularShifts === 0 && pendingSpecialShifts === 0) {
+                    // Obtener el ID del estado "Closed Job"
+                    const closedJobStatus = await JobStatus.findOne({
+                        where: { name: 'Closed Job' }
+                    });
+
+                    if (closedJobStatus) {
+                        const job = await Job.findByPk(jobId);
+                        
+                        // Solo actualizar si el job no está ya en "Closed Job"
+                        if (job && job.status_id !== closedJobStatus.id) {
+                            await job.update({ 
+                                status_id: closedJobStatus.id,
+                                closing_date: job.closing_date || new Date() // Mantener closing_date existente o asignar ahora
+                            });
+                            
+                            jobsUpdatedToClosedCount++;
+                            
+                            logger.info(`Job status updated to "Closed Job" after all shifts approved`, {
+                                job_id: jobId,
+                                job_name: job.name,
+                                previous_status_id: job.status_id,
+                                new_status_id: closedJobStatus.id
+                            });
+                        }
+                    }
+                }
+            } catch (error) {
+                logger.error(`Error updating job status for job_id ${jobId}:`, {
+                    error: error.message,
+                    job_id: jobId
+                });
+                // No lanzar error, continuar con otros jobs
+            }
+        }
+
         logger.info(`Approved ${totalUpdated} shifts (${regularUpdatedCount} regular, ${specialUpdatedCount} special)`, {
             shifts: shifts || [],
             specialShifts: specialShifts || [],
             regularUpdatedCount,
-            specialUpdatedCount
+            specialUpdatedCount,
+            jobsUpdatedToClosedCount
         });
 
         res.json({
             success: true,
-            message: `${totalUpdated} shifts approved successfully (${regularUpdatedCount} regular, ${specialUpdatedCount} special)`,
+            message: `${totalUpdated} shifts approved successfully (${regularUpdatedCount} regular, ${specialUpdatedCount} special). ${jobsUpdatedToClosedCount} job(s) updated to "Closed Job" status.`,
             approvedCount: totalUpdated,
             regularApprovedCount: regularUpdatedCount,
-            specialApprovedCount: specialUpdatedCount
+            specialApprovedCount: specialUpdatedCount,
+            jobsUpdatedToClosedCount
         });
 
     } catch (error) {

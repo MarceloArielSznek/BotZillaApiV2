@@ -296,27 +296,40 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
                     estimate_name: estimate.name,
                     sales_person_id: estimate.sales_person_id
                 });
-                
-                // Buscar status "Closed Job" para jobs de Performance
-                const status = await JobStatus.findOne({
-                    where: { 
-                        name: {
-                            [Op.iLike]: 'Closed Job'
-                        }
-                    }
-                });
-                
-                if (status) {
-                    statusId = status.id;
-                    logger.info('Status "Closed Job" assigned to Performance job', {
-                        status_id: statusId,
-                        job_name
-                    });
-                }
             } else {
                 logger.warn('Estimate not found in our DB (even with fuzzy matching)', { 
                     job_name,
                     branch_id
+                });
+            }
+            
+            // Determinar el estado del job basado en la información disponible
+            // Si el job viene de Performance con shifts, debería tener un estado apropiado
+            let statusName = 'In Progress'; // Estado por defecto
+            
+            // Si no tiene crew_leader_id, necesita un crew leader
+            if (!crew_leader_id) {
+                statusName = 'Requires Crew Lead';
+            }
+            
+            const status = await JobStatus.findOne({
+                where: { 
+                    name: {
+                        [Op.iLike]: statusName
+                    }
+                }
+            });
+            
+            if (status) {
+                statusId = status.id;
+                logger.info(`Status "${statusName}" assigned to Performance job`, {
+                    status_id: statusId,
+                    job_name,
+                    has_crew_leader: !!crew_leader_id
+                });
+            } else {
+                logger.error(`Status "${statusName}" not found in database`, {
+                    job_name
                 });
             }
         } catch (error) {
