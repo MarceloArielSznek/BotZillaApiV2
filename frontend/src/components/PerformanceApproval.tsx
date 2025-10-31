@@ -560,6 +560,7 @@ const PerformanceApproval: React.FC = () => {
                 <TableCell>Branch</TableCell>
                 <TableCell>Crew Leader</TableCell>
                 <TableCell>Status</TableCell>
+                <TableCell>Closing Date</TableCell>
                 <TableCell>Shifts</TableCell>
                 <TableCell>Total Hours</TableCell>
                 <TableCell>Crew Size</TableCell>
@@ -600,6 +601,19 @@ const PerformanceApproval: React.FC = () => {
                         )}
                       </TableCell>
                       <TableCell>
+                        {job.closing_date ? (
+                          <Typography variant="body2">
+                            {new Date(job.closing_date).toLocaleDateString('en-US', {
+                              month: '2-digit',
+                              day: '2-digit',
+                              year: 'numeric'
+                            })}
+                          </Typography>
+                        ) : (
+                          <Typography variant="body2" color="text.secondary">-</Typography>
+                        )}
+                      </TableCell>
+                      <TableCell>
                         <Chip label={job.shifts_count} size="small" color="info" />
                       </TableCell>
                       <TableCell>
@@ -620,10 +634,15 @@ const PerformanceApproval: React.FC = () => {
 
                     {/* Shifts expandibles */}
                     <TableRow>
-                      <TableCell colSpan={9} sx={{ p: 0 }}>
+                      <TableCell colSpan={10} sx={{ p: 0, border: 0 }}>
                         <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                          <Box sx={{ p: 2, bgcolor: 'background.default' }}>
-                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
+                          <Box sx={{ 
+                            bgcolor: 'background.default',
+                            borderTop: 1,
+                            borderBottom: 1,
+                            borderColor: 'divider'
+                          }}>
+                            <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2, px: 2, pt: 2 }}>
                               <Typography variant="h6">
                                 Shifts for {job.name}
                               </Typography>
@@ -648,8 +667,8 @@ const PerformanceApproval: React.FC = () => {
                               </Stack>
                             </Stack>
 
-                            <TableContainer component={Paper} variant="outlined">
-                              <Table size="small">
+                            <TableContainer>
+                              <Table size="small" sx={{ width: '100%' }}>
                                 <TableHead>
                                   <TableRow>
                                     <TableCell padding="checkbox">Reject</TableCell>
@@ -764,7 +783,7 @@ const PerformanceApproval: React.FC = () => {
                               </Table>
                             </TableContainer>
 
-                            <Box sx={{ mt: 2, display: 'flex', justifyContent: 'space-between' }}>
+                            <Box sx={{ mt: 2, px: 2, pb: 2, display: 'flex', justifyContent: 'space-between' }}>
                               <Typography variant="body2" color="text.secondary">
                                 Estimator: {job.estimator || 'N/A'}
                               </Typography>

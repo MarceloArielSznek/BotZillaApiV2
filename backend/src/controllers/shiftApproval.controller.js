@@ -269,16 +269,18 @@ const approveShifts = async (req, res) => {
                         if (job && job.status_id !== closedJobStatus.id) {
                             await job.update({ 
                                 status_id: closedJobStatus.id,
-                                closing_date: job.closing_date || new Date() // Mantener closing_date existente o asignar ahora
+                                closing_date: job.closing_date || new Date(), // Mantener closing_date existente o asignar ahora
+                                in_payload: true // Marcar como "In Payload" automáticamente
                             });
                             
                             jobsUpdatedToClosedCount++;
                             
-                            logger.info(`Job status updated to "Closed Job" after all shifts approved`, {
+                            logger.info(`Job status updated to "Closed Job" and marked as "In Payload" after all shifts approved`, {
                                 job_id: jobId,
                                 job_name: job.name,
                                 previous_status_id: job.status_id,
-                                new_status_id: closedJobStatus.id
+                                new_status_id: closedJobStatus.id,
+                                in_payload: true
                             });
                         }
                     }
