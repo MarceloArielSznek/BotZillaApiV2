@@ -465,19 +465,28 @@ async function saveJobsToDb(jobsFromAT) {
             const estimate = await findEstimateInOurDb(atJob.job_estimate?.id);
 
             // Determinar el status_id a usar
-            // Si el job ya existe y está en "Closed Job", NO sobrescribir el status
-            // porque significa que todos los shifts ya fueron aprobados
+            // Si el job ya existe y está en "Closed Job" o "pending_approval", NO sobrescribir el status
+            // porque significa que todos los shifts ya fueron aprobados o están esperando aprobación
             let statusIdToUse = status?.id || null;
+            let shouldPreserveStatus = false;
             
             if (existingJob) {
                 const closedJobStatus = await JobStatus.findOne({
                     where: { name: 'Closed Job' }
                 });
                 
-                // Si el job está en "Closed Job", preservar ese estado
+                // 1. Si el job está en "Closed Job", preservar ese estado
                 if (closedJobStatus && existingJob.status_id === closedJobStatus.id) {
                     statusIdToUse = existingJob.status_id; // Mantener "Closed Job"
+                    shouldPreserveStatus = true;
                     logger.info(`🔒 Job "${atJob.name}" está en "Closed Job" (shifts aprobados). Status preservado, NO sobrescrito por sync.`);
+                }
+                
+                // 2. Si el job está en "pending_approval", preservar el status y performance_status
+                if (existingJob.performance_status === 'pending_approval') {
+                    statusIdToUse = existingJob.status_id; // Mantener status actual
+                    shouldPreserveStatus = true;
+                    logger.info(`🔒 Job "${atJob.name}" está en "pending_approval" (esperando aprobación de shifts). Status y performance_status preservados, NO sobrescritos por sync.`);
                 }
             }
 
@@ -491,6 +500,11 @@ async function saveJobsToDb(jobsFromAT) {
                 branch_id: branch?.id || null,
                 last_synced_at: new Date()
             };
+            
+            // Si el job está protegido (pending_approval o Closed Job), preservar performance_status
+            if (shouldPreserveStatus && existingJob) {
+                jobData.performance_status = existingJob.performance_status;
+            }
 
             if (estimate) {
                 logger.info(`📋 Estimate encontrado: ID ${estimate.id} (AT ID: ${atJob.job_estimate?.id})`);
