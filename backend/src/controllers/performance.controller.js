@@ -1901,20 +1901,83 @@ class PerformanceController {
                 
                 await transaction.commit();
                 
+                // =====================================================
+                // DESPUÉS DEL COMMIT: Verificar si cada job debe actualizarse a "Closed Job"
+                // =====================================================
+                let jobsUpdatedToClosedCount = 0;
+                const JobStatus = require('../models/JobStatus');
+                
+                for (const jobId of job_ids) {
+                    try {
+                        // Contar shifts regulares pendientes
+                        const pendingRegularShifts = await Shift.count({
+                            where: {
+                                job_id: jobId,
+                                approved_shift: false
+                            }
+                        });
+
+                        // Contar special shifts pendientes
+                        const pendingSpecialShifts = await JobSpecialShift.count({
+                            where: {
+                                job_id: jobId,
+                                approved_shift: false
+                            }
+                        });
+
+                        // Si NO hay shifts pendientes, actualizar el job a "Closed Job"
+                        if (pendingRegularShifts === 0 && pendingSpecialShifts === 0) {
+                            // Obtener el ID del estado "Closed Job"
+                            const closedJobStatus = await JobStatus.findOne({
+                                where: { name: 'Closed Job' }
+                            });
+
+                            if (closedJobStatus) {
+                                const job = await Job.findByPk(jobId);
+                                
+                                // Solo actualizar si el job no está ya en "Closed Job"
+                                if (job && job.status_id !== closedJobStatus.id) {
+                                    await job.update({ 
+                                        status_id: closedJobStatus.id,
+                                        closing_date: job.closing_date || new Date() // Mantener closing_date existente o asignar ahora
+                                    });
+                                    
+                                    jobsUpdatedToClosedCount++;
+                                    
+                                    logger.info(`✅ Job status updated to "Closed Job" after all shifts approved`, {
+                                        job_id: jobId,
+                                        job_name: job.name,
+                                        previous_status_id: job.status_id,
+                                        new_status_id: closedJobStatus.id
+                                    });
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        logger.error(`❌ Error updating job status for job_id ${jobId}:`, {
+                            error: error.message,
+                            job_id: jobId
+                        });
+                        // No lanzar error, continuar con otros jobs
+                    }
+                }
+                
                 logger.info('Jobs, shifts and special shifts approved', {
                     job_ids,
                     jobs_updated: jobsUpdated,
                     shifts_updated: shiftsUpdated,
-                    special_shifts_updated: specialShiftsUpdated
+                    special_shifts_updated: specialShiftsUpdated,
+                    jobs_updated_to_closed: jobsUpdatedToClosedCount
                 });
                 
                 return res.status(200).json({
                     success: true,
-                    message: 'Jobs, shifts and special shifts approved successfully',
+                    message: `Jobs, shifts and special shifts approved successfully. ${jobsUpdatedToClosedCount} job(s) updated to "Closed Job" status.`,
                     data: {
                         jobs_updated: jobsUpdated,
                         shifts_updated: shiftsUpdated,
-                        special_shifts_updated: specialShiftsUpdated
+                        special_shifts_updated: specialShiftsUpdated,
+                        jobs_updated_to_closed: jobsUpdatedToClosedCount
                     }
                 });
                 

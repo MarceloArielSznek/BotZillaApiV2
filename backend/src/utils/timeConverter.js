@@ -111,6 +111,21 @@ function hasQCTag(tagsStr) {
 }
 
 /**
+ * Detecta si un shift tiene tag de "Delivery Drop"
+ * @param {string} tagsStr - String con los tags separados por comas o espacios
+ * @returns {boolean} - true si contiene "Delivery Drop"
+ */
+function hasDeliveryDropTag(tagsStr) {
+    if (!tagsStr || tagsStr.trim() === '') {
+        return false;
+    }
+    
+    // Buscar "Delivery Drop" (case insensitive)
+    const deliveryDropPattern = /Delivery\s+Drop/i;
+    return deliveryDropPattern.test(tagsStr);
+}
+
+/**
  * Agrega shifts por crew member y job
  * @param {Array} shifts - Array de shifts procesados
  * @returns {Array} - Array de shifts agregados por crew_member_name y job_name_raw
@@ -178,6 +193,7 @@ module.exports = {
     convertOvertimeX2,
     calculateShiftTotals,
     hasQCTag,
+    hasDeliveryDropTag,
     aggregateShiftsByCrewAndJob
 };
 

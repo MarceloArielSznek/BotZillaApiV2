@@ -47,19 +47,18 @@ import branchService from '../services/branchService';
 import employeeService from '../services/employeeService';
 
 interface Shift {
-  crew_member_id: number;
-  employee_id: number;
-  employee_name: string;
+  type?: 'regular' | 'special';
+  crew_member_id?: number;
+  employee_id?: number;
+  employee_name?: string;
+  special_shift_id?: number;
+  special_shift_name?: string;
   hours: number;
   performance_status: string;
+  approved?: boolean;
 }
 
-interface SpecialShift {
-  special_shift_id: number;
-  shift_type: string;
-  hours: number;
-  approved_shift: boolean;
-}
+// Special shifts ahora están incluidos en el array 'shifts' con type: 'special'
 
 interface PendingJob {
   id: number;
@@ -82,8 +81,7 @@ interface PendingJob {
   shifts_count: number;
   total_hours: number;
   crew_count: number;
-  shifts: Shift[];
-  specialShifts?: SpecialShift[]; // QC shifts
+  shifts: Shift[]; // Incluye regular shifts y special shifts (QC, Job Delivery)
 }
 
 interface Branch {
@@ -201,40 +199,9 @@ const PerformanceApproval: React.FC = () => {
       const response = await performanceService.getPendingApproval(branchId);
       console.log('Pending approval response:', response);
       if (response && response.data && response.data.jobs) {
-        // Separar regular shifts y special shifts
-        const processedJobs = response.data.jobs.map((job: any) => {
-          const regularShifts: Shift[] = [];
-          const specialShifts: SpecialShift[] = [];
-          
-          if (job.shifts && Array.isArray(job.shifts)) {
-            job.shifts.forEach((shift: any) => {
-              if (shift.type === 'regular') {
-                regularShifts.push({
-                  crew_member_id: shift.crew_member_id,
-                  employee_id: shift.employee_id,
-                  employee_name: shift.employee_name,
-                  hours: shift.hours,
-                  performance_status: shift.performance_status
-                });
-              } else if (shift.type === 'special') {
-                specialShifts.push({
-                  special_shift_id: shift.special_shift_id,
-                  shift_type: shift.special_shift_name || 'QC',
-                  hours: shift.hours,
-                  approved_shift: shift.approved || false
-                });
-              }
-            });
-          }
-          
-          return {
-            ...job,
-            shifts: regularShifts,
-            specialShifts: specialShifts
-          };
-        });
-        
-        setPendingJobs(processedJobs);
+        // Mantener todos los shifts juntos (regulares y especiales) como vienen del backend
+        // El backend ya los formatea correctamente con el campo 'type'
+        setPendingJobs(response.data.jobs);
       } else if (response && response.jobs) {
         // Fallback por si el formato cambia
         setPendingJobs(response.jobs);
@@ -410,21 +377,22 @@ const PerformanceApproval: React.FC = () => {
 
     const updatedJobs = pendingJobs.map(job => {
       if (job.id === selectedJobForNewQC) {
-        const newQCShift: SpecialShift = {
+        const newQCShift: Shift = {
+          type: 'special',
           special_shift_id: 1, // QC shift ID (assumed to be 1, verify in DB)
-          shift_type: 'QC',
+          special_shift_name: 'QC',
           hours: newQCShiftData.hours,
-          approved_shift: false
+          performance_status: 'pending_approval',
+          approved: false
         };
         
-        const updatedSpecialShifts = [...(job.specialShifts || []), newQCShift];
-        const qcTotalHours = updatedSpecialShifts.reduce((sum, s) => sum + s.hours, 0);
-        const regularTotalHours = job.shifts.reduce((sum, s) => sum + s.hours, 0);
+        const updatedShifts = [...job.shifts, newQCShift];
+        const totalHours = updatedShifts.reduce((sum, s) => sum + s.hours, 0);
         
         return {
           ...job,
-          specialShifts: updatedSpecialShifts,
-          total_hours: regularTotalHours + qcTotalHours
+          shifts: updatedShifts,
+          total_hours: totalHours
         };
       }
       return job;
@@ -696,16 +664,34 @@ const PerformanceApproval: React.FC = () => {
                                     const isEditing = editingShift?.jobId === job.id && editingShift?.shiftIndex === shiftIndex;
                                     const shiftKey = `${job.id}-${shift.crew_member_id}`;
                                     const isShiftSelected = selectedShiftsToReject.has(shiftKey);
+                                    
+                                    // Detectar si es un special shift
+                                    const isSpecialShift = shift.type === 'special';
+                                    const displayName = isSpecialShift ? shift.special_shift_name : shift.employee_name;
 
                                     return (
                                       <TableRow key={shiftIndex} hover>
                                         <TableCell padding="checkbox">
-                                          <Checkbox
-                                            checked={isShiftSelected}
-                                            onChange={() => handleToggleShiftSelection(job.id, shift.crew_member_id)}
-                                          />
+                                          {!isSpecialShift && (
+                                            <Checkbox
+                                              checked={isShiftSelected}
+                                              onChange={() => handleToggleShiftSelection(job.id, shift.crew_member_id)}
+                                            />
+                                          )}
                                         </TableCell>
-                                        <TableCell>{shift.employee_name}</TableCell>
+                                        <TableCell>
+                                          <Stack direction="row" spacing={1} alignItems="center">
+                                            <Typography variant="body2">{displayName}</Typography>
+                                            {isSpecialShift && (
+                                              <Chip 
+                                                label="Special Shift" 
+                                                size="small" 
+                                                color="warning" 
+                                                sx={{ fontSize: '0.65rem' }} 
+                                              />
+                                            )}
+                                          </Stack>
+                                        </TableCell>
                                         <TableCell>
                                           {isEditing ? (
                                             <TextField
@@ -733,7 +719,11 @@ const PerformanceApproval: React.FC = () => {
                                           })()}
                                         </TableCell>
                                         <TableCell align="right">
-                                          {isEditing ? (
+                                          {isSpecialShift ? (
+                                            <Typography variant="caption" color="text.secondary">
+                                              Special shifts cannot be edited
+                                            </Typography>
+                                          ) : isEditing ? (
                                             <Stack direction="row" spacing={1} justifyContent="flex-end">
                                               <IconButton
                                                 size="small"
@@ -782,46 +772,6 @@ const PerformanceApproval: React.FC = () => {
                                 Total Hours: {job.total_hours.toFixed(2)}
                               </Typography>
                             </Box>
-
-                            {/* Special Shifts (QC) Section */}
-                            {job.specialShifts && job.specialShifts.length > 0 && (
-                              <Box sx={{ mt: 3 }}>
-                                <Typography variant="h6" sx={{ mb: 1 }}>
-                                  Special Shifts (QC)
-                                </Typography>
-                                <TableContainer component={Paper} variant="outlined">
-                                  <Table size="small">
-                                    <TableHead>
-                                      <TableRow>
-                                        <TableCell>Type</TableCell>
-                                        <TableCell>Hours</TableCell>
-                                        <TableCell>Status</TableCell>
-                                      </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                      {job.specialShifts.map((qcShift, index) => (
-                                        <TableRow key={index}>
-                                          <TableCell>
-                                            <Chip label={qcShift.shift_type} size="small" color="warning" />
-                                          </TableCell>
-                                          <TableCell>{qcShift.hours.toFixed(2)}</TableCell>
-                                          <TableCell>
-                                            {qcShift.approved_shift ? (
-                                              <Chip label="Approved" size="small" color="success" />
-                                            ) : (
-                                              <Chip label="Pending" size="small" color="warning" />
-                                            )}
-                                          </TableCell>
-                                        </TableRow>
-                                      ))}
-                                    </TableBody>
-                                  </Table>
-                                </TableContainer>
-                                <Typography variant="body2" sx={{ mt: 1, fontWeight: 'bold', color: 'warning.main' }}>
-                                  Total QC Hours: {job.specialShifts.reduce((sum, s) => sum + s.hours, 0).toFixed(2)}
-                                </Typography>
-                              </Box>
-                            )}
                           </Box>
                         </Collapse>
                       </TableCell>

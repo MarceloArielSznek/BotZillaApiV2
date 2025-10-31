@@ -385,52 +385,86 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
  * @returns {Promise<void>}
  */
 async function saveQCSpecialShift(jobId, hours, autoApprove = false) {
+    return saveSpecialShift(jobId, 'QC', hours, autoApprove);
+}
+
+/**
+ * Guarda un Special Shift "Job Delivery" para un job
+ * @param {number} jobId - ID del job
+ * @param {number} hours - Horas totales de Job Delivery (default 3)
+ * @param {boolean} autoApprove - Si debe auto-aprobar o requerir aprobación
+ * @returns {Promise<void>}
+ */
+async function saveDeliveryDropSpecialShift(jobId, hours, autoApprove = false) {
+    return saveSpecialShift(jobId, 'Job Delivery', hours, autoApprove);
+}
+
+/**
+ * Función genérica para guardar Special Shifts
+ * @param {number} jobId - ID del job
+ * @param {string} specialShiftName - Nombre del special shift ('QC', 'Delivery Drop', etc.)
+ * @param {number} hours - Horas totales
+ * @param {boolean} autoApprove - Si debe auto-aprobar o requerir aprobación
+ * @returns {Promise<void>}
+ */
+async function saveSpecialShift(jobId, specialShiftName, hours, autoApprove = false) {
     const JobSpecialShift = require('../models/JobSpecialShift');
     const SpecialShift = require('../models/SpecialShift');
     
     try {
-        logger.info('🔍 SEARCHING FOR QC SPECIAL SHIFT IN DB', { jobId, hours, autoApprove });
+        logger.info(`🔍 SEARCHING FOR ${specialShiftName.toUpperCase()} SPECIAL SHIFT IN DB`, { jobId, hours, autoApprove });
         
-        // Buscar el Special Shift "QC" (ID: 4)
-        const qcSpecialShift = await SpecialShift.findOne({
-            where: { name: 'QC' }
+        // Buscar el Special Shift por nombre
+        const specialShift = await SpecialShift.findOne({
+            where: { name: specialShiftName }
         });
         
-        if (!qcSpecialShift) {
-            logger.error('❌ QC SPECIAL SHIFT NOT FOUND IN DB');
+        if (!specialShift) {
+            logger.error(`❌ ${specialShiftName.toUpperCase()} SPECIAL SHIFT NOT FOUND IN DB`);
             return;
         }
         
-        logger.info('✅ QC SPECIAL SHIFT FOUND', {
-            id: qcSpecialShift.id,
-            name: qcSpecialShift.name
+        logger.info(`✅ ${specialShiftName.toUpperCase()} SPECIAL SHIFT FOUND`, {
+            id: specialShift.id,
+            name: specialShift.name
         });
         
-        // Verificar si ya existe un registro QC para este job
+        // Verificar si ya existe un registro para este job
         const existing = await JobSpecialShift.findOne({
             where: {
                 job_id: jobId,
-                special_shift_id: qcSpecialShift.id
+                special_shift_id: specialShift.id
             }
         });
         
         if (existing) {
-            // Actualizar horas (sumar si ya existía)
-            const newHours = parseFloat(existing.hours) + hours;
-            await existing.update({
-                hours: newHours
-            });
-            logger.info('🔄 QC SPECIAL SHIFT UPDATED (ADDED HOURS)', {
+            // Si el special shift ya fue aprobado, NO permitir duplicación
+            if (existing.approved_shift === true) {
+                logger.warn(`⚠️ ${specialShiftName.toUpperCase()} SPECIAL SHIFT ALREADY APPROVED - SKIPPING TO PREVENT DUPLICATION`, {
+                    job_id: jobId,
+                    special_shift_id: specialShift.id,
+                    existing_hours: existing.hours,
+                    attempted_hours: hours,
+                    approved_shift: existing.approved_shift
+                });
+                return; // NO actualizar ni crear
+            }
+            
+            // Si existe pero NO está aprobado, reemplazar las horas (no sumar)
+            logger.info(`🔄 ${specialShiftName.toUpperCase()} SPECIAL SHIFT EXISTS BUT NOT APPROVED - REPLACING HOURS`, {
                 job_id: jobId,
                 old_hours: existing.hours,
-                added_hours: hours,
-                new_hours: newHours
+                new_hours: hours
+            });
+            
+            await existing.update({
+                hours: hours // Reemplazar, no sumar
             });
         } else {
             // Crear nuevo registro
-            logger.info('📝 CREATING NEW JOB_SPECIAL_SHIFT RECORD', {
+            logger.info(`📝 CREATING NEW ${specialShiftName.toUpperCase()} JOB_SPECIAL_SHIFT RECORD`, {
                 job_id: jobId,
-                special_shift_id: qcSpecialShift.id,
+                special_shift_id: specialShift.id,
                 date: new Date().toISOString(),
                 hours: hours,
                 approved_shift: autoApprove
@@ -438,13 +472,13 @@ async function saveQCSpecialShift(jobId, hours, autoApprove = false) {
             
             const created = await JobSpecialShift.create({
                 job_id: jobId,
-                special_shift_id: qcSpecialShift.id,
+                special_shift_id: specialShift.id,
                 date: new Date(), // Fecha actual para el special shift
                 hours: hours,
-                approved_shift: autoApprove // Corrected field name
+                approved_shift: autoApprove
             });
             
-            logger.info('✅ JOB_SPECIAL_SHIFT RECORD CREATED', {
+            logger.info(`✅ ${specialShiftName.toUpperCase()} JOB_SPECIAL_SHIFT RECORD CREATED`, {
                 job_id: created.job_id,
                 special_shift_id: created.special_shift_id,
                 date: created.date,
@@ -453,7 +487,7 @@ async function saveQCSpecialShift(jobId, hours, autoApprove = false) {
             });
         }
     } catch (error) {
-        logger.error('Error saving QC Special Shift', {
+        logger.error(`Error saving ${specialShiftName} Special Shift`, {
             job_id: jobId,
             hours: hours,
             error: error.message
@@ -748,6 +782,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 // Procesar shifts de este job
                 const shiftsToSave = [];
                 let qcShiftsCount = 0;
+                let deliveryDropShiftsCount = 0;
                 
                 // Log todos los shifts para debugging
                 logger.info('🔍 PROCESSING SHIFTS FOR JOB', {
@@ -757,7 +792,8 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                         crew: s.crew_member_name,
                         hours: s.total_hours,
                         tags: s.tags,
-                        is_qc: s.is_qc
+                        is_qc: s.is_qc,
+                        is_delivery_drop: s.is_delivery_drop
                     }))
                 });
                 
@@ -768,6 +804,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                         : shift.total_hours;
                     
                     const isQC = modifiedShifts ? (shift.has_qc || shift.tags?.toUpperCase().includes('QC')) : shift.is_qc;
+                    const isDeliveryDrop = modifiedShifts ? shift.tags?.match(/Delivery\s+Drop/i) : shift.is_delivery_drop;
                     
                     // Debug: Log cada shift para ver qué contiene
                     logger.info('🔍 PROCESSING INDIVIDUAL SHIFT', {
@@ -776,6 +813,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                         total_hours: totalHours,
                         tags: shift.tags,
                         is_qc: isQC,
+                        is_delivery_drop: isDeliveryDrop,
                         from_frontend: !!modifiedShifts
                     });
                     
@@ -792,20 +830,30 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                     }
                     
                     // Si el shift tiene tag QC, contarlo pero no crear shift regular
+                    // SIEMPRE usa 3 horas por crew member, sin importar las horas trabajadas
                     if (isQC) {
-                        // Si viene de frontend, usar las horas especificadas; si no, usar default de 3
-                        const qcHours = modifiedShifts ? totalHours : 3;
-                        qcShiftsCount += qcHours;
-                        logger.info('✅ QC SHIFT DETECTED - WILL CREATE SPECIAL SHIFT', {
+                        qcShiftsCount++; // Solo contar crew members, no acumular horas
+                        logger.info('✅ QC SHIFT DETECTED - WILL CREATE SPECIAL SHIFT (3 hours per person)', {
                             job_name: jobName,
                             crew_member: shift.crew_member_name,
-                            hours: qcHours,
                             tags: shift.tags
                         });
                         continue; // Skip regular shift creation
                     }
                     
-                    // Buscar o crear employee para cada crew member (solo shifts NO-QC)
+                    // Si el shift tiene tag Delivery Drop, contarlo pero no crear shift regular
+                    // SIEMPRE usa 3 horas por crew member, sin importar las horas trabajadas
+                    if (isDeliveryDrop) {
+                        deliveryDropShiftsCount++; // Solo contar crew members, no acumular horas
+                        logger.info('✅ DELIVERY DROP SHIFT DETECTED - WILL CREATE SPECIAL SHIFT (3 hours per person)', {
+                            job_name: jobName,
+                            crew_member: shift.crew_member_name,
+                            tags: shift.tags
+                        });
+                        continue; // Skip regular shift creation
+                    }
+                    
+                    // Buscar o crear employee para cada crew member (solo shifts regulares)
                     const employee = await findOrCreateEmployee(shift.crew_member_name, branchId);
                     
                     if (employee) {
@@ -823,13 +871,13 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 results.shifts_duplicates_approved += (shiftResults.duplicates_approved || 0);
                 results.errors.push(...shiftResults.errors);
                 
-                // Si hay shifts QC, crear Special Shift QC
+                // Si hay shifts QC, crear Special Shift QC (SIEMPRE 3 horas por persona)
                 if (qcShiftsCount > 0) {
-                    const qcHours = modifiedShifts ? qcShiftsCount : (qcShiftsCount * 3); // Si viene de frontend ya tiene horas, sino 3 x count
-                    logger.info('🚀 CREATING QC SPECIAL SHIFT', {
+                    const qcHours = qcShiftsCount * 3; // SIEMPRE 3 horas por crew member
+                    logger.info('🚀 CREATING QC SPECIAL SHIFT (3 hours per crew member)', {
                         job_id: savedJob.id,
                         job_name: jobName,
-                        qc_shifts_count: qcShiftsCount,
+                        qc_crew_members_count: qcShiftsCount,
                         total_qc_hours: qcHours,
                         auto_approve: autoApprove
                     });
@@ -837,11 +885,35 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                     logger.info('✅ QC SPECIAL SHIFT CREATED SUCCESSFULLY', {
                         job_id: savedJob.id,
                         job_name: jobName,
-                        qc_shifts_count: qcShiftsCount,
+                        qc_crew_members_count: qcShiftsCount,
                         total_qc_hours: qcHours
                     });
                 } else {
                     logger.info('ℹ️ NO QC SHIFTS FOR THIS JOB', {
+                        job_name: jobName,
+                        total_shifts: shifts.length
+                    });
+                }
+                
+                // Si hay shifts Delivery Drop, crear Special Shift (SIEMPRE 3 horas por persona)
+                if (deliveryDropShiftsCount > 0) {
+                    const deliveryDropHours = deliveryDropShiftsCount * 3; // SIEMPRE 3 horas por crew member
+                    logger.info('🚀 CREATING JOB DELIVERY SPECIAL SHIFT (3 hours per crew member)', {
+                        job_id: savedJob.id,
+                        job_name: jobName,
+                        delivery_drop_crew_members_count: deliveryDropShiftsCount,
+                        total_delivery_drop_hours: deliveryDropHours,
+                        auto_approve: autoApprove
+                    });
+                    await saveDeliveryDropSpecialShift(savedJob.id, deliveryDropHours, autoApprove);
+                    logger.info('✅ JOB DELIVERY SPECIAL SHIFT CREATED SUCCESSFULLY', {
+                        job_id: savedJob.id,
+                        job_name: jobName,
+                        delivery_drop_crew_members_count: deliveryDropShiftsCount,
+                        total_delivery_drop_hours: deliveryDropHours
+                    });
+                } else {
+                    logger.info('ℹ️ NO DELIVERY DROP SHIFTS FOR THIS JOB', {
                         job_name: jobName,
                         total_shifts: shifts.length
                     });

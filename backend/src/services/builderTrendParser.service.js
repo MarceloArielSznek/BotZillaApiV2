@@ -5,7 +5,7 @@
 const xlsx = require('xlsx');
 const { v4: uuidv4 } = require('uuid');
 const { logger } = require('../utils/logger');
-const { calculateShiftTotals, hasQCTag } = require('../utils/timeConverter');
+const { calculateShiftTotals, hasQCTag, hasDeliveryDropTag } = require('../utils/timeConverter');
 const { matchShiftsToJobs } = require('../utils/jobMatcher');
 const BuilderTrendShift = require('../models/BuilderTrendShift');
 const PerformanceSyncJob = require('../models/PerformanceSyncJob');
@@ -95,6 +95,9 @@ async function parseBuilderTrendExcel(fileBuffer, syncId) {
             // Detectar QC
             shift.is_qc = hasQCTag(shift.tags);
             
+            // Detectar Delivery Drop
+            shift.is_delivery_drop = hasDeliveryDropTag(shift.tags);
+            
             // Log detallado para debugging QC
             if (shift.is_qc) {
                 logger.info('🔍 QC TAG DETECTED IN EXCEL', {
@@ -102,6 +105,16 @@ async function parseBuilderTrendExcel(fileBuffer, syncId) {
                     job: shift.job_name_raw,
                     tags: shift.tags,
                     is_qc: shift.is_qc
+                });
+            }
+            
+            // Log detallado para debugging Delivery Drop
+            if (shift.is_delivery_drop) {
+                logger.info('📦 DELIVERY DROP TAG DETECTED IN EXCEL', {
+                    crew_member: shift.crew_member_name,
+                    job: shift.job_name_raw,
+                    tags: shift.tags,
+                    is_delivery_drop: shift.is_delivery_drop
                 });
             }
             

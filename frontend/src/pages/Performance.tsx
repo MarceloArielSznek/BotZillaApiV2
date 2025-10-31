@@ -1312,7 +1312,6 @@ const Performance: React.FC = () => {
                                 <TableCell sx={{ fontWeight: 600, color: 'white' }}>OT</TableCell>
                                 <TableCell sx={{ fontWeight: 600, color: 'white' }}>2OT</TableCell>
                                 <TableCell sx={{ fontWeight: 600, color: 'white' }}>Total Hours</TableCell>
-                                <TableCell sx={{ fontWeight: 600, color: 'white' }}>QC</TableCell>
                                 <TableCell sx={{ fontWeight: 600, color: 'white' }}>Tags</TableCell>
                                 <TableCell sx={{ fontWeight: 600, color: 'white' }}>Actions</TableCell>
                               </TableRow>
@@ -1320,7 +1319,7 @@ const Performance: React.FC = () => {
                             <TableBody>
                               {jobShifts.length === 0 || (jobShifts.length === 1 && !jobShifts[0].crew_member_name) ? (
                                 <TableRow>
-                                  <TableCell colSpan={9} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                                  <TableCell colSpan={8} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                                     <Typography variant="body2">
                                       No shifts found for this job. Click "Add Shift" to add manually.
                                     </Typography>
@@ -1330,9 +1329,32 @@ const Performance: React.FC = () => {
                                 jobShifts.map((shift, shiftIndex) => {
                                   const isEditing = editingShift?.jobName === jobName && editingShift?.index === shiftIndex;
                                   
+                                  // Determinar si es un special shift y su nombre
+                                  const isQC = shift.has_qc || shift.tags?.toUpperCase().includes('QC');
+                                  const isDeliveryDrop = shift.tags?.toLowerCase().includes('delivery drop');
+                                  const isSpecialShift = isQC || isDeliveryDrop;
+                                  
+                                  // Nombre a mostrar
+                                  let displayName = shift.crew_member_name;
+                                  if (isQC) displayName = 'QC';
+                                  if (isDeliveryDrop) displayName = 'Job Delivery';
+                                  
+                                  // Horas a mostrar (3 fijas para special shifts)
+                                  const displayHours = isSpecialShift ? 3.00 : shift.total_hours;
+                                  
                                   return (
                                     <TableRow key={shiftIndex} hover>
-                                      <TableCell>{shift.crew_member_name}</TableCell>
+                                      <TableCell>
+                                        {displayName}
+                                        {isSpecialShift && (
+                                          <Chip 
+                                            label="Special Shift" 
+                                            size="small" 
+                                            color="warning" 
+                                            sx={{ ml: 1, fontSize: '0.65rem' }} 
+                                          />
+                                        )}
+                                      </TableCell>
                                     <TableCell>
                                       {isEditing ? (
                                         <TextField
@@ -1389,18 +1411,11 @@ const Performance: React.FC = () => {
                                       <Chip 
                                         label={isEditing 
                                           ? ((editFormData.regular_hours || 0) + (editFormData.ot_hours || 0) + (editFormData.ot2_hours || 0)).toFixed(2)
-                                          : shift.total_hours.toFixed(2)
+                                          : displayHours.toFixed(2)
                                         } 
-                                        color="primary" 
+                                        color={isSpecialShift ? "warning" : "primary"}
                                         size="small" 
                                       />
-                                    </TableCell>
-                                    <TableCell>
-                                      {shift.has_qc ? (
-                                        <Chip label="QC" color="warning" size="small" />
-                                      ) : (
-                                        '-'
-                                      )}
                                     </TableCell>
                                     <TableCell>
                                       {isEditing ? (
