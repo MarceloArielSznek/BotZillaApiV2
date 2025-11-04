@@ -715,6 +715,7 @@ async function saveJobsToDb(jobsFromAT) {
                 const crewLeaderChanged = existingJob.crew_leader_id !== jobData.crew_leader_id;
                 const isPlansInProgress = newStatusName === 'Plans In Progress';
                 const hadNoCrewLeader = !existingJob.crew_leader_id;
+                const hadCrewLeader = !!existingJob.crew_leader_id;
                 const nowHasCrewLeader = !!crewLeader;
                 const nowHasCrewLeaderFromAT = !!crewLeaderFromAT;
                 
@@ -771,6 +772,54 @@ async function saveJobsToDb(jobsFromAT) {
                         }, atJob.name);
                     }
                 }
+                
+                // ESCENARIO 3: Job está en estado ACTIVO CON crew leader, pero se CAMBIA por otro
+                // Este es el caso que el Operation Manager quiere: mantener el plan pero cambiar al crew leader
+                // Estados activos: Plans In Progress, In Production, Job in Progress, Uploading Shifts, Missing Data to Close
+                const activeJobStatuses = ['Plans In Progress', 'In Production', 'Job in Progress', 'Uploading Shifts', 'Missing Data to Close'];
+                const isActiveJob = activeJobStatuses.includes(newStatusName);
+                
+                if (!shouldNotify && isActiveJob && crewLeaderChanged && hadCrewLeader && nowHasCrewLeader) {
+                    shouldNotify = true;
+                    logger.info(`🔔 Escenario 3: Crew Leader REEMPLAZADO en job ACTIVO: ${atJob.name}`);
+                    logger.info(`   📊 Estado actual: ${newStatusName}`);
+                    logger.info(`   👤 Crew Leader anterior: ID ${existingJob.crew_leader_id}`);
+                    logger.info(`   👤 Crew Leader nuevo: ${getCrewLeaderName(crewLeader)} (ID ${crewLeader.id})`);
+                    
+                    // Verificar si el NUEVO crew leader tiene telegram_id - ANTI-SPAM: solo 1 vez
+                    if (!crewLeader.telegram_id) {
+                        logger.warn(`⚠️  Nuevo Crew Leader "${getCrewLeaderName(crewLeader)}" no tiene telegram_id. Enviando alerta de registro (1x)...`);
+                        
+                        // Enviar webhook de alerta (crew leader debe registrarse) - SOLO 1 VEZ
+                        await sendRegistrationAlertOnce(existingJob, {
+                            crewLeaderId: crewLeader.id,
+                            crewLeaderName: getCrewLeaderName(crewLeader),
+                            crewLeaderEmail: crewLeader.email || 'No email',
+                            jobName: atJob.name,
+                            branchName: branch?.name || 'Unknown',
+                            registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                            activeUser: false,
+                            hasTelegramId: false
+                        }, atJob.name);
+                    } else if (crewLeader.status !== 'active') {
+                        logger.warn(`⚠️  Nuevo Crew Leader "${getCrewLeaderName(crewLeader)}" tiene telegram_id pero no está aprobado (status: ${crewLeader.status}). Enviando alerta (1x)...`);
+                        
+                        // Enviar webhook de alerta (crew leader pendiente de aprobación) - SOLO 1 VEZ
+                        await sendRegistrationAlertOnce(existingJob, {
+                            crewLeaderId: crewLeader.id,
+                            crewLeaderName: getCrewLeaderName(crewLeader),
+                            crewLeaderEmail: crewLeader.email || 'No email',
+                            jobName: atJob.name,
+                            branchName: branch?.name || 'Unknown',
+                            registrationUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/employee-registration`,
+                            activeUser: false,
+                            hasTelegramId: true
+                        }, atJob.name);
+                    } else {
+                        // Crew leader nuevo está activo y tiene telegram_id - ¡notificar!
+                        logger.info(`✅ Nuevo Crew Leader "${getCrewLeaderName(crewLeader)}" está activo y tiene telegram_id. Notificación será enviada.`);
+                    }
+                }
 
                 // Verificar si algo realmente cambió
                 const hasChanges = 
@@ -813,8 +862,13 @@ async function saveJobsToDb(jobsFromAT) {
                 const needsNotification = shouldNotify || 
                     (!existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active' && newStatusName === 'Plans In Progress');
                 
+                // Determinar el contexto de la notificación
+                // Si es un cambio de crew leader (Escenario 3), usar un identificador especial
+                const wasCrewLeaderReplaced = isActiveJob && crewLeaderChanged && hadCrewLeader && nowHasCrewLeader;
+                const notificationContext = wasCrewLeaderReplaced ? 'Crew Leader Replaced' : oldStatusName;
+                
                 if (needsNotification && !existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active') {
-                    const notification = await generateNotification(atJob, crewLeader, branch, estimate, oldStatusName);
+                    const notification = await generateNotification(atJob, crewLeader, branch, estimate, notificationContext);
                     if (notification) {
                         // Agregar a la lista de notificaciones
                         // El sistema existente (que se ejecuta cada 15 min) las procesará
@@ -947,7 +1001,10 @@ async function generateNotification(atJob, crewLeader, branch, estimate, previou
         let contextMessage = null;
         
         if (previousStatus) {
-            if (previousStatus === 'Pending Review') {
+            if (previousStatus === 'Crew Leader Replaced') {
+                notificationType = 'Job Reassigned with Existing Plan';
+                contextMessage = 'You have been assigned a job with an approved plan. Please review the plan and proceed with execution.';
+            } else if (previousStatus === 'Pending Review') {
                 notificationType = 'Job Plan Changes Required';
                 contextMessage = 'Changes detected in the estimate. Please recreate the plan.';
             } else if (previousStatus === 'Requires Crew Lead') {
