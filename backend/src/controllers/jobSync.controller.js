@@ -505,6 +505,19 @@ async function saveJobsToDb(jobsFromAT) {
             if (shouldPreserveStatus && existingJob) {
                 jobData.performance_status = existingJob.performance_status;
             }
+            
+            // IMPORTANTE: Preservar closing_date existente si el job ya lo tiene
+            // El closing_date solo debe venir del Performance spreadsheet, NO del sync de Attic Tech
+            // Si ya existe un closing_date, no lo sobrescribir
+            if (existingJob && existingJob.closing_date) {
+                // NO incluir closing_date en jobData para preservar el valor existente
+                // Sequelize solo actualizará los campos que estén en jobData
+                logger.info(`🔒 Preservando closing_date existente para job "${atJob.name}": ${existingJob.closing_date}`);
+            } else {
+                // Si no existe closing_date, dejarlo como null (no establecer fecha de hoy)
+                // El closing_date solo debe venir del Performance spreadsheet
+                logger.info(`ℹ️  Job "${atJob.name}" no tiene closing_date. Se mantendrá como null (vendrá del Performance spreadsheet si aplica).`);
+            }
 
             if (estimate) {
                 logger.info(`📋 Estimate encontrado: ID ${estimate.id} (AT ID: ${atJob.job_estimate?.id})`);

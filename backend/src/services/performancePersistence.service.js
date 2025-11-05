@@ -192,19 +192,56 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
         const shouldKeepSynced = job.performance_status === 'synced';
         const newPerformanceStatus = shouldKeepSynced ? 'synced' : (autoApprove ? 'synced' : 'pending_approval');
         
+        // IMPORTANTE: Preservar closing_date existente si el nuevo valor es null o es la fecha de hoy (probablemente placeholder)
+        // Solo actualizar closing_date si viene una fecha real del spreadsheet (finish_date)
+        let closingDateToUse = closing_date;
+        if (job.closing_date) {
+            // Si el job ya tiene closing_date, preservarlo en estos casos:
+            // 1. Si el nuevo valor es null (no viene del spreadsheet)
+            // 2. Si el nuevo valor es la fecha de hoy (probablemente placeholder porque no había finish_date)
+            if (!closing_date) {
+                // Caso 1: nuevo valor es null → preservar existente
+                closingDateToUse = job.closing_date;
+                logger.info('Preserving existing closing_date (new value is null)', {
+                    job_name,
+                    existing_closing_date: job.closing_date
+                });
+            } else {
+                // Caso 2: verificar si el nuevo valor es la fecha de hoy
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                const newClosingDate = new Date(closing_date);
+                newClosingDate.setHours(0, 0, 0, 0);
+                const existingClosingDate = new Date(job.closing_date);
+                existingClosingDate.setHours(0, 0, 0, 0);
+                
+                // Si el nuevo closing_date es la fecha de hoy y el job ya tiene un closing_date diferente, preservar el existente
+                if (newClosingDate.getTime() === today.getTime() && existingClosingDate.getTime() !== today.getTime()) {
+                    closingDateToUse = job.closing_date;
+                    logger.info('Preserving existing closing_date (new value is today\'s date placeholder)', {
+                        job_name,
+                        existing_closing_date: job.closing_date,
+                        new_closing_date: closing_date
+                    });
+                }
+            }
+        }
+        
         logger.info('Updating existing job from Performance', {
             job_id: job.id,
             job_name,
             existing_name: job.name,
             old_sold_price: job.sold_price,
             new_sold_price: sold_price,
+            old_closing_date: job.closing_date,
+            new_closing_date: closingDateToUse,
             old_performance_status: job.performance_status,
             new_performance_status: newPerformanceStatus,
             kept_synced: shouldKeepSynced
         });
         
         await job.update({
-            closing_date,
+            closing_date: closingDateToUse,
             sold_price,
             crew_leader_id,
             attic_tech_hours: attic_tech_hours || job.attic_tech_hours, // Mantener el existente si no viene nuevo
@@ -212,10 +249,16 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
         });
     } else {
         // Job no existe → crear nuevo
+        // Si closing_date es null y es un job nuevo, usar fecha de hoy como placeholder
+        // Esto solo aplica para jobs nuevos, no para actualizaciones
+        const finalClosingDate = closing_date || new Date();
+        
         logger.info('Creating new job from Performance', {
             job_name,
             branch_id,
-            sold_price
+            sold_price,
+            closing_date: finalClosingDate,
+            closing_date_source: closing_date ? 'spreadsheet' : 'today (new job placeholder)'
         });
         
         // Buscar estimate en nuestra BD por nombre (ya están sincronizados desde AT)
@@ -354,7 +397,7 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
         
         job = await Job.create({
             name: job_name,
-            closing_date,
+            closing_date: finalClosingDate, // Usar finalClosingDate (puede ser del spreadsheet o fecha de hoy si es nuevo)
             sold_price,
             crew_leader_id,
             branch_id,
@@ -754,10 +797,13 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 }
                 
                 // Guardar o actualizar job
-                const closingDate = syncJob.finish_date || new Date();
+                // IMPORTANTE: Solo usar fecha de hoy si NO hay finish_date del spreadsheet Y es un job nuevo
+                // Si el job ya existe y tiene closing_date, saveOrUpdateJob lo preservará
+                // Si no hay finish_date, usar null en lugar de new Date() para que saveOrUpdateJob decida
+                const closingDate = syncJob.finish_date || null; // No usar new Date() como fallback
                 const jobData = {
                     job_name: jobName,
-                    closing_date: closingDate, // Usar finish_date del spreadsheet (columna B), o fecha actual si no existe
+                    closing_date: closingDate, // Usar finish_date del spreadsheet (columna B), o null si no existe
                     sold_price: soldPrice,
                     crew_leader_id: crewLeaderId,
                     branch_id: branchId,
@@ -768,7 +814,8 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                     job_name: jobName,
                     finish_date_from_spreadsheet: syncJob.finish_date,
                     closing_date_to_save: closingDate,
-                    using_spreadsheet_date: !!syncJob.finish_date
+                    using_spreadsheet_date: !!syncJob.finish_date,
+                    note: closingDate ? 'Using spreadsheet date' : 'No date from spreadsheet (will preserve existing or leave null)'
                 });
                 
                 const savedJob = await saveOrUpdateJob(jobData, autoApprove);
