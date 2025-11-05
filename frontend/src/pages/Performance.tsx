@@ -75,6 +75,7 @@ interface AggregatedShift {
   job_id: number;
   job_name: string;
   crew_member_name: string;
+  closing_date?: string | null;
   shifts_count: number;
   regular_hours: number;
   ot_hours: number;
@@ -1212,6 +1213,34 @@ const Performance: React.FC = () => {
                 ).map(([jobName, jobShifts]) => {
                   const isExpanded = expandedJobs.has(jobName);
                   
+                  // Obtener la fecha de cierre del primer shift (todos los shifts del mismo job tienen la misma fecha)
+                  const closingDate = jobShifts.length > 0 ? jobShifts[0].closing_date : null;
+                  
+                  // Formatear fecha de cierre
+                  const formatClosingDate = (dateStr: string | null | undefined) => {
+                    if (!dateStr) return null;
+                    try {
+                      // Si viene como YYYY-MM-DD, parsear directamente sin timezone
+                      const yyyymmddMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+                      if (yyyymmddMatch) {
+                        const [, year, month, day] = yyyymmddMatch;
+                        // Formatear directamente sin crear Date object para evitar timezone
+                        return `${month.padStart(2, '0')}/${day.padStart(2, '0')}/${year}`;
+                      }
+                      
+                      // Si viene como ISO string u otro formato, parsear con cuidado
+                      const date = new Date(dateStr);
+                      if (isNaN(date.getTime())) return null;
+                      // Usar componentes de fecha local (no UTC) para evitar problemas de timezone
+                      const month = String(date.getMonth() + 1).padStart(2, '0');
+                      const day = String(date.getDate()).padStart(2, '0');
+                      const year = date.getFullYear();
+                      return `${month}/${day}/${year}`;
+                    } catch {
+                      return null;
+                    }
+                  };
+                  
                   const toggleExpanded = () => {
                     setExpandedJobs(prev => {
                       const newSet = new Set(prev);
@@ -1260,6 +1289,19 @@ const Performance: React.FC = () => {
                             onClick={toggleExpanded}
                           >
                             {jobName}
+                            {closingDate && (
+                              <Typography 
+                                component="span" 
+                                variant="body2" 
+                                sx={{ 
+                                  ml: 1.5, 
+                                  color: 'text.secondary',
+                                  fontWeight: 400
+                                }}
+                              >
+                                ({formatClosingDate(closingDate)})
+                              </Typography>
+                            )}
                           </Typography>
                           <Chip label={`${jobTotals.crewMembers} crew`} size="small" />
                           <Chip label={`${jobTotals.shifts} shifts`} size="small" />
@@ -1330,17 +1372,18 @@ const Performance: React.FC = () => {
                                   const isEditing = editingShift?.jobName === jobName && editingShift?.index === shiftIndex;
                                   
                                   // Determinar si es un special shift y su nombre
-                                  const isQC = shift.has_qc || shift.tags?.toUpperCase().includes('QC');
-                                  const isDeliveryDrop = shift.tags?.toLowerCase().includes('delivery drop');
+                                  // El backend ya envía "QC Special Shift" o "Job Delivery Special Shift" en crew_member_name
+                                  const isQC = shift.has_qc || shift.tags?.toUpperCase().includes('QC') || shift.crew_member_name === 'QC Special Shift';
+                                  const isDeliveryDrop = shift.tags?.toLowerCase().includes('delivery drop') || shift.crew_member_name === 'Job Delivery Special Shift';
                                   const isSpecialShift = isQC || isDeliveryDrop;
                                   
-                                  // Nombre a mostrar
+                                  // Nombre a mostrar - usar el nombre del backend si es special shift, o simplificar para UI
                                   let displayName = shift.crew_member_name;
                                   if (isQC) displayName = 'QC';
                                   if (isDeliveryDrop) displayName = 'Job Delivery';
                                   
-                                  // Horas a mostrar (3 fijas para special shifts)
-                                  const displayHours = isSpecialShift ? 3.00 : shift.total_hours;
+                                  // Horas a mostrar - usar las horas reales del shift
+                                  const displayHours = shift.total_hours;
                                   
                                   return (
                                     <TableRow key={shiftIndex} hover>

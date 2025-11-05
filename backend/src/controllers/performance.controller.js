@@ -417,10 +417,66 @@ class PerformanceController {
                     try {
                         // Intentar parsear la fecha (puede venir en varios formatos)
                         const dateStr = rowArray[1].toString().trim();
+                        
+                        // Log para debug
+                        logger.info('Parsing finish_date from spreadsheet', {
+                            job_name: jobName,
+                            raw_date_value: dateStr,
+                            raw_date_type: typeof rowArray[1],
+                            raw_date_raw: rowArray[1]
+                        });
+                        
                         if (dateStr) {
-                            finishDate = new Date(dateStr);
+                            // Intentar parsear diferentes formatos de fecha
+                            // Formato común: "MM/DD/YYYY" o "YYYY-MM-DD" o ISO string con timezone
+                            let parsedDate = null;
+                            
+                            // Intentar formato MM/DD/YYYY
+                            const mmddyyyyMatch = dateStr.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                            if (mmddyyyyMatch) {
+                                const [, month, day, year] = mmddyyyyMatch;
+                                // Crear fecha en hora local (no UTC) para evitar problemas de timezone
+                                parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                                logger.info('Parsed as MM/DD/YYYY', {
+                                    job_name: jobName,
+                                    month, day, year,
+                                    parsed_date: parsedDate.toISOString(),
+                                    local_date: `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`
+                                });
+                            } else {
+                                // Intentar formato YYYY-MM-DD
+                                const yyyymmddMatch = dateStr.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+                                if (yyyymmddMatch) {
+                                    const [, year, month, day] = yyyymmddMatch;
+                                    // Crear fecha en hora local (no UTC) para evitar problemas de timezone
+                                    parsedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+                                    logger.info('Parsed as YYYY-MM-DD', {
+                                        job_name: jobName,
+                                        year, month, day,
+                                        parsed_date: parsedDate.toISOString(),
+                                        local_date: `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`
+                                    });
+                                } else {
+                                    // Fallback: si viene como ISO string con timezone, extraer solo la fecha
+                                    const tempDate = new Date(dateStr);
+                                    if (!isNaN(tempDate.getTime())) {
+                                        // Usar los componentes de fecha local (no UTC) para evitar problemas de timezone
+                                        parsedDate = new Date(tempDate.getFullYear(), tempDate.getMonth(), tempDate.getDate());
+                                        logger.info('Parsed as ISO/Other format', {
+                                            job_name: jobName,
+                                            original_string: dateStr,
+                                            temp_date_utc: tempDate.toISOString(),
+                                            parsed_date_local: parsedDate.toISOString(),
+                                            local_date: `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, '0')}-${String(parsedDate.getDate()).padStart(2, '0')}`
+                                        });
+                                    }
+                                }
+                            }
+                            
                             // Validar que sea una fecha válida
-                            if (isNaN(finishDate.getTime())) {
+                            if (parsedDate && !isNaN(parsedDate.getTime())) {
+                                finishDate = parsedDate;
+                            } else {
                                 logger.warn('Invalid finish_date format', { 
                                     job_name: jobName,
                                     raw_date: dateStr 
@@ -1126,25 +1182,59 @@ class PerformanceController {
                         model: PerformanceSyncJob,
                         as: 'matchedSyncJob',
                         required: true,
-                        attributes: ['id', 'job_name', 'row_number', 'crew_leader', 'estimator']
+                        attributes: ['id', 'job_name', 'row_number', 'crew_leader', 'estimator', 'finish_date']
                     }
                 ],
                 order: [['matched_sync_job_id', 'ASC'], ['crew_member_name', 'ASC']]
             });
             
-            // Agrupar por job y crew member
+            // Helper para detectar tipo de shift especial
+            const { hasQCTag, hasDeliveryDropTag } = require('../utils/timeConverter');
+            
+            // Agrupar por job y crew member, SEPARANDO special shifts de regulares
             const aggregated = {};
             
             shifts.forEach(shift => {
                 const jobId = shift.matched_sync_job_id;
                 const crewMember = shift.crew_member_name;
-                const key = `${jobId}|${crewMember}`;
                 
-                if (!aggregated[key]) {
-                    aggregated[key] = {
+                // Detectar si es QC o Delivery Drop desde tags
+                // is_qc puede venir de la BD, pero Delivery Drop solo desde tags
+                const isQC = shift.is_qc || hasQCTag(shift.tags || '');
+                const isDeliveryDrop = hasDeliveryDropTag(shift.tags || '');
+                const isSpecialShift = isQC || isDeliveryDrop;
+                
+                // Crear clave de agregación que INCLUYE el tipo de shift
+                // Para special shifts, usar un nombre único y tipo separado
+                // Para regulares, usar el nombre del crew member
+                let aggregationKey;
+                let displayName;
+                
+                if (isSpecialShift) {
+                    // Special shifts se agrupan por tipo (QC o Delivery Drop), NO por crew member
+                    if (isQC) {
+                        aggregationKey = `${jobId}|QC_SPECIAL`;
+                        displayName = 'QC Special Shift';
+                    } else if (isDeliveryDrop) {
+                        aggregationKey = `${jobId}|DELIVERY_DROP_SPECIAL`;
+                        displayName = 'Job Delivery Special Shift';
+                    } else {
+                        // Fallback (no debería pasar)
+                        aggregationKey = `${jobId}|SPECIAL|${crewMember}`;
+                        displayName = 'Special Shift';
+                    }
+                } else {
+                    // Regular shifts se agrupan por crew member
+                    aggregationKey = `${jobId}|REGULAR|${crewMember}`;
+                    displayName = crewMember;
+                }
+                
+                if (!aggregated[aggregationKey]) {
+                    aggregated[aggregationKey] = {
                         job_id: jobId,
                         job_name: shift.matchedSyncJob.job_name,
-                        crew_member_name: crewMember,
+                        crew_member_name: displayName, // Nombre a mostrar
+                        closing_date: shift.matchedSyncJob.finish_date, // Fecha de cierre del job (columna B del spreadsheet)
                         shifts_count: 0,
                         regular_hours: 0,
                         ot_hours: 0,
@@ -1155,30 +1245,85 @@ class PerformanceController {
                     };
                 }
                 
-                aggregated[key].shifts_count += 1;
-                aggregated[key].regular_hours += parseFloat(shift.regular_hours || 0);
-                aggregated[key].ot_hours += parseFloat(shift.ot_hours || 0);
-                aggregated[key].ot2_hours += parseFloat(shift.ot2_hours || 0);
-                aggregated[key].total_hours += parseFloat(shift.total_hours || 0);
+                aggregated[aggregationKey].shifts_count += 1;
                 
-                if (shift.is_qc) {
-                    aggregated[key].has_qc = true;
+                // Para QC shifts: cada shift cuenta como 3 horas fijas, sin importar las horas reales
+                if (isQC) {
+                    // No sumar horas reales, se calcularán al final multiplicando shifts_count * 3
+                    aggregated[aggregationKey].has_qc = true;
+                } else if (isDeliveryDrop) {
+                    // Delivery Drop también tiene 3 horas fijas por shift
+                    // No sumar horas reales aquí tampoco
+                } else {
+                    // Para shifts regulares, sumar las horas reales
+                    aggregated[aggregationKey].regular_hours += parseFloat(shift.regular_hours || 0);
+                    aggregated[aggregationKey].ot_hours += parseFloat(shift.ot_hours || 0);
+                    aggregated[aggregationKey].ot2_hours += parseFloat(shift.ot2_hours || 0);
+                    aggregated[aggregationKey].total_hours += parseFloat(shift.total_hours || 0);
                 }
                 
                 if (shift.tags && shift.tags.trim() !== '') {
-                    aggregated[key].tags.push(shift.tags);
+                    aggregated[aggregationKey].tags.push(shift.tags);
                 }
             });
             
-            // Convertir a array y redondear
-            const result = Object.values(aggregated).map(item => ({
-                ...item,
-                regular_hours: parseFloat(item.regular_hours.toFixed(2)),
-                ot_hours: parseFloat(item.ot_hours.toFixed(2)),
-                ot2_hours: parseFloat(item.ot2_hours.toFixed(2)),
-                total_hours: parseFloat(item.total_hours.toFixed(2)),
-                tags: [...new Set(item.tags)].join(', ') // Unique tags
-            }));
+            // Convertir a array y calcular horas finales para QC/Delivery Drop
+            const result = Object.values(aggregated).map(item => {
+                // Si es QC o Delivery Drop, calcular horas como shifts_count * 3
+                const isQC = item.has_qc || item.crew_member_name === 'QC Special Shift';
+                const isDeliveryDrop = item.crew_member_name === 'Job Delivery Special Shift';
+                
+                if (isQC || isDeliveryDrop) {
+                    // Cada shift QC/Delivery Drop es exactamente 3 horas
+                    item.regular_hours = item.shifts_count * 3;
+                    item.ot_hours = 0;
+                    item.ot2_hours = 0;
+                    item.total_hours = item.shifts_count * 3;
+                }
+                
+                // Formatear closing_date como string YYYY-MM-DD para evitar problemas de timezone
+                let closingDateStr = null;
+                if (item.closing_date) {
+                    try {
+                        // Si viene como Date object, extraer componentes de fecha local
+                        const dateObj = item.closing_date instanceof Date 
+                            ? item.closing_date 
+                            : new Date(item.closing_date);
+                        
+                        if (!isNaN(dateObj.getTime())) {
+                            // Usar componentes de fecha local (no UTC)
+                            const year = dateObj.getFullYear();
+                            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+                            const day = String(dateObj.getDate()).padStart(2, '0');
+                            closingDateStr = `${year}-${month}-${day}`;
+                            
+                            logger.info('Formatting closing_date for frontend', {
+                                job_name: item.job_name,
+                                original_date: item.closing_date,
+                                date_type: typeof item.closing_date,
+                                formatted_date: closingDateStr,
+                                local_components: { year, month, day }
+                            });
+                        }
+                    } catch (error) {
+                        logger.error('Error formatting closing_date', {
+                            job_name: item.job_name,
+                            closing_date: item.closing_date,
+                            error: error.message
+                        });
+                    }
+                }
+                
+                return {
+                    ...item,
+                    regular_hours: parseFloat(item.regular_hours.toFixed(2)),
+                    ot_hours: parseFloat(item.ot_hours.toFixed(2)),
+                    ot2_hours: parseFloat(item.ot2_hours.toFixed(2)),
+                    total_hours: parseFloat(item.total_hours.toFixed(2)),
+                    closing_date: closingDateStr || item.closing_date, // Usar string formateado si está disponible
+                    tags: [...new Set(item.tags)].join(', ') // Unique tags
+                };
+            });
             
             logger.info('Retrieved aggregated shifts', {
                 sync_id,

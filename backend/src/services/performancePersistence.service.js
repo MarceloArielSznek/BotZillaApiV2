@@ -803,8 +803,12 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                         ? (shift.regular_hours || 0) + (shift.ot_hours || 0) + (shift.ot2_hours || 0)
                         : shift.total_hours;
                     
-                    const isQC = modifiedShifts ? (shift.has_qc || shift.tags?.toUpperCase().includes('QC')) : shift.is_qc;
-                    const isDeliveryDrop = modifiedShifts ? shift.tags?.match(/Delivery\s+Drop/i) : shift.is_delivery_drop;
+                    const isQC = modifiedShifts 
+                        ? (shift.has_qc || shift.tags?.toUpperCase().includes('QC') || shift.crew_member_name === 'QC Special Shift')
+                        : shift.is_qc;
+                    const isDeliveryDrop = modifiedShifts 
+                        ? (shift.tags?.match(/Delivery\s+Drop/i) || shift.crew_member_name === 'Job Delivery Special Shift')
+                        : shift.is_delivery_drop;
                     
                     // Debug: Log cada shift para ver qué contiene
                     logger.info('🔍 PROCESSING INDIVIDUAL SHIFT', {
@@ -832,11 +836,15 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                     // Si el shift tiene tag QC, contarlo pero no crear shift regular
                     // SIEMPRE usa 3 horas por crew member, sin importar las horas trabajadas
                     if (isQC) {
-                        qcShiftsCount++; // Solo contar crew members, no acumular horas
+                        // Si viene del frontend agregado, usar shifts_count; si no, contar 1
+                        const shiftCount = modifiedShifts && shift.shifts_count ? shift.shifts_count : 1;
+                        qcShiftsCount += shiftCount; // Contar según shifts_count si viene agregado
                         logger.info('✅ QC SHIFT DETECTED - WILL CREATE SPECIAL SHIFT (3 hours per person)', {
                             job_name: jobName,
                             crew_member: shift.crew_member_name,
-                            tags: shift.tags
+                            tags: shift.tags,
+                            shifts_count: shiftCount,
+                            is_aggregated: !!modifiedShifts
                         });
                         continue; // Skip regular shift creation
                     }
@@ -844,11 +852,15 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                     // Si el shift tiene tag Delivery Drop, contarlo pero no crear shift regular
                     // SIEMPRE usa 3 horas por crew member, sin importar las horas trabajadas
                     if (isDeliveryDrop) {
-                        deliveryDropShiftsCount++; // Solo contar crew members, no acumular horas
+                        // Si viene del frontend agregado, usar shifts_count; si no, contar 1
+                        const shiftCount = modifiedShifts && shift.shifts_count ? shift.shifts_count : 1;
+                        deliveryDropShiftsCount += shiftCount; // Contar según shifts_count si viene agregado
                         logger.info('✅ DELIVERY DROP SHIFT DETECTED - WILL CREATE SPECIAL SHIFT (3 hours per person)', {
                             job_name: jobName,
                             crew_member: shift.crew_member_name,
-                            tags: shift.tags
+                            tags: shift.tags,
+                            shifts_count: shiftCount,
+                            is_aggregated: !!modifiedShifts
                         });
                         continue; // Skip regular shift creation
                     }
