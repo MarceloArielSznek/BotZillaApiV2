@@ -45,24 +45,40 @@ async function findOrCreateEmployee(fullName, branchId) {
     // Limpiar nombre: 
     // 1. Remover paréntesis y su contenido (ej: "Drew Gipson (D)" → "Drew Gipson")
     // 2. Remover comillas dobles y su contenido (ej: 'Malik "Fatu" Richardson' → "Malik Richardson")
+    // 3. Remover símbolos # (ej: "Israel Mauricio #2" → "Israel Mauricio 2")
     let cleanedName = fullName.trim();
     cleanedName = cleanedName.replace(/\s*\([^)]*\)/g, '').trim(); // Remover (texto)
     cleanedName = cleanedName.replace(/\s*"[^"]*"\s*/g, ' ').trim(); // Remover "texto"
+    cleanedName = cleanedName.replace(/#/g, '').trim(); // Remover símbolos #
     cleanedName = cleanedName.replace(/\s+/g, ' '); // Normalizar espacios múltiples
     
     const nameParts = cleanedName.split(/\s+/);
     const firstName = nameParts[0];
     const lastName = nameParts.slice(1).join(' ') || ''; // Si no hay apellido, dejar vacío
     
+    // Sanitizar nombres para que solo contengan caracteres válidos según la validación del modelo
+    // first_name: solo letras, espacios, guiones y apostrofes
+    // last_name: letras, números, espacios, guiones, apostrofes y puntos
+    const sanitizeFirstName = (name) => {
+        return name.replace(/[^a-zA-ZÀ-ÿ\u00f1\u00d1\s'-]/g, '').trim() || 'Unknown';
+    };
+    
+    const sanitizeLastName = (name) => {
+        return name.replace(/[^a-zA-ZÀ-ÿ\u00f1\u00d1\s'\-0-9.]/g, '').trim() || '';
+    };
+    
+    const sanitizedFirstName = sanitizeFirstName(firstName);
+    const sanitizedLastName = sanitizeLastName(lastName);
+    
     // Buscar employee existente por nombre
     const whereClause = {
-        first_name: { [Op.iLike]: firstName },
+        first_name: { [Op.iLike]: sanitizedFirstName },
         is_deleted: false
     };
     
     // Solo agregar condición de last_name si existe
-    if (lastName && lastName.trim() !== '') {
-        whereClause.last_name = { [Op.iLike]: lastName };
+    if (sanitizedLastName && sanitizedLastName.trim() !== '') {
+        whereClause.last_name = { [Op.iLike]: sanitizedLastName };
     }
     
     let employee = await Employee.findOne({
@@ -72,20 +88,22 @@ async function findOrCreateEmployee(fullName, branchId) {
     // Si no existe, crear uno nuevo (pendiente de aprobación)
     if (!employee) {
         logger.info('Creating new employee from Performance', {
-            first_name: firstName,
-            last_name: lastName,
+            original_name: fullName,
+            cleaned_name: cleanedName,
+            first_name: sanitizedFirstName,
+            last_name: sanitizedLastName,
             branch_id: branchId
         });
         
         // Generar email válido sin espacios ni caracteres especiales
-        const emailSafeFirstName = firstName.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const emailSafeLastName = lastName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const emailSafeFirstName = sanitizedFirstName.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const emailSafeLastName = sanitizedLastName.toLowerCase().replace(/[^a-z0-9]/g, '');
         const timestamp = Date.now(); // Para evitar duplicados
         const generatedEmail = `${emailSafeFirstName}.${emailSafeLastName}.${timestamp}@pending.local`;
         
         employee = await Employee.create({
-            first_name: firstName,
-            last_name: lastName,
+            first_name: sanitizedFirstName,
+            last_name: sanitizedLastName,
             email: generatedEmail,
             role: 'crew_member',
             status: 'pending',
@@ -188,9 +206,10 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
     
     if (job) {
         // Job existe → actualizar
-        // Si el job ya está 'synced' (aprobado anteriormente), mantenerlo así y no pedir aprobación nuevamente
-        const shouldKeepSynced = job.performance_status === 'synced';
-        const newPerformanceStatus = shouldKeepSynced ? 'synced' : (autoApprove ? 'synced' : 'pending_approval');
+        // IMPORTANTE: Si autoApprove es false, siempre debe estar en pending_approval
+        // porque significa que hay nuevos shifts que requieren aprobación
+        // Solo mantener 'synced' si autoApprove es true (todos los shifts se aprueban automáticamente)
+        const newPerformanceStatus = autoApprove ? 'synced' : 'pending_approval';
         
         // IMPORTANTE: Preservar closing_date existente si el nuevo valor es null o es la fecha de hoy (probablemente placeholder)
         // Solo actualizar closing_date si viene una fecha real del spreadsheet (finish_date)
@@ -237,7 +256,8 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
             new_closing_date: closingDateToUse,
             old_performance_status: job.performance_status,
             new_performance_status: newPerformanceStatus,
-            kept_synced: shouldKeepSynced
+            autoApprove,
+            status_changed: job.performance_status !== newPerformanceStatus
         });
         
         await job.update({
@@ -245,7 +265,7 @@ async function saveOrUpdateJob(jobData, autoApprove = false) {
             sold_price,
             crew_leader_id,
             attic_tech_hours: attic_tech_hours || job.attic_tech_hours, // Mantener el existente si no viene nuevo
-            performance_status: newPerformanceStatus // Mantener 'synced' si ya estaba aprobado
+            performance_status: newPerformanceStatus // Si autoApprove es false, siempre pending_approval
         });
     } else {
         // Job no existe → crear nuevo
@@ -819,6 +839,19 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 });
                 
                 const savedJob = await saveOrUpdateJob(jobData, autoApprove);
+                
+                // Verificar si hay shifts nuevos o pendientes para determinar si cambiar performance_status
+                const hasShifts = shifts.length > 0;
+                
+                // Si autoApprove es false Y hay shifts, el job debe estar en pending_approval
+                // incluso si ya estaba en synced (porque hay nuevos shifts pendientes)
+                if (!autoApprove && hasShifts && savedJob.performance_status === 'synced') {
+                    await savedJob.update({ performance_status: 'pending_approval' });
+                    logger.info('Changed job performance_status from synced to pending_approval (new shifts added)', {
+                        job_id: savedJob.id,
+                        job_name: jobName
+                    });
+                }
                 
                 if (savedJob.createdAt === savedJob.updatedAt) {
                     results.jobs_created++;
