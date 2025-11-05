@@ -978,6 +978,46 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                     });
                 }
                 
+                // Si autoApprove es true, todos los shifts ya fueron aprobados
+                // Verificar que todos los shifts estén aprobados y marcar como "In Payload"
+                if (autoApprove) {
+                    const Shift = require('../models/Shift');
+                    const JobSpecialShift = require('../models/JobSpecialShift');
+                    
+                    // Verificar que no haya shifts pendientes
+                    const pendingRegularShifts = await Shift.count({
+                        where: {
+                            job_id: savedJob.id,
+                            approved_shift: false
+                        }
+                    });
+                    
+                    const pendingSpecialShifts = await JobSpecialShift.count({
+                        where: {
+                            job_id: savedJob.id,
+                            approved_shift: false
+                        }
+                    });
+                    
+                    // Si todos los shifts están aprobados, marcar como "In Payload"
+                    if (pendingRegularShifts === 0 && pendingSpecialShifts === 0) {
+                        await savedJob.update({ in_payload: true });
+                        logger.info('✅ Job marked as "In Payload" after auto-approving all shifts', {
+                            job_id: savedJob.id,
+                            job_name: jobName,
+                            regular_shifts: pendingRegularShifts,
+                            special_shifts: pendingSpecialShifts
+                        });
+                    } else {
+                        logger.warn('⚠️ Not all shifts are approved, skipping "In Payload" marking', {
+                            job_id: savedJob.id,
+                            job_name: jobName,
+                            pending_regular_shifts: pendingRegularShifts,
+                            pending_special_shifts: pendingSpecialShifts
+                        });
+                    }
+                }
+                
                 results.jobs_processed++;
                 
             } catch (error) {

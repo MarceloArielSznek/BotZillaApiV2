@@ -2070,7 +2070,7 @@ class PerformanceController {
                             }
                         });
 
-                        // Si NO hay shifts pendientes, actualizar el job a "Closed Job"
+                        // Si NO hay shifts pendientes, actualizar el job a "Closed Job" y marcar como "In Payload"
                         if (pendingRegularShifts === 0 && pendingSpecialShifts === 0) {
                             // Obtener el ID del estado "Closed Job"
                             const closedJobStatus = await JobStatus.findOne({
@@ -2080,23 +2080,40 @@ class PerformanceController {
                             if (closedJobStatus) {
                                 const job = await Job.findByPk(jobId);
                                 
-                                // Solo actualizar si el job no está ya en "Closed Job"
-                                if (job && job.status_id !== closedJobStatus.id) {
-                                    await job.update({ 
-                                        status_id: closedJobStatus.id,
-                                        closing_date: job.closing_date || new Date(), // Mantener closing_date existente o asignar ahora
-                                        in_payload: true // Marcar como "In Payload" automáticamente
-                                    });
+                                if (job) {
+                                    const updateData = {};
+                                    let jobsUpdatedToClosed = false;
                                     
-                                    jobsUpdatedToClosedCount++;
+                                    // Si el job no está ya en "Closed Job", actualizar el status
+                                    if (job.status_id !== closedJobStatus.id) {
+                                        updateData.status_id = closedJobStatus.id;
+                                        updateData.closing_date = job.closing_date || new Date(); // Mantener closing_date existente o asignar ahora
+                                        jobsUpdatedToClosed = true;
+                                    }
                                     
-                                    logger.info(`✅ Job status updated to "Closed Job" and marked as "In Payload" after all shifts approved`, {
-                                        job_id: jobId,
-                                        job_name: job.name,
-                                        previous_status_id: job.status_id,
-                                        new_status_id: closedJobStatus.id,
-                                        in_payload: true
-                                    });
+                                    // IMPORTANTE: Siempre marcar como "In Payload" cuando todos los shifts están aprobados
+                                    // Incluso si el job ya estaba en "Closed Job"
+                                    if (!job.in_payload) {
+                                        updateData.in_payload = true;
+                                    }
+                                    
+                                    // Solo actualizar si hay cambios
+                                    if (Object.keys(updateData).length > 0) {
+                                        await job.update(updateData);
+                                        
+                                        if (jobsUpdatedToClosed) {
+                                            jobsUpdatedToClosedCount++;
+                                        }
+                                        
+                                        logger.info(`✅ Job marked as "In Payload" after all shifts approved`, {
+                                            job_id: jobId,
+                                            job_name: job.name,
+                                            status_changed: jobsUpdatedToClosed,
+                                            previous_status_id: job.status_id,
+                                            new_status_id: jobsUpdatedToClosed ? closedJobStatus.id : job.status_id,
+                                            in_payload: true
+                                        });
+                                    }
                                 }
                             }
                         }
