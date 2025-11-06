@@ -2451,10 +2451,13 @@ class AutomationsController {
                     }
 
                     if (roofNotificationType && !dbReport.roof_notification_sent) {
+                        // Determinar si es lead o opportunity basado en el tipo de notificación
+                        const isLead = roofNotificationType.includes('Inspection Request');
                         notificationResults.push({
                             ...baseNotificationPayload,
                             service_type: 'Roofing',
-                            notification_type: roofNotificationType
+                            notification_type: roofNotificationType,
+                            lead_or_opportunity: isLead ? 'lead' : 'opportunity'
                         });
                         dbReport.roof_notification_sent = true;
                         changesMade = true;
@@ -2476,10 +2479,13 @@ class AutomationsController {
                     }
                     
                     if (hvacNotificationType && !dbReport.hvac_notification_sent) {
+                        // Determinar si es lead o opportunity basado en el tipo de notificación
+                        const isLead = hvacNotificationType.includes('Inspection Request');
                         notificationResults.push({
                             ...baseNotificationPayload,
                             service_type: 'HVAC',
-                            notification_type: hvacNotificationType
+                            notification_type: hvacNotificationType,
+                            lead_or_opportunity: isLead ? 'lead' : 'opportunity'
                         });
                         dbReport.hvac_notification_sent = true;
                         changesMade = true;
