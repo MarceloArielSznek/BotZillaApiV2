@@ -51,10 +51,12 @@ async function fetchJobsFromAtticTech(apiKey, fromDate) {
             depth: 3, // Aumentado para traer más relaciones
             limit: 1000, // Ajustar según necesidad
             // Filtrar por updatedAt >= HOY (solo jobs actualizados hoy)
-            'where[updatedAt][greater_than_equal]': fromDate
+            'where[updatedAt][greater_than_equal]': fromDate,
+            // IMPORTANTE: Excluir jobs con status "Closed Job" - estos solo se manejan desde Performance
+            'where[status][not_equals]': 'Closed Job'
         };
 
-        logger.info(`📡 Fetching jobs from Attic Tech desde: ${fromDate}`);
+        logger.info(`📡 Fetching jobs from Attic Tech desde: ${fromDate} (excluyendo "Closed Job")`);
 
         const response = await axios.get(url, {
             headers: {
@@ -65,9 +67,13 @@ async function fetchJobsFromAtticTech(apiKey, fromDate) {
         });
 
         const jobs = response.data?.docs || [];
-        logger.info(`✅ Se obtuvieron ${jobs.length} jobs desde AT`);
         
-        return jobs;
+        // Filtro adicional por si acaso (defensa en profundidad)
+        const filteredJobs = jobs.filter(job => job.status !== 'Closed Job');
+        
+        logger.info(`✅ Se obtuvieron ${jobs.length} jobs desde AT, ${filteredJobs.length} después de filtrar "Closed Job"`);
+        
+        return filteredJobs;
     } catch (error) {
         logger.error('❌ Error fetching jobs from Attic Tech', { error: error.message });
         throw error;
@@ -465,24 +471,12 @@ async function saveJobsToDb(jobsFromAT) {
             const estimate = await findEstimateInOurDb(atJob.job_estimate?.id);
 
             // Determinar el status_id a usar
-            // Si el job ya existe y está en "Closed Job" o "pending_approval", NO sobrescribir el status
-            // porque significa que todos los shifts ya fueron aprobados o están esperando aprobación
+            // Si el job está en "pending_approval", preservar el status y performance_status
             let statusIdToUse = status?.id || null;
             let shouldPreserveStatus = false;
             
             if (existingJob) {
-                const closedJobStatus = await JobStatus.findOne({
-                    where: { name: 'Closed Job' }
-                });
-                
-                // 1. Si el job está en "Closed Job", preservar ese estado
-                if (closedJobStatus && existingJob.status_id === closedJobStatus.id) {
-                    statusIdToUse = existingJob.status_id; // Mantener "Closed Job"
-                    shouldPreserveStatus = true;
-                    logger.info(`🔒 Job "${atJob.name}" está en "Closed Job" (shifts aprobados). Status preservado, NO sobrescrito por sync.`);
-                }
-                
-                // 2. Si el job está en "pending_approval", preservar el status y performance_status
+                // Si el job está en "pending_approval", preservar el status y performance_status
                 if (existingJob.performance_status === 'pending_approval') {
                     statusIdToUse = existingJob.status_id; // Mantener status actual
                     shouldPreserveStatus = true;
@@ -501,7 +495,7 @@ async function saveJobsToDb(jobsFromAT) {
                 last_synced_at: new Date()
             };
             
-            // Si el job está protegido (pending_approval o Closed Job), preservar performance_status
+            // Si el job está protegido (pending_approval), preservar performance_status
             if (shouldPreserveStatus && existingJob) {
                 jobData.performance_status = existingJob.performance_status;
             }
