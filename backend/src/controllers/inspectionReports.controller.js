@@ -41,21 +41,20 @@ const getStatus = (report) => {
 };
 
 // Helper function to determine the service type (Roofing, HVAC, Both)
-// IMPORTANTE: Si hay interés explícito, tiene prioridad sobre condición de reemplazo
+// IMPORTANTE: Solo considera servicios con interés explícito (leads), NO oportunidades
+// El service_type debe reflejar solo los servicios donde el cliente expresó interés explícito
 const getServiceType = (report) => {
-  // Para Roofing: interés explícito tiene prioridad sobre condición
-  const hasRoofing = report.full_roof_inspection_interest === true || 
-                     (report.full_roof_inspection_interest !== true && report.roof_condition === 'needs_replacement');
+  // Solo considerar Roofing si hay interés explícito (lead)
+  const hasRoofingLead = report.full_roof_inspection_interest === true;
   
-  // Para HVAC: interés explícito tiene prioridad sobre condición
-  const hasHVAC = report.full_hvac_furnace_inspection_interest === true || 
-                  (report.full_hvac_furnace_inspection_interest !== true && report.system_condition === 'needs_replacement');
+  // Solo considerar HVAC si hay interés explícito (lead)
+  const hasHVACLead = report.full_hvac_furnace_inspection_interest === true;
   
-  if (hasRoofing && hasHVAC) {
+  if (hasRoofingLead && hasHVACLead) {
     return 'Both';
-  } else if (hasRoofing) {
+  } else if (hasRoofingLead) {
     return 'Roofing';
-  } else if (hasHVAC) {
+  } else if (hasHVACLead) {
     return 'HVAC';
   }
   return '-';
