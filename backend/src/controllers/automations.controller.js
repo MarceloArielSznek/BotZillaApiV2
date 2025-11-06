@@ -2437,11 +2437,16 @@ class AutomationsController {
                     let changesMade = false;
                     
                     // --- Evaluar ROOFING de forma independiente ---
+                    // IMPORTANTE: Si hay interés explícito en inspección, NO generar también "Potential Lead"
+                    // El interés explícito tiene prioridad y ya indica que es un lead confirmado
                     let roofNotificationType = null;
                     const hasRoofInterest = parseBoolean(report.roofInspectionInterest);
+                    
                     if (hasRoofInterest) {
+                        // Cliente expresó interés explícito → Lead confirmado, no necesita "Potential Lead"
                         roofNotificationType = 'New Roofing Inspection Request';
                     } else if (report.roofCondition && ['needs_replacement'].includes(report.roofCondition)) {
+                        // Solo si NO hay interés explícito, evaluar condición de reemplazo
                         roofNotificationType = 'New Roofing Potential Lead';
                     }
 
@@ -2457,11 +2462,16 @@ class AutomationsController {
                     }
 
                     // --- Evaluar HVAC de forma independiente ---
+                    // IMPORTANTE: Si hay interés explícito en inspección, NO generar también "Potential Lead"
+                    // El interés explícito tiene prioridad y ya indica que es un lead confirmado
                     let hvacNotificationType = null;
                     const hasHvacInterest = parseBoolean(report.hvacInspectionInterest);
+                    
                     if (hasHvacInterest) {
+                        // Cliente expresó interés explícito → Lead confirmado, no necesita "Potential Lead"
                         hvacNotificationType = 'New HVAC Inspection Request';
                     } else if (report.hvacSystemCondition && ['needs_replacement'].includes(report.hvacSystemCondition)) {
+                        // Solo si NO hay interés explícito, evaluar condición de reemplazo
                         hvacNotificationType = 'New HVAC Potential Lead';
                     }
                     

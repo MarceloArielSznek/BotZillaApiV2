@@ -9,32 +9,47 @@ const isLead = (report) => {
 };
 
 // Helper function to determine if a report is an opportunity
+// IMPORTANTE: Si hay interés explícito (lead), NO se considera opportunity
+// Solo se considera opportunity si NO hay interés pero SÍ hay condición de reemplazo
 const isOpportunity = (report) => {
-  return report.roof_condition === 'needs_replacement' || 
-         report.system_condition === 'needs_replacement';
+  // Si hay interés explícito en Roofing, NO considerar condición de reemplazo como opportunity
+  const hasRoofInterest = report.full_roof_inspection_interest === true;
+  const hasRoofReplacement = report.roof_condition === 'needs_replacement';
+  const roofIsOpportunity = !hasRoofInterest && hasRoofReplacement;
+  
+  // Si hay interés explícito en HVAC, NO considerar condición de reemplazo como opportunity
+  const hasHvacInterest = report.full_hvac_furnace_inspection_interest === true;
+  const hasHvacReplacement = report.system_condition === 'needs_replacement';
+  const hvacIsOpportunity = !hasHvacInterest && hasHvacReplacement;
+  
+  return roofIsOpportunity || hvacIsOpportunity;
 };
 
 // Helper function to determine the status (Lead, Opportunity, Both, or Report)
+// IMPORTANTE: Si hay interés explícito, tiene prioridad sobre opportunity
 const getStatus = (report) => {
   const isLeadReport = isLead(report);
   const isOppReport = isOpportunity(report);
   
-  if (isLeadReport && isOppReport) {
-    return 'Lead & Opportunity';
+  // Si es lead, siempre mostrar solo como Lead (no Lead & Opportunity)
+  if (isLeadReport) {
+    return 'Lead';
   } else if (isOppReport) {
     return 'Opportunity';
-  } else if (isLeadReport) {
-    return 'Lead';
   }
   return 'Report';
 };
 
 // Helper function to determine the service type (Roofing, HVAC, Both)
+// IMPORTANTE: Si hay interés explícito, tiene prioridad sobre condición de reemplazo
 const getServiceType = (report) => {
+  // Para Roofing: interés explícito tiene prioridad sobre condición
   const hasRoofing = report.full_roof_inspection_interest === true || 
-                     report.roof_condition === 'needs_replacement';
+                     (report.full_roof_inspection_interest !== true && report.roof_condition === 'needs_replacement');
+  
+  // Para HVAC: interés explícito tiene prioridad sobre condición
   const hasHVAC = report.full_hvac_furnace_inspection_interest === true || 
-                  report.system_condition === 'needs_replacement';
+                  (report.full_hvac_furnace_inspection_interest !== true && report.system_condition === 'needs_replacement');
   
   if (hasRoofing && hasHVAC) {
     return 'Both';
