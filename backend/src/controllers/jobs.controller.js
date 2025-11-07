@@ -5,6 +5,324 @@ const { Op, Transaction } = require('sequelize');
 const sequelize = require('../config/database');
 const { calculateJobPerformance, calculateJobPerformanceFromObject } = require('../services/performance.service');
 const jobCreationService = require('../services/jobCreationService');
+const axios = require('axios');
+
+/**
+ * Helper function to check if a job is overrun and send automatic alert
+ * @param {number} jobId - ID del job
+ * @param {boolean} forceSend - Si es true, envía aunque ya se haya enviado antes
+ * @returns {Promise<{sent: boolean, isOverrun: boolean, error?: string}>}
+ */
+async function sendAutomaticOverrunAlert(jobId, forceSend = false) {
+    try {
+        const job = await Job.findByPk(jobId, {
+            include: [
+                {
+                    model: Estimate,
+                    as: 'estimate',
+                    attributes: ['id', 'name', 'attic_tech_hours'],
+                    include: [{
+                        model: SalesPerson,
+                        as: 'salesperson',
+                        attributes: ['id', 'name']
+                    }]
+                },
+                {
+                    model: Branch,
+                    as: 'branch',
+                    attributes: ['id', 'name']
+                },
+                {
+                    model: Employee,
+                    as: 'crewLeader',
+                    attributes: ['id', 'first_name', 'last_name', 'email']
+                },
+                {
+                    model: Shift,
+                    as: 'shifts',
+                    attributes: ['crew_member_id', 'job_id', 'hours', 'approved_shift'],
+                    required: false
+                },
+                {
+                    model: JobSpecialShift,
+                    as: 'jobSpecialShifts',
+                    attributes: ['special_shift_id', 'hours', 'approved_shift'],
+                    required: false
+                }
+            ]
+        });
+
+        if (!job) {
+            logger.warn('Job not found for automatic overrun alert', { job_id: jobId });
+            return { sent: false, isOverrun: false, error: 'Job not found' };
+        }
+
+        // Calcular horas trabajadas
+        const shifts = job.shifts || [];
+        const specialShifts = job.jobSpecialShifts || [];
+        const regularHours = shifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+        const specialHours = specialShifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+        const totalWorkedHours = regularHours + specialHours;
+
+        // AT estimated hours
+        const atEstimatedHours = parseFloat(job.attic_tech_hours || job.estimate?.attic_tech_hours || 0);
+
+        // Verificar si es overrun
+        const isOverrun = totalWorkedHours > atEstimatedHours && atEstimatedHours > 0;
+
+        if (!isOverrun) {
+            logger.info('Job is not overrun, skipping automatic alert', {
+                job_id: jobId,
+                job_name: job.name,
+                total_worked_hours: totalWorkedHours,
+                at_estimated_hours: atEstimatedHours
+            });
+            return { sent: false, isOverrun: false };
+        }
+
+        // Verificar si ya se envió la notificación automática (a menos que sea forceSend)
+        if (!forceSend && job.overrun_alert_sent) {
+            logger.info('Automatic overrun alert already sent for this job', {
+                job_id: jobId,
+                job_name: job.name
+            });
+            return { sent: false, isOverrun: true, alreadySent: true };
+        }
+
+        // Preparar payload para Make.com (formato que espera Make.com)
+        const clEstimatedHours = parseFloat(job.cl_estimated_plan_hours || 0);
+        const hoursSaved = atEstimatedHours - totalWorkedHours;
+
+        const payload = {
+            job_id: job.id,
+            branch: job.branch?.name || 'N/A',
+            job_name: job.name,
+            sales_person: job.estimate?.salesperson?.name || 'N/A', // Usar sales_person para coincidir con Make.com
+            crew_leader: job.crewLeader ? `${job.crewLeader.first_name} ${job.crewLeader.last_name}` : 'N/A',
+            closing_date: job.closing_date ? new Date(job.closing_date).toLocaleDateString('en-US') : 'N/A', // Usar closing_date para coincidir con Make.com
+            at_estimated_hours: parseFloat(atEstimatedHours.toFixed(2)),
+            total_hours_worked: parseFloat(totalWorkedHours.toFixed(2)),
+            hours_saved: parseFloat(hoursSaved.toFixed(2))
+        };
+
+        // Enviar a Make.com webhook
+        const webhookUrl = process.env.MAKE_OVERRUN_ALERT_WEBHOOK_URL;
+
+        if (!webhookUrl) {
+            logger.error('MAKE_OVERRUN_ALERT_WEBHOOK_URL is not configured');
+            return { sent: false, isOverrun: true, error: 'Webhook URL not configured' };
+        }
+
+        await axios.post(webhookUrl, payload);
+
+        // Marcar como enviado solo si no es forceSend (forceSend es para envíos manuales)
+        if (!forceSend) {
+            await job.update({ overrun_alert_sent: true });
+        }
+
+        logger.info('Automatic overrun alert sent successfully', {
+            job_id: jobId,
+            job_name: job.name,
+            hours_saved: hoursSaved,
+            force_send: forceSend
+        });
+
+        return { sent: true, isOverrun: true, payload };
+
+    } catch (error) {
+        logger.error('Error sending automatic overrun alert', {
+            error: error.message,
+            stack: error.stack,
+            job_id: jobId
+        });
+        return { sent: false, isOverrun: false, error: error.message };
+    }
+}
+
+/**
+ * Helper function to send automatic overrun alerts for multiple jobs in batch
+ * Envía todos los jobs overrun en un solo array al webhook de Make.com
+ * @param {number[]} jobIds - Array de IDs de jobs a verificar
+ * @param {boolean} forceSend - Si es true, envía aunque ya se haya enviado antes
+ * @returns {Promise<{sent: number, total: number, jobs: Array}>}
+ */
+async function sendBulkAutomaticOverrunAlerts(jobIds, forceSend = false) {
+    const results = {
+        sent: 0,
+        total: jobIds.length,
+        jobs: [],
+        errors: []
+    };
+
+    if (!jobIds || jobIds.length === 0) {
+        return results;
+    }
+
+    try {
+        // Obtener todos los jobs con sus relaciones
+        const jobs = await Job.findAll({
+            where: { id: jobIds },
+            include: [
+                {
+                    model: Estimate,
+                    as: 'estimate',
+                    attributes: ['id', 'name', 'attic_tech_hours'],
+                    include: [{
+                        model: SalesPerson,
+                        as: 'salesperson',
+                        attributes: ['id', 'name']
+                    }]
+                },
+                {
+                    model: Branch,
+                    as: 'branch',
+                    attributes: ['id', 'name']
+                },
+                {
+                    model: Employee,
+                    as: 'crewLeader',
+                    attributes: ['id', 'first_name', 'last_name', 'email']
+                },
+                {
+                    model: Shift,
+                    as: 'shifts',
+                    attributes: ['crew_member_id', 'job_id', 'hours', 'approved_shift'],
+                    required: false
+                },
+                {
+                    model: JobSpecialShift,
+                    as: 'jobSpecialShifts',
+                    attributes: ['special_shift_id', 'hours', 'approved_shift'],
+                    required: false
+                }
+            ]
+        });
+
+        const overrunJobs = [];
+
+        logger.info(`Starting bulk overrun alert check for ${jobs.length} jobs`, {
+            job_ids: jobs.map(j => j.id),
+            job_names: jobs.map(j => j.name)
+        });
+
+        // Procesar cada job y determinar si es overrun
+        for (const job of jobs) {
+            try {
+                // Calcular horas trabajadas
+                const shifts = job.shifts || [];
+                const specialShifts = job.jobSpecialShifts || [];
+                const regularHours = shifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+                const specialHours = specialShifts.reduce((acc, s) => acc + parseFloat(s.hours || 0), 0);
+                const totalWorkedHours = regularHours + specialHours;
+
+                // AT estimated hours
+                const atEstimatedHours = parseFloat(job.attic_tech_hours || job.estimate?.attic_tech_hours || 0);
+
+                // Verificar si es overrun
+                const isOverrun = totalWorkedHours > atEstimatedHours && atEstimatedHours > 0;
+
+                logger.info(`Checking job for overrun status`, {
+                    job_id: job.id,
+                    job_name: job.name,
+                    total_worked_hours: totalWorkedHours,
+                    at_estimated_hours: atEstimatedHours,
+                    is_overrun: isOverrun,
+                    overrun_alert_sent: job.overrun_alert_sent,
+                    force_send: forceSend
+                });
+
+                if (!isOverrun) {
+                    logger.info(`Job is not overrun, skipping`, {
+                        job_id: job.id,
+                        job_name: job.name
+                    });
+                    continue; // Saltar jobs que no son overrun
+                }
+
+                // Verificar si ya se envió la notificación automática (a menos que sea forceSend)
+                if (!forceSend && job.overrun_alert_sent) {
+                    logger.info('Automatic overrun alert already sent for this job, skipping', {
+                        job_id: job.id,
+                        job_name: job.name
+                    });
+                    continue; // Saltar jobs que ya tienen alert enviado
+                }
+
+                // Preparar payload para Make.com (formato que espera Make.com)
+                const clEstimatedHours = parseFloat(job.cl_estimated_plan_hours || 0);
+                const hoursSaved = atEstimatedHours - totalWorkedHours;
+
+                const payload = {
+                    job_id: job.id,
+                    branch: job.branch?.name || 'N/A',
+                    job_name: job.name,
+                    sales_person: job.estimate?.salesperson?.name || 'N/A', // Usar sales_person para coincidir con Make.com
+                    crew_leader: job.crewLeader ? `${job.crewLeader.first_name} ${job.crewLeader.last_name}` : 'N/A',
+                    closing_date: job.closing_date ? new Date(job.closing_date).toLocaleDateString('en-US') : 'N/A', // Usar closing_date para coincidir con Make.com
+                    at_estimated_hours: parseFloat(atEstimatedHours.toFixed(2)),
+                    total_hours_worked: parseFloat(totalWorkedHours.toFixed(2)),
+                    hours_saved: parseFloat(hoursSaved.toFixed(2))
+                };
+
+                overrunJobs.push(payload);
+                results.jobs.push({ job_id: job.id, job_name: job.name });
+
+            } catch (error) {
+                logger.error('Error processing job for overrun alert', {
+                    job_id: job.id,
+                    error: error.message
+                });
+                results.errors.push({ job_id: job.id, error: error.message });
+            }
+        }
+
+        // Si hay jobs overrun, enviarlos todos juntos en un array
+        if (overrunJobs.length > 0) {
+            const webhookUrl = process.env.MAKE_OVERRUN_ALERT_WEBHOOK_URL;
+
+            if (!webhookUrl) {
+                logger.error('MAKE_OVERRUN_ALERT_WEBHOOK_URL is not configured');
+                results.errors.push({ error: 'Webhook URL not configured' });
+                return results;
+            }
+
+            // Enviar array de jobs al webhook (formato que espera Make.com)
+            await axios.post(webhookUrl, { jobs: overrunJobs });
+
+            // Marcar como enviado solo si no es forceSend
+            if (!forceSend) {
+                const jobIdsToUpdate = overrunJobs.map(j => j.job_id);
+                await Job.update(
+                    { overrun_alert_sent: true },
+                    { where: { id: jobIdsToUpdate } }
+                );
+            }
+
+            results.sent = overrunJobs.length;
+
+            logger.info('Bulk automatic overrun alerts sent successfully', {
+                jobs_sent: overrunJobs.length,
+                total_jobs_checked: jobIds.length,
+                job_ids: overrunJobs.map(j => j.job_id)
+            });
+        } else {
+            logger.info('No overrun jobs found to send automatic alerts', {
+                total_jobs_checked: jobIds.length
+            });
+        }
+
+        return results;
+
+    } catch (error) {
+        logger.error('Error sending bulk automatic overrun alerts', {
+            error: error.message,
+            stack: error.stack,
+            job_ids: jobIds
+        });
+        results.errors.push({ error: error.message });
+        return results;
+    }
+}
 
 class JobsController {
     async getAllJobs(req, res) {
@@ -762,7 +1080,8 @@ class JobsController {
                     'attic_tech_hours', 'cl_estimated_plan_hours',
                     'branch_id', 'crew_leader_id', 'status_id', 'estimate_id',
                     'overrun_report_id', // Agregado para saber si ya tiene reporte
-                    'operation_post_id' // Agregado para saber si ya tiene operation post
+                    'operation_post_id', // Agregado para saber si ya tiene operation post
+                    'overrun_alert_sent' // Agregado para saber si ya se envió alert automático
                 ],
                 include: [
                     {
@@ -861,6 +1180,7 @@ class JobsController {
                         report: job.overrunReport.report,
                         created_at: job.overrunReport.created_at
                     } : null,
+                    overrun_alert_sent: job.overrun_alert_sent || false, // Indicar si ya se envió alert automático
                     operation_post_id: job.operation_post_id,
                     operation_post: job.operationPost ? {
                         id: job.operationPost.id,
@@ -907,4 +1227,8 @@ class JobsController {
 
 }
 
-module.exports = new JobsController(); 
+module.exports = {
+    JobsController, // Exportar la clase, no una instancia
+    sendAutomaticOverrunAlert, // Función individual (mantener para compatibilidad)
+    sendBulkAutomaticOverrunAlerts // Función para enviar múltiples jobs en batch
+}; 

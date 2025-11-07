@@ -6,6 +6,7 @@ const builderTrendParserService = require('../services/builderTrendParser.servic
 const { getMatchingStats } = require('../utils/jobMatcher');
 const { aggregateShiftsByCrewAndJob } = require('../utils/timeConverter');
 const { v4: uuidv4 } = require('uuid');
+const { sendBulkAutomaticOverrunAlerts } = require('./jobs.controller');
 
 /**
  * Mapeo de nombres de branches: Base de Datos → Google Spreadsheet
@@ -2051,6 +2052,7 @@ class PerformanceController {
                 // =====================================================
                 let jobsUpdatedToClosedCount = 0;
                 const JobStatus = require('../models/JobStatus');
+                const closedJobsForOverrunAlert = []; // Acumular jobs cerrados para enviar alert en batch
                 
                 for (const jobId of job_ids) {
                     try {
@@ -2113,6 +2115,12 @@ class PerformanceController {
                                             new_status_id: jobsUpdatedToClosed ? closedJobStatus.id : job.status_id,
                                             in_payload: true
                                         });
+                                        
+                                        // Acumular job para enviar alert en batch al final
+                                        closedJobsForOverrunAlert.push(jobId);
+                                    } else {
+                                        // Si no hubo cambios pero el job ya está cerrado, también verificar overrun
+                                        closedJobsForOverrunAlert.push(jobId);
                                     }
                                 }
                             }
@@ -2123,6 +2131,30 @@ class PerformanceController {
                             job_id: jobId
                         });
                         // No lanzar error, continuar con otros jobs
+                    }
+                }
+                
+                // Enviar alert automático de overrun en batch para todos los jobs cerrados
+                if (closedJobsForOverrunAlert.length > 0) {
+                    try {
+                        const alertResult = await sendBulkAutomaticOverrunAlerts(closedJobsForOverrunAlert);
+                        if (alertResult.sent > 0) {
+                            logger.info(`✅ Automatic overrun alerts sent in batch`, {
+                                jobs_sent: alertResult.sent,
+                                total_jobs_checked: alertResult.total,
+                                job_ids: alertResult.jobs.map(j => j.job_id)
+                            });
+                        } else {
+                            logger.info(`ℹ️  No overrun jobs found to send automatic alerts`, {
+                                total_jobs_checked: alertResult.total
+                            });
+                        }
+                    } catch (alertError) {
+                        // No fallar la aprobación si el alert falla
+                        logger.error(`Error sending bulk automatic overrun alerts`, {
+                            error: alertError.message,
+                            job_ids: closedJobsForOverrunAlert
+                        });
                     }
                 }
                 

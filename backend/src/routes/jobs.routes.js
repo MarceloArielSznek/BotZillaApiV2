@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const jobsController = require('../controllers/jobs.controller');
+const { JobsController } = require('../controllers/jobs.controller');
+const jobsController = new JobsController();
 const authMiddleware = require('../middleware/auth.middleware');
 const apiKeyMiddleware = require('../middleware/apiKey.middleware');
 

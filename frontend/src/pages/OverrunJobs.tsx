@@ -63,6 +63,7 @@ const OverrunJobs: React.FC = () => {
   const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
   const [showOnlyWithoutReport, setShowOnlyWithoutReport] = useState(false);
   
   // Selection state for bulk operations
@@ -162,8 +163,65 @@ const OverrunJobs: React.FC = () => {
     setSelectedBranch('');
     setStartDate('');
     setEndDate('');
+    setSelectedMonth('');
     setShowOnlyWithoutReport(false);
     setPage(0);
+  };
+
+  const handleMonthChange = (monthYear: string) => {
+    setSelectedMonth(monthYear);
+    
+    if (monthYear) {
+      // Formato esperado: "YYYY-MM" (ej: "2025-11")
+      const [year, month] = monthYear.split('-');
+      const yearNum = parseInt(year);
+      const monthNum = parseInt(month);
+      
+      // Primer día del mes
+      const firstDay = new Date(yearNum, monthNum - 1, 1);
+      const startDateStr = firstDay.toISOString().split('T')[0];
+      
+      // Último día del mes
+      const lastDay = new Date(yearNum, monthNum, 0);
+      const endDateStr = lastDay.toISOString().split('T')[0];
+      
+      setStartDate(startDateStr);
+      setEndDate(endDateStr);
+    } else {
+      // Si se limpia el mes, también limpiar las fechas
+      setStartDate('');
+      setEndDate('');
+    }
+  };
+
+  // Generar opciones de mes/año (últimos 12 meses + próximos 2 meses)
+  const getMonthYearOptions = () => {
+    const options: string[] = [];
+    const today = new Date();
+    
+    // Agregar últimos 12 meses
+    for (let i = 12; i >= 0; i--) {
+      const date = new Date(today.getFullYear(), today.getMonth() - i, 1);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      options.push(`${year}-${month}`);
+    }
+    
+    // Agregar próximos 2 meses
+    for (let i = 1; i <= 2; i++) {
+      const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      options.push(`${year}-${month}`);
+    }
+    
+    return options;
+  };
+
+  const formatMonthYearLabel = (monthYear: string) => {
+    const [year, month] = monthYear.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+    return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   };
 
   const handleSelectJob = (jobId: number) => {
@@ -301,7 +359,11 @@ const OverrunJobs: React.FC = () => {
         throw new Error('Failed to send job to Make.com');
       }
 
-      enqueueSnackbar(`Overrun alert sent for "${jobName}"`, { variant: 'success' });
+      const alertMessage = job.overrun_alert_sent 
+        ? `Additional overrun alert sent for "${jobName}" (1 automatic alert was already sent)`
+        : `Overrun alert sent for "${jobName}"`;
+      
+      enqueueSnackbar(alertMessage, { variant: 'success' });
       // Recargar jobs para actualizar el estado del botón
       loadOverrunJobs();
     } catch (error: any) {
@@ -481,11 +543,33 @@ const OverrunJobs: React.FC = () => {
             </Select>
           </FormControl>
 
+          <FormControl size="small" sx={{ minWidth: 200 }}>
+            <InputLabel>Select Month</InputLabel>
+            <Select
+              value={selectedMonth}
+              onChange={(e) => handleMonthChange(e.target.value)}
+              label="Select Month"
+            >
+              <MenuItem value="">All Months</MenuItem>
+              {getMonthYearOptions().map((monthYear) => (
+                <MenuItem key={monthYear} value={monthYear}>
+                  {formatMonthYearLabel(monthYear)}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+
           <TextField
             label="From Date"
             type="date"
             value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
+            onChange={(e) => {
+              setStartDate(e.target.value);
+              // Si se cambia manualmente la fecha, limpiar el selector de mes
+              if (selectedMonth) {
+                setSelectedMonth('');
+              }
+            }}
             size="small"
             InputLabelProps={{ shrink: true }}
           />
@@ -494,7 +578,13 @@ const OverrunJobs: React.FC = () => {
             label="To Date"
             type="date"
             value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
+            onChange={(e) => {
+              setEndDate(e.target.value);
+              // Si se cambia manualmente la fecha, limpiar el selector de mes
+              if (selectedMonth) {
+                setSelectedMonth('');
+              }
+            }}
             size="small"
             InputLabelProps={{ shrink: true }}
           />
@@ -673,21 +763,38 @@ const OverrunJobs: React.FC = () => {
                     <TableCell align="center">
                       {currentTab === 0 ? (
                         // Overrun Jobs tab - send alert
-                        <Tooltip title={job.overrun_report ? "Report already generated" : "Send Overrun Alert"}>
-                          <span>
-                            <IconButton
-                              color="error"
-                              size="small"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleSendAlert(job.id, job.name);
-                              }}
-                              disabled={!!job.overrun_report}
-                            >
-                              <SendIcon />
-                            </IconButton>
-                          </span>
-                        </Tooltip>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          {job.overrun_alert_sent && (
+                            <Chip 
+                              label="Alert Sent" 
+                              size="small" 
+                              color="success" 
+                              variant="outlined"
+                              sx={{ fontSize: '0.7rem', height: '20px' }}
+                            />
+                          )}
+                          <Tooltip title={
+                            job.overrun_report 
+                              ? "Report already generated" 
+                              : job.overrun_alert_sent 
+                                ? "Send another alert (1 automatic alert already sent)" 
+                                : "Send Overrun Alert"
+                          }>
+                            <span>
+                              <IconButton
+                                color="error"
+                                size="small"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendAlert(job.id, job.name);
+                                }}
+                                disabled={!!job.overrun_report}
+                              >
+                                <SendIcon />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Box>
                       ) : (
                         // Operation Command tab - generate post
                         <Tooltip title="Generate Operation Post">

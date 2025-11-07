@@ -1,6 +1,7 @@
 const { Shift, Job, CrewMember, Branch, Estimate, JobSpecialShift, SpecialShift, JobStatus } = require('../models');
 const { Op } = require('sequelize');
 const { logger } = require('../utils/logger');
+const { sendBulkAutomaticOverrunAlerts } = require('./jobs.controller');
 
 /**
  * Obtener todos los shifts pendientes de aprobación
@@ -235,8 +236,16 @@ const approveShifts = async (req, res) => {
             specialShifts.forEach(shift => affectedJobIds.add(shift.job_id));
         }
 
+        logger.info(`Processing shifts approval for ${affectedJobIds.size} unique jobs`, {
+            affected_job_ids: Array.from(affectedJobIds),
+            regular_shifts_count: shifts?.length || 0,
+            special_shifts_count: specialShifts?.length || 0
+        });
+
         // Para cada job, verificar si TODOS los shifts están aprobados y actualizar el estado
         let jobsUpdatedToClosedCount = 0;
+        const closedJobsForOverrunAlert = []; // Acumular jobs cerrados para enviar alert en batch
+        
         for (const jobId of affectedJobIds) {
             try {
                 // Contar shifts regulares pendientes
@@ -265,25 +274,44 @@ const approveShifts = async (req, res) => {
                     if (closedJobStatus) {
                         const job = await Job.findByPk(jobId);
                         
-                        // Solo actualizar si el job no está ya en "Closed Job"
-                        if (job && job.status_id !== closedJobStatus.id) {
-                            await job.update({ 
-                                status_id: closedJobStatus.id,
-                                closing_date: job.closing_date || new Date(), // Mantener closing_date existente o asignar ahora
-                                in_payload: true // Marcar como "In Payload" automáticamente
-                            });
+                        if (job) {
+                            // Solo actualizar si el job no está ya en "Closed Job"
+                            if (job.status_id !== closedJobStatus.id) {
+                                await job.update({ 
+                                    status_id: closedJobStatus.id,
+                                    closing_date: job.closing_date || new Date(), // Mantener closing_date existente o asignar ahora
+                                    in_payload: true // Marcar como "In Payload" automáticamente
+                                });
+                                
+                                jobsUpdatedToClosedCount++;
+                                
+                                logger.info(`Job status updated to "Closed Job" and marked as "In Payload" after all shifts approved`, {
+                                    job_id: jobId,
+                                    job_name: job.name,
+                                    previous_status_id: job.status_id,
+                                    new_status_id: closedJobStatus.id,
+                                    in_payload: true
+                                });
+                            }
                             
-                            jobsUpdatedToClosedCount++;
-                            
-                            logger.info(`Job status updated to "Closed Job" and marked as "In Payload" after all shifts approved`, {
+                            // IMPORTANTE: Agregar TODOS los jobs que tienen todos los shifts aprobados
+                            // (tanto si se actualizó el status como si ya estaba en "Closed Job")
+                            // para verificar overrun en batch
+                            closedJobsForOverrunAlert.push(jobId);
+                            logger.info(`Job added to overrun alert batch check`, {
                                 job_id: jobId,
                                 job_name: job.name,
-                                previous_status_id: job.status_id,
-                                new_status_id: closedJobStatus.id,
-                                in_payload: true
+                                was_already_closed: job.status_id === closedJobStatus.id
                             });
                         }
                     }
+                } else {
+                    // Log para debug: job que aún tiene shifts pendientes
+                    logger.info(`Job still has pending shifts, not adding to overrun alert batch`, {
+                        job_id: jobId,
+                        pending_regular_shifts: pendingRegularShifts,
+                        pending_special_shifts: pendingSpecialShifts
+                    });
                 }
             } catch (error) {
                 logger.error(`Error updating job status for job_id ${jobId}:`, {
@@ -292,6 +320,40 @@ const approveShifts = async (req, res) => {
                 });
                 // No lanzar error, continuar con otros jobs
             }
+        }
+        
+        // Enviar alert automático de overrun en batch para todos los jobs cerrados
+        if (closedJobsForOverrunAlert.length > 0) {
+            logger.info(`Preparing to send bulk overrun alerts`, {
+                total_jobs_to_check: closedJobsForOverrunAlert.length,
+                job_ids: closedJobsForOverrunAlert
+            });
+            
+            try {
+                const alertResult = await sendBulkAutomaticOverrunAlerts(closedJobsForOverrunAlert);
+                if (alertResult.sent > 0) {
+                    logger.info(`✅ Automatic overrun alerts sent in batch`, {
+                        jobs_sent: alertResult.sent,
+                        total_jobs_checked: alertResult.total,
+                        job_ids: alertResult.jobs.map(j => j.job_id)
+                    });
+                } else {
+                    logger.info(`ℹ️  No overrun jobs found to send automatic alerts`, {
+                        total_jobs_checked: alertResult.total,
+                        job_ids_checked: closedJobsForOverrunAlert
+                    });
+                }
+            } catch (alertError) {
+                logger.error(`Error sending bulk automatic overrun alerts`, {
+                    error: alertError.message,
+                    job_ids: closedJobsForOverrunAlert
+                });
+            }
+        } else {
+            logger.info(`No jobs with all shifts approved, skipping overrun alert check`, {
+                total_affected_jobs: affectedJobIds.size,
+                affected_job_ids: Array.from(affectedJobIds)
+            });
         }
 
         logger.info(`Approved ${totalUpdated} shifts (${regularUpdatedCount} regular, ${specialUpdatedCount} special)`, {

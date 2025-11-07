@@ -14,6 +14,7 @@ const Estimate = require('../models/Estimate');
 const JobStatus = require('../models/JobStatus');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
+const { sendBulkAutomaticOverrunAlerts } = require('../controllers/jobs.controller');
 
 /**
  * Determina el estado del branch (CA o WA) para saber qué columna usar para sold_price
@@ -797,6 +798,8 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
             errors: []
         };
         
+        const closedJobsForOverrunAlert = []; // Acumular jobs cerrados para enviar alert en batch
+        
         for (const [jobName, jobInfo] of Object.entries(jobsMap)) {
             try {
                 const syncJob = jobInfo.syncJob;
@@ -1016,6 +1019,7 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 if (autoApprove) {
                     const Shift = require('../models/Shift');
                     const JobSpecialShift = require('../models/JobSpecialShift');
+                    const JobStatus = require('../models/JobStatus');
                     
                     // Verificar que no haya shifts pendientes
                     const pendingRegularShifts = await Shift.count({
@@ -1032,15 +1036,32 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                         }
                     });
                     
-                    // Si todos los shifts están aprobados, marcar como "In Payload"
+                    // Si todos los shifts están aprobados, marcar como "In Payload" y "Closed Job"
                     if (pendingRegularShifts === 0 && pendingSpecialShifts === 0) {
-                        await savedJob.update({ in_payload: true });
+                        const updateData = { in_payload: true };
+                        
+                        // Verificar si el job debe marcarse como "Closed Job"
+                        const closedJobStatus = await JobStatus.findOne({
+                            where: { name: 'Closed Job' }
+                        });
+                        
+                        if (closedJobStatus && savedJob.status_id !== closedJobStatus.id) {
+                            updateData.status_id = closedJobStatus.id;
+                            updateData.closing_date = savedJob.closing_date || new Date();
+                        }
+                        
+                        await savedJob.update(updateData);
+                        
                         logger.info('✅ Job marked as "In Payload" after auto-approving all shifts', {
                             job_id: savedJob.id,
                             job_name: jobName,
                             regular_shifts: pendingRegularShifts,
-                            special_shifts: pendingSpecialShifts
+                            special_shifts: pendingSpecialShifts,
+                            status_updated: !!updateData.status_id
                         });
+                        
+                        // Acumular job para enviar alert en batch al final
+                        closedJobsForOverrunAlert.push(savedJob.id);
                     } else {
                         logger.warn('⚠️ Not all shifts are approved, skipping "In Payload" marking', {
                             job_id: savedJob.id,
@@ -1061,6 +1082,30 @@ async function savePerformanceDataPermanently(syncId, selectedJobNames = null, a
                 results.errors.push({
                     job: jobName,
                     error: error.message
+                });
+            }
+        }
+        
+        // Enviar alert automático de overrun en batch para todos los jobs cerrados
+        if (autoApprove && closedJobsForOverrunAlert.length > 0) {
+            try {
+                const alertResult = await sendBulkAutomaticOverrunAlerts(closedJobsForOverrunAlert);
+                if (alertResult.sent > 0) {
+                    logger.info(`✅ Automatic overrun alerts sent in batch`, {
+                        jobs_sent: alertResult.sent,
+                        total_jobs_checked: alertResult.total,
+                        job_ids: alertResult.jobs.map(j => j.job_id)
+                    });
+                } else {
+                    logger.info(`ℹ️  No overrun jobs found to send automatic alerts`, {
+                        total_jobs_checked: alertResult.total
+                    });
+                }
+            } catch (alertError) {
+                // No fallar el proceso si el alert falla
+                logger.error(`Error sending bulk automatic overrun alerts`, {
+                    error: alertError.message,
+                    job_ids: closedJobsForOverrunAlert
                 });
             }
         }

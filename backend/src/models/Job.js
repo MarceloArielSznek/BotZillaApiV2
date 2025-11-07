@@ -139,6 +139,12 @@ Job.init({
     allowNull: false,
     defaultValue: false,
     comment: 'Indicates if a Make.com registration alert has been sent for this job. Prevents spam. Reset when CL changes or completes registration.'
+  },
+  overrun_alert_sent: {
+    type: DataTypes.BOOLEAN,
+    allowNull: false,
+    defaultValue: false,
+    comment: 'Indicates if automatic overrun alert has been sent when job was approved. User can manually send additional alerts.'
   }
 }, {
   sequelize,
