@@ -68,10 +68,31 @@ async function fetchJobsFromAtticTech(apiKey, fromDate) {
 
         const jobs = response.data?.docs || [];
         
+        // DEBUG: Buscar "Nave test" en los jobs traídos
+        const naveTestJob = jobs.find(job => job.name && job.name.toLowerCase().includes('nave test'));
+        if (naveTestJob) {
+            logger.info(`🎯🎯🎯 "Nave test" ENCONTRADO EN AT API 🎯🎯🎯`, {
+                jobId: naveTestJob.id,
+                jobName: naveTestJob.name,
+                status: naveTestJob.status,
+                updatedAt: naveTestJob.updatedAt,
+                fromDate: fromDate
+            });
+        } else {
+            logger.info(`⚠️  "Nave test" NO encontrado en los jobs traídos desde AT (total: ${jobs.length} jobs)`);
+        }
+        
         // Filtro adicional por si acaso (defensa en profundidad)
         const filteredJobs = jobs.filter(job => job.status !== 'Closed Job');
         
         logger.info(`✅ Se obtuvieron ${jobs.length} jobs desde AT, ${filteredJobs.length} después de filtrar "Closed Job"`);
+        
+        // Listar todos los nombres de jobs para debuggear
+        if (jobs.length > 0 && jobs.length <= 50) {
+            logger.info(`📋 Lista de jobs traídos desde AT:`, {
+                jobNames: jobs.map(j => j.name).slice(0, 50)
+            });
+        }
         
         return filteredJobs;
     } catch (error) {
@@ -338,11 +359,15 @@ async function findOperationManager(branchId) {
             attributes: ['id', 'email', 'telegram_id']
         });
 
-        if (operationManager && operationManager.telegram_id) {
-            logger.info(`✅ Operation Manager encontrado para branch ${branchId}: ${operationManager.email}`);
-            return operationManager;
+        if (operationManager) {
+            if (operationManager.telegram_id) {
+                logger.info(`✅ Operation Manager encontrado para branch ${branchId}: ${operationManager.email} (con telegram_id)`);
+            } else {
+                logger.warn(`⚠️  Operation Manager encontrado para branch ${branchId}: ${operationManager.email} (SIN telegram_id - se generará notificación sin telegram)`);
+            }
+            return operationManager; // Retornar incluso si no tiene telegram_id
         } else {
-            logger.warn(`⚠️  No se encontró Operation Manager con telegram_id para branch ${branchId}`);
+            logger.warn(`⚠️  No se encontró Operation Manager para branch ${branchId}`);
             return null;
         }
     } catch (error) {
@@ -372,6 +397,55 @@ async function sendRegistrationAlertOnce(existingJob, alertData, jobName) {
     
     logger.info(`✅ Registration alert sent (1x) for job: ${jobName}`);
     return true;
+}
+
+/**
+ * Generar notificación para Operation Manager (job cambió a "Pending Review")
+ */
+async function generatePendingReviewNotification(atJob, branch, estimate, crewLeader) {
+    try {
+        // Priorizar datos de NUESTRA BD si el estimate existe
+        const notification = {
+            job_name: atJob.name,
+            cx_name: estimate?.customer_name || atJob.job_estimate?.customer?.name || 'N/A',
+            cx_phone: estimate?.customer_phone || atJob.job_estimate?.customer?.phone || null,
+            job_address: estimate?.customer_address || atJob.job_estimate?.customer?.address || 'N/A',
+            branch: branch?.name || 'N/A',
+            salesperson_name: estimate?.SalesPerson?.name || atJob.job_estimate?.salesperson?.name || 'N/A',
+            client_email: estimate?.customer_email || atJob.job_estimate?.customer?.email || null,
+            crew_leader_name: crewLeader ? getCrewLeaderName(crewLeader) : 'N/A',
+            job_link: `https://www.attic-tech.com/jobs/${atJob.id}`,
+            notification_type: 'Job Status Changed - Pending Review',
+            telegram_id: null // Se llenará después
+        };
+
+        // Buscar Operation Manager del branch
+        if (branch) {
+            const operationManager = await findOperationManager(branch.id);
+            if (operationManager) {
+                if (operationManager.telegram_id) {
+                    notification.telegram_id = operationManager.telegram_id;
+                    logger.info(`📨 Notificación generada para Operation Manager (Job: ${atJob.name}, Branch: ${branch.name}, Status: Pending Review)`);
+                    return notification;
+                } else {
+                    logger.warn(`⚠️  Operation Manager encontrado pero NO tiene telegram_id (Job: ${atJob.name}, Branch: ${branch.name}, Email: ${operationManager.email || 'N/A'})`);
+                    // Aún así retornar la notificación sin telegram_id para que se pueda enviar por otro medio si es necesario
+                    logger.info(`📨 Notificación generada SIN telegram_id (Job: ${atJob.name}, Branch: ${branch.name}, Status: Pending Review)`);
+                    return notification;
+                }
+            } else {
+                logger.warn(`⚠️  No se encontró Operation Manager para branch ${branch.id} (${branch.name})`);
+            }
+        } else {
+            logger.warn(`⚠️  No hay branch asignado al job ${atJob.name}`);
+        }
+
+        logger.warn(`⚠️  No se pudo generar notificación para Operation Manager (Job: ${atJob.name}, Status: Pending Review)`);
+        return null;
+    } catch (error) {
+        logger.error(`Error generando notificación de Pending Review para Operation Manager (job ${atJob.id}):`, error);
+        return null;
+    }
 }
 
 /**
@@ -423,6 +497,21 @@ async function saveJobsToDb(jobsFromAT) {
 
     for (const atJob of jobsFromAT) {
         try {
+            // DEBUG ESPECÍFICO PARA "Nave test" AL INICIO (solo para este job)
+            const isNaveTest = atJob.name && atJob.name.toLowerCase().includes('nave test');
+            if (isNaveTest) {
+                logger.info(`🎯🎯🎯 ENCONTRADO "Nave test" EN EL SYNC 🎯🎯🎯`);
+                logger.info(`📋 Información inicial del job:`, {
+                    atticTechJobId: atJob.id,
+                    jobName: atJob.name,
+                    statusFromAT: atJob.status,
+                    hasEstimate: !!atJob.job_estimate,
+                    estimateId: atJob.job_estimate?.id || 'N/A',
+                    branchName: atJob.job_estimate?.branch?.name || 'N/A'
+                });
+            }
+            // No mostrar log para todos los jobs (solo cuando hay cambios o es "Nave test")
+            
             // Buscar si ya existe en job
             const existingJob = await Job.findOne({
                 where: { attic_tech_job_id: atJob.id },
@@ -513,35 +602,65 @@ async function saveJobsToDb(jobsFromAT) {
                 logger.info(`ℹ️  Job "${atJob.name}" no tiene closing_date. Se mantendrá como null (vendrá del Performance spreadsheet si aplica).`);
             }
 
-            if (estimate) {
-                logger.info(`📋 Estimate encontrado: ID ${estimate.id} (AT ID: ${atJob.job_estimate?.id})`);
-            } else {
-                logger.warn(`⚠️  Estimate NO encontrado en nuestra BD para job: ${atJob.name} (AT Estimate ID: ${atJob.job_estimate?.id})`);
+            // Solo mostrar logs de estimate si es "Nave test" o hay cambios
+            if (isNaveTest) {
+                if (estimate) {
+                    logger.info(`📋 Estimate encontrado: ID ${estimate.id} (AT ID: ${atJob.job_estimate?.id})`);
+                } else {
+                    logger.warn(`⚠️  Estimate NO encontrado en nuestra BD para job: ${atJob.name} (AT Estimate ID: ${atJob.job_estimate?.id})`);
+                }
             }
 
             // DETECCIÓN DE CAMBIO DE ESTADO: Requires Crew Lead → Plans In Progress
             let shouldNotify = false;
             if (existingJob) {
-                // Usar last_known_status_id para detectar cambios reales
-                const oldStatusId = existingJob.last_known_status_id || existingJob.status_id;
-                const newStatusId = status?.id;
+                // CRÍTICO: Para detectar cambios, comparar el status_id ACTUAL en nuestra BD
+                // con el nuevo status que viene de Attic Tech
+                // last_known_status_id solo se usa si existe, sino usamos status_id actual
+                const oldStatusId = existingJob.status_id; // SIEMPRE usar el status_id actual de nuestra BD
+                const newStatusId = status?.id; // El nuevo status que viene de Attic Tech
                 const statusChanged = oldStatusId !== newStatusId;
                 
                 // Obtener nombre del estado ANTERIOR
                 let oldStatusName = 'Unknown';
-                if (existingJob.last_known_status_id) {
-                    const oldStatusObj = await JobStatus.findByPk(existingJob.last_known_status_id);
+                if (existingJob.status?.name) {
+                    oldStatusName = existingJob.status.name; // Usar el nombre del status_id actual
+                } else if (existingJob.status_id) {
+                    const oldStatusObj = await JobStatus.findByPk(existingJob.status_id);
                     oldStatusName = oldStatusObj?.name || 'Unknown';
-                } else if (existingJob.status?.name) {
-                    oldStatusName = existingJob.status.name;
                 }
                 
                 const newStatusName = status?.name || 'Unknown';
                 
-                // Log de debug para ver estados
+                // SOLO mostrar logs detallados cuando hay cambio de estado o es "Nave test"
                 if (statusChanged) {
-                    logger.info(`📝 Estado cambió para "${atJob.name}": ${oldStatusName} (ID ${oldStatusId}) → ${newStatusName} (ID ${newStatusId})`);
+                    // Log cuando HAY cambio de estado (siempre visible)
+                    logger.info(`📝 ✅ CAMBIO DE ESTADO: "${atJob.name}" - ${oldStatusName} (ID ${oldStatusId}) → ${newStatusName} (ID ${newStatusId})`);
+                    logger.info(`🔍 DEBUG - Comparación de estados:`, {
+                        oldStatusName,
+                        newStatusName,
+                        oldStatusId,
+                        newStatusId,
+                        statusChanged,
+                        isPlansToPending: oldStatusName === 'Plans In Progress' && newStatusName === 'Pending Review',
+                        branchExists: !!branch,
+                        branchId: branch?.id,
+                        branchName: branch?.name
+                    });
+                } else if (isNaveTest) {
+                    // Log detallado solo para "Nave test" aunque no haya cambio
+                    logger.info(`🔍 DEBUG - Estado del job "Nave test" (sin cambios):`, {
+                        existingJobId: existingJob.id,
+                        last_known_status_id: existingJob.last_known_status_id,
+                        current_status_id_in_db: existingJob.status_id,
+                        new_status_id_from_at: newStatusId,
+                        statusChanged,
+                        current_status_name: existingJob.status?.name || 'N/A',
+                        comparison: `BD: ${existingJob.status_id} vs AT: ${newStatusId}`
+                    });
+                    logger.info(`ℹ️  No hay cambio de estado para "Nave test": ${oldStatusName} (ID ${oldStatusId}) → ${newStatusName} (ID ${newStatusId})`);
                 }
+                // Si no hay cambio y no es "Nave test", no mostrar logs (reducir ruido)
                 
                 // ⚠️  RESETEAR NOTIFICACIÓN: Si el job regresa a "Requires Crew Leader"
                 // Esto permite que el NUEVO crew leader reciba una notificación cuando sea asignado
@@ -669,6 +788,69 @@ async function saveJobsToDb(jobsFromAT) {
                     }
                 }
                 
+                // NOTIFICACIÓN AL OPERATION MANAGER: Job cambió de "Plans In Progress" a "Pending Review"
+                // Log detallado ANTES de la condición para debuggear
+                if (statusChanged) {
+                    logger.info(`🔍 EVALUANDO NOTIFICACIÓN PENDING REVIEW para "${atJob.name}":`, {
+                        oldStatusName,
+                        newStatusName,
+                        oldStatusNameMatch: oldStatusName === 'Plans In Progress',
+                        newStatusNameMatch: newStatusName === 'Pending Review',
+                        branchExists: !!branch,
+                        branchId: branch?.id,
+                        branchName: branch?.name,
+                        condition1: oldStatusName === 'Plans In Progress',
+                        condition2: newStatusName === 'Pending Review',
+                        condition3: !!branch,
+                        allConditionsMet: statusChanged && oldStatusName === 'Plans In Progress' && newStatusName === 'Pending Review' && branch
+                    });
+                }
+                
+                if (statusChanged && oldStatusName === 'Plans In Progress' && newStatusName === 'Pending Review' && branch) {
+                    logger.info(`🔔 Job cambió de "Plans In Progress" a "Pending Review": ${atJob.name} (Branch: ${branch.name})`);
+                    logger.info(`🔍 DEBUG - Detalles del cambio:`, {
+                        oldStatusName,
+                        newStatusName,
+                        oldStatusId,
+                        newStatusId,
+                        branchId: branch?.id,
+                        branchName: branch?.name,
+                        crewLeaderName: crewLeader ? getCrewLeaderName(crewLeader) : 'N/A'
+                    });
+                    const notification = await generatePendingReviewNotification(atJob, branch, estimate, crewLeader);
+                    logger.info(`🔍 RESULTADO generatePendingReviewNotification para "${atJob.name}":`, {
+                        notificationGenerated: !!notification,
+                        hasTelegramId: notification?.telegram_id ? true : false,
+                        telegramId: notification?.telegram_id || 'N/A',
+                        notificationType: notification?.notification_type || 'N/A'
+                    });
+                    if (notification) {
+                        notifications.push(notification);
+                        logger.info(`✅ Notificación de Pending Review agregada para Operation Manager (telegram_id: ${notification.telegram_id || 'VACÍO - se enviará sin telegram'})`);
+                    } else {
+                        logger.warn(`⚠️  No se pudo generar notificación de Pending Review (verificar Operation Manager y telegram_id)`);
+                    }
+                } else if (statusChanged && oldStatusName === 'Plans In Progress' && newStatusName === 'Pending Review') {
+                    // Log cuando falta branch
+                    logger.warn(`⚠️  Job cambió a "Pending Review" pero NO tiene branch asignado: ${atJob.name}`, {
+                        oldStatusName,
+                        newStatusName,
+                        branchExists: !!branch,
+                        branchId: branch?.id
+                    });
+                } else if (statusChanged) {
+                    // Log para otros cambios de estado para debuggear
+                    logger.info(`📝 Cambio de estado detectado pero no coincide con Pending Review:`, {
+                        jobName: atJob.name,
+                        oldStatusName,
+                        newStatusName,
+                        statusChanged,
+                        isPlansInProgress: oldStatusName === 'Plans In Progress',
+                        isPendingReview: newStatusName === 'Pending Review',
+                        hasBranch: !!branch
+                    });
+                }
+                
                 // RECORDATORIO CONTINUO: Si el job tiene crew leader sin telegram_id - ANTI-SPAM: solo 1 vez
                 if (!statusChanged && crewLeader && !crewLeader.telegram_id && newStatusName === 'Plans In Progress') {
                     logger.warn(`🔄 Recordatorio: Crew Leader "${getCrewLeaderName(crewLeader)}" aún no tiene telegram_id. Enviando alerta (1x)...`);
@@ -782,8 +964,8 @@ async function saveJobsToDb(jobsFromAT) {
                 
                 // ESCENARIO 3: Job está en estado ACTIVO CON crew leader, pero se CAMBIA por otro
                 // Este es el caso que el Operation Manager quiere: mantener el plan pero cambiar al crew leader
-                // Estados activos: Plans In Progress, In Production, Job in Progress, Uploading Shifts, Missing Data to Close
-                const activeJobStatuses = ['Plans In Progress', 'In Production', 'Job in Progress', 'Uploading Shifts', 'Missing Data to Close'];
+                // Estados activos: Plans In Progress, In Production, Job in Progress, Uploading Shifts, Missing Data to Close, Pending Review
+                const activeJobStatuses = ['Plans In Progress', 'In Production', 'Job in Progress', 'Uploading Shifts', 'Missing Data to Close', 'Pending Review'];
                 const isActiveJob = activeJobStatuses.includes(newStatusName);
                 
                 if (!shouldNotify && isActiveJob && crewLeaderChanged && hadCrewLeader && nowHasCrewLeader) {
@@ -848,20 +1030,32 @@ async function saveJobsToDb(jobsFromAT) {
                         jobData.notification_sent = existingJob.notification_sent;
                         jobData.last_notification_sent_at = existingJob.last_notification_sent_at;
                     }
-                    jobData.last_known_status_id = status?.id || null; // Actualizar último estado conocido
+                    // IMPORTANTE: Guardar el status_id ACTUAL como last_known_status_id ANTES de actualizar
+                    // Esto permite detectar cambios en el próximo sync
+                    jobData.last_known_status_id = existingJob.status_id; // Guardar el estado ACTUAL antes de cambiarlo
 
                     await Job.update(jobData, {
                         where: { id: existingJob.id }
                     });
                     updatedCount++;
-                    logger.info(`🔄 Updated job: ${atJob.name} (AT ID: ${atJob.id})`);
+                    // Solo mostrar log de actualización si hay cambios de estado o es "Nave test"
+                    if (statusChanged || isNaveTest) {
+                        logger.info(`🔄 Updated job: ${atJob.name} (AT ID: ${atJob.id}) - last_known_status_id guardado como: ${existingJob.status_id}`);
+                    }
                 } else {
-                    // Solo actualizar last_synced_at sin contar como "actualización"
+                    // IMPORTANTE: Si no hay cambios, actualizar last_known_status_id al status_id actual
+                    // Esto asegura que en el próximo sync podamos detectar cambios
                     await Job.update(
-                        { last_synced_at: new Date() }, 
+                        { 
+                            last_synced_at: new Date(),
+                            last_known_status_id: existingJob.status_id // Guardar el estado actual
+                        }, 
                         { where: { id: existingJob.id } }
                     );
-                    logger.debug(`✓ No changes for job: ${atJob.name} (AT ID: ${atJob.id})`);
+                    // Solo mostrar log si es "Nave test"
+                    if (isNaveTest) {
+                        logger.debug(`✓ No changes for job: ${atJob.name} (AT ID: ${atJob.id}), last_known_status_id actualizado a: ${existingJob.status_id}`);
+                    }
                 }
 
                 // Generar notificación si es necesario (el sistema existente la enviará)
@@ -873,6 +1067,49 @@ async function saveJobsToDb(jobsFromAT) {
                 // Si es un cambio de crew leader (Escenario 3), usar un identificador especial
                 const wasCrewLeaderReplaced = isActiveJob && crewLeaderChanged && hadCrewLeader && nowHasCrewLeader;
                 const notificationContext = wasCrewLeaderReplaced ? 'Crew Leader Replaced' : oldStatusName;
+                
+                // DEBUG ESPECÍFICO PARA "Nave test"
+                if (atJob.name && atJob.name.toLowerCase().includes('nave test')) {
+                    logger.info(`🔍🔍🔍 DEBUG COMPLETO PARA "Nave test" 🔍🔍🔍`);
+                    logger.info(`📊 Estado del job:`, {
+                        jobName: atJob.name,
+                        jobId: existingJob?.id,
+                        atticTechJobId: atJob.id,
+                        statusChanged,
+                        oldStatusId,
+                        newStatusId,
+                        oldStatusName,
+                        newStatusName,
+                        last_known_status_id: existingJob?.last_known_status_id,
+                        current_status_id: existingJob?.status_id,
+                        branchId: branch?.id,
+                        branchName: branch?.name,
+                        branchExists: !!branch,
+                        crewLeaderId: crewLeader?.id,
+                        crewLeaderName: crewLeader ? getCrewLeaderName(crewLeader) : 'N/A',
+                        estimateId: estimate?.id,
+                        isPlansToPending: oldStatusName === 'Plans In Progress' && newStatusName === 'Pending Review',
+                        conditionMet: statusChanged && oldStatusName === 'Plans In Progress' && newStatusName === 'Pending Review' && branch,
+                        shouldNotify,
+                        needsNotification,
+                        notificationSent: existingJob?.notification_sent
+                    });
+                    
+                    // Verificar Operation Manager
+                    if (branch) {
+                        const operationManager = await findOperationManager(branch.id);
+                        logger.info(`👤 Operation Manager para branch ${branch.id}:`, {
+                            found: !!operationManager,
+                            hasTelegramId: operationManager?.telegram_id ? true : false,
+                            telegramId: operationManager?.telegram_id || 'N/A',
+                            email: operationManager?.email || 'N/A'
+                        });
+                    } else {
+                        logger.warn(`⚠️  NO HAY BRANCH para "Nave test" - esto impedirá la notificación`);
+                    }
+                    
+                    logger.info(`🔍🔍🔍 FIN DEBUG "Nave test" 🔍🔍🔍`);
+                }
                 
                 if (needsNotification && !existingJob.notification_sent && crewLeader && crewLeader.telegram_id && crewLeader.status === 'active') {
                     const notification = await generateNotification(atJob, crewLeader, branch, estimate, notificationContext);

@@ -1316,13 +1316,13 @@ class PerformanceController {
                 }
                 
                 return {
-                    ...item,
-                    regular_hours: parseFloat(item.regular_hours.toFixed(2)),
-                    ot_hours: parseFloat(item.ot_hours.toFixed(2)),
-                    ot2_hours: parseFloat(item.ot2_hours.toFixed(2)),
-                    total_hours: parseFloat(item.total_hours.toFixed(2)),
+                ...item,
+                regular_hours: parseFloat(item.regular_hours.toFixed(2)),
+                ot_hours: parseFloat(item.ot_hours.toFixed(2)),
+                ot2_hours: parseFloat(item.ot2_hours.toFixed(2)),
+                total_hours: parseFloat(item.total_hours.toFixed(2)),
                     closing_date: closingDateStr || item.closing_date, // Usar string formateado si está disponible
-                    tags: [...new Set(item.tags)].join(', ') // Unique tags
+                tags: [...new Set(item.tags)].join(', ') // Unique tags
                 };
             });
             
@@ -2104,17 +2104,17 @@ class PerformanceController {
                                         await job.update(updateData);
                                         
                                         if (jobsUpdatedToClosed) {
-                                            jobsUpdatedToClosedCount++;
+                                    jobsUpdatedToClosedCount++;
                                         }
-                                        
+                                    
                                         logger.info(`✅ Job marked as "In Payload" after all shifts approved`, {
-                                            job_id: jobId,
-                                            job_name: job.name,
+                                        job_id: jobId,
+                                        job_name: job.name,
                                             status_changed: jobsUpdatedToClosed,
-                                            previous_status_id: job.status_id,
+                                        previous_status_id: job.status_id,
                                             new_status_id: jobsUpdatedToClosed ? closedJobStatus.id : job.status_id,
-                                            in_payload: true
-                                        });
+                                        in_payload: true
+                                    });
                                         
                                         // Acumular job para enviar alert en batch al final
                                         closedJobsForOverrunAlert.push(jobId);
