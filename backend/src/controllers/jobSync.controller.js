@@ -327,13 +327,13 @@ function getCrewLeaderName(crewLeader) {
 }
 
 /**
- * Buscar el Operation Manager de un branch específico
+ * Buscar el Operation Manager de un branch específico (retorna solo el primero - para compatibilidad)
  */
 async function findOperationManager(branchId) {
     try {
         if (!branchId) return null;
 
-        // Buscar el rol "operation manager" (ID 4)
+        // Buscar el rol "operation manager"
         const operationManagerRole = await UserRol.findOne({
             where: { name: 'operation manager' }
         });
@@ -377,6 +377,53 @@ async function findOperationManager(branchId) {
 }
 
 /**
+ * Buscar TODOS los Operation Managers de un branch específico
+ */
+async function findAllOperationManagers(branchId) {
+    try {
+        if (!branchId) return [];
+
+        // Buscar el rol "operation manager"
+        const operationManagerRole = await UserRol.findOne({
+            where: { name: 'operation manager' }
+        });
+
+        if (!operationManagerRole) {
+            logger.warn('⚠️  Rol "operation manager" no encontrado en la BD');
+            return [];
+        }
+
+        // Buscar TODOS los usuarios con rol operation manager asignados a este branch
+        const operationManagers = await User.findAll({
+            where: { 
+                rol_id: operationManagerRole.id 
+            },
+            include: [
+                {
+                    model: Branch,
+                    as: 'branches',
+                    where: { id: branchId },
+                    through: { attributes: [] }
+                }
+            ],
+            attributes: ['id', 'email', 'telegram_id']
+        });
+
+        if (operationManagers && operationManagers.length > 0) {
+            const withTelegram = operationManagers.filter(om => om.telegram_id).length;
+            logger.info(`✅ Encontrados ${operationManagers.length} Operation Manager(s) para branch ${branchId} (${withTelegram} con telegram_id)`);
+            return operationManagers;
+        } else {
+            logger.warn(`⚠️  No se encontraron Operation Managers para branch ${branchId}`);
+            return [];
+        }
+    } catch (error) {
+        logger.error(`Error buscando Operation Managers para branch ${branchId}`, { error: error.message });
+        return [];
+    }
+}
+
+/**
  * Helper: Send registration alert webhook ONLY if not already sent
  * Prevents spam by checking registration_alert_sent flag
  */
@@ -404,8 +451,22 @@ async function sendRegistrationAlertOnce(existingJob, alertData, jobName) {
  */
 async function generatePendingReviewNotification(atJob, branch, estimate, crewLeader) {
     try {
-        // Priorizar datos de NUESTRA BD si el estimate existe
-        const notification = {
+        // Buscar TODOS los Operation Managers del branch
+        if (!branch) {
+            logger.warn(`⚠️  No hay branch asignado al job ${atJob.name}`);
+            return [];
+        }
+
+        const operationManagers = await findAllOperationManagers(branch.id);
+        
+        if (operationManagers.length === 0) {
+            logger.warn(`⚠️  No se encontraron Operation Managers para branch ${branch.id} (${branch.name})`);
+            return [];
+        }
+
+        // Generar una notificación para cada Operation Manager
+        const notifications = [];
+        const baseNotification = {
             job_name: atJob.name,
             cx_name: estimate?.customer_name || atJob.job_estimate?.customer?.name || 'N/A',
             cx_phone: estimate?.customer_phone || atJob.job_estimate?.customer?.phone || null,
@@ -415,36 +476,29 @@ async function generatePendingReviewNotification(atJob, branch, estimate, crewLe
             client_email: estimate?.customer_email || atJob.job_estimate?.customer?.email || null,
             crew_leader_name: crewLeader ? getCrewLeaderName(crewLeader) : 'N/A',
             job_link: `https://www.attic-tech.com/jobs/${atJob.id}`,
-            notification_type: 'Job Status Changed - Pending Review',
-            telegram_id: null // Se llenará después
+            notification_type: 'Job Status Changed - Pending Review'
         };
 
-        // Buscar Operation Manager del branch
-        if (branch) {
-            const operationManager = await findOperationManager(branch.id);
-            if (operationManager) {
-                if (operationManager.telegram_id) {
-                    notification.telegram_id = operationManager.telegram_id;
-                    logger.info(`📨 Notificación generada para Operation Manager (Job: ${atJob.name}, Branch: ${branch.name}, Status: Pending Review)`);
-                    return notification;
-                } else {
-                    logger.warn(`⚠️  Operation Manager encontrado pero NO tiene telegram_id (Job: ${atJob.name}, Branch: ${branch.name}, Email: ${operationManager.email || 'N/A'})`);
-                    // Aún así retornar la notificación sin telegram_id para que se pueda enviar por otro medio si es necesario
-                    logger.info(`📨 Notificación generada SIN telegram_id (Job: ${atJob.name}, Branch: ${branch.name}, Status: Pending Review)`);
-                    return notification;
-                }
+        for (const operationManager of operationManagers) {
+            const notification = { ...baseNotification };
+            
+            if (operationManager.telegram_id) {
+                notification.telegram_id = operationManager.telegram_id;
+                logger.info(`📨 Notificación generada para Operation Manager ${operationManager.email} (Job: ${atJob.name}, Branch: ${branch.name}, Status: Pending Review)`);
+                notifications.push(notification);
             } else {
-                logger.warn(`⚠️  No se encontró Operation Manager para branch ${branch.id} (${branch.name})`);
+                logger.warn(`⚠️  Operation Manager ${operationManager.email} encontrado pero NO tiene telegram_id (Job: ${atJob.name}, Branch: ${branch.name})`);
+                // Aún así agregar la notificación sin telegram_id para que se pueda enviar por otro medio si es necesario
+                notification.telegram_id = null;
+                notifications.push(notification);
             }
-        } else {
-            logger.warn(`⚠️  No hay branch asignado al job ${atJob.name}`);
         }
 
-        logger.warn(`⚠️  No se pudo generar notificación para Operation Manager (Job: ${atJob.name}, Status: Pending Review)`);
-        return null;
+        logger.info(`✅ Generadas ${notifications.length} notificación(es) de Pending Review para ${operationManagers.length} Operation Manager(s)`);
+        return notifications;
     } catch (error) {
-        logger.error(`Error generando notificación de Pending Review para Operation Manager (job ${atJob.id}):`, error);
-        return null;
+        logger.error(`Error generando notificaciones de Pending Review para Operation Managers (job ${atJob.id}):`, error);
+        return [];
     }
 }
 
@@ -453,8 +507,22 @@ async function generatePendingReviewNotification(atJob, branch, estimate, crewLe
  */
 async function generateOperationManagerNotification(atJob, branch, estimate) {
     try {
-        // Priorizar datos de NUESTRA BD si el estimate existe
-        const notification = {
+        // Buscar TODOS los Operation Managers del branch
+        if (!branch) {
+            logger.warn(`⚠️  No hay branch asignado al job ${atJob.name}`);
+            return [];
+        }
+
+        const operationManagers = await findAllOperationManagers(branch.id);
+        
+        if (operationManagers.length === 0) {
+            logger.warn(`⚠️  No se encontraron Operation Managers para branch ${branch.id} (${branch.name})`);
+            return [];
+        }
+
+        // Generar una notificación para cada Operation Manager
+        const notifications = [];
+        const baseNotification = {
             job_name: atJob.name,
             cx_name: estimate?.customer_name || atJob.job_estimate?.customer?.name || 'N/A',
             cx_phone: estimate?.customer_phone || atJob.job_estimate?.customer?.phone || null,
@@ -464,25 +532,28 @@ async function generateOperationManagerNotification(atJob, branch, estimate) {
             client_email: estimate?.customer_email || atJob.job_estimate?.customer?.email || null,
             crew_leader_name: null, // No hay crew leader aún (job requiere asignación)
             job_link: `https://www.attic-tech.com/jobs/${atJob.id}`,
-            notification_type: 'New Job - Requires Crew Lead',
-            telegram_id: null // Se llenará después
+            notification_type: 'New Job - Requires Crew Lead'
         };
 
-        // Buscar Operation Manager del branch
-        if (branch) {
-            const operationManager = await findOperationManager(branch.id);
-            if (operationManager && operationManager.telegram_id) {
+        for (const operationManager of operationManagers) {
+            const notification = { ...baseNotification };
+            
+            if (operationManager.telegram_id) {
                 notification.telegram_id = operationManager.telegram_id;
-                logger.info(`📨 Notificación generada para Operation Manager (Job: ${atJob.name}, Branch: ${branch.name})`);
-                return notification;
+                logger.info(`📨 Notificación generada para Operation Manager ${operationManager.email} (Job: ${atJob.name}, Branch: ${branch.name})`);
+                notifications.push(notification);
+            } else {
+                logger.warn(`⚠️  Operation Manager ${operationManager.email} encontrado pero NO tiene telegram_id (Job: ${atJob.name}, Branch: ${branch.name})`);
+                // Solo agregar notificaciones con telegram_id para "Requires Crew Lead"
+                // (a diferencia de Pending Review, aquí no enviamos sin telegram_id)
             }
         }
 
-        logger.warn(`⚠️  No se pudo generar notificación para Operation Manager (Job: ${atJob.name})`);
-        return null;
+        logger.info(`✅ Generadas ${notifications.length} notificación(es) de Requires Crew Lead para ${operationManagers.length} Operation Manager(s)`);
+        return notifications;
     } catch (error) {
-        logger.error(`Error generando notificación para Operation Manager (job ${atJob.id}):`, error);
-        return null;
+        logger.error(`Error generando notificaciones para Operation Managers (job ${atJob.id}):`, error);
+        return [];
     }
 }
 
@@ -817,18 +888,18 @@ async function saveJobsToDb(jobsFromAT) {
                         branchName: branch?.name,
                         crewLeaderName: crewLeader ? getCrewLeaderName(crewLeader) : 'N/A'
                     });
-                    const notification = await generatePendingReviewNotification(atJob, branch, estimate, crewLeader);
+                    const operationManagerNotifications = await generatePendingReviewNotification(atJob, branch, estimate, crewLeader);
                     logger.info(`🔍 RESULTADO generatePendingReviewNotification para "${atJob.name}":`, {
-                        notificationGenerated: !!notification,
-                        hasTelegramId: notification?.telegram_id ? true : false,
-                        telegramId: notification?.telegram_id || 'N/A',
-                        notificationType: notification?.notification_type || 'N/A'
+                        notificationsGenerated: operationManagerNotifications.length,
+                        notificationsWithTelegram: operationManagerNotifications.filter(n => n.telegram_id).length,
+                        notificationsWithoutTelegram: operationManagerNotifications.filter(n => !n.telegram_id).length
                     });
-                    if (notification) {
-                        notifications.push(notification);
-                        logger.info(`✅ Notificación de Pending Review agregada para Operation Manager (telegram_id: ${notification.telegram_id || 'VACÍO - se enviará sin telegram'})`);
+                    if (operationManagerNotifications && operationManagerNotifications.length > 0) {
+                        // Agregar todas las notificaciones al array
+                        notifications.push(...operationManagerNotifications);
+                        logger.info(`✅ ${operationManagerNotifications.length} notificación(es) de Pending Review agregada(s) para Operation Manager(s)`);
                     } else {
-                        logger.warn(`⚠️  No se pudo generar notificación de Pending Review (verificar Operation Manager y telegram_id)`);
+                        logger.warn(`⚠️  No se pudieron generar notificaciones de Pending Review (verificar Operation Managers y telegram_id)`);
                     }
                 } else if (statusChanged && oldStatusName === 'Plans In Progress' && newStatusName === 'Pending Review') {
                     // Log cuando falta branch
@@ -1182,9 +1253,11 @@ async function saveJobsToDb(jobsFromAT) {
                 // NOTIFICACIÓN AL OPERATION MANAGER: Nuevo job con "Requires Crew Lead"
                 if (newStatus === 'Requires Crew Lead' && branch) {
                     logger.info(`🔔 Nuevo job con estado "Requires Crew Lead": ${atJob.name} (Branch: ${branch.name})`);
-                    const notification = await generateOperationManagerNotification(atJob, branch, estimate);
-                    if (notification) {
-                        notifications.push(notification);
+                    const operationManagerNotifications = await generateOperationManagerNotification(atJob, branch, estimate);
+                    if (operationManagerNotifications && operationManagerNotifications.length > 0) {
+                        // Agregar todas las notificaciones al array
+                        notifications.push(...operationManagerNotifications);
+                        logger.info(`✅ ${operationManagerNotifications.length} notificación(es) de Requires Crew Lead agregada(s) para Operation Manager(s)`);
                     }
                 }
                 
