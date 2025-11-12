@@ -49,6 +49,12 @@ InspectionReport.init({
         defaultValue: false,
         allowNull: false,
     },
+    exported_to_spreadsheet: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        allowNull: false,
+        comment: 'Indica si el reporte ya fue exportado al spreadsheet. Se marca como true después de enviarlo a Make.com'
+    },
     attic_tech_created_at: DataTypes.DATE,
 }, {
     sequelize,

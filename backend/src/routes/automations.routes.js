@@ -346,4 +346,126 @@ router.post(
     automationsController.syncInspectionReports
 );
 
+/**
+ * @swagger
+ * /api/automations/inspection-reports-export:
+ *   get:
+ *     summary: Exporta reportes de inspección de la base de datos para Make.com
+ *     description: Por defecto solo exporta reportes no enviados. Use ?all=true para todos
+ *     tags: [Automations]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: all
+ *         schema:
+ *           type: boolean
+ *         description: Si es true, exporta todos los reportes (incluso los ya exportados)
+ *     responses:
+ *       200:
+ *         description: Exportación completada exitosamente.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 total:
+ *                   type: integer
+ *                   example: 150
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       customer_name:
+ *                         type: string
+ *                       customer_phone:
+ *                         type: string
+ *                       customer_email:
+ *                         type: string
+ *                       address:
+ *                         type: string
+ *                       branch:
+ *                         type: string
+ *                       salesperson:
+ *                         type: string
+ *                       roof_condition:
+ *                         type: string
+ *                       full_roof_inspection_interest:
+ *                         type: boolean
+ *                       system_condition:
+ *                         type: string
+ *                       full_hvac_furnace_inspection_interest:
+ *                         type: boolean
+ *                       created_at:
+ *                         type: string
+ *                         format: date-time
+ *                       attic_tech_report_id:
+ *                         type: integer
+ *       401:
+ *         description: No autorizado - API Key faltante o inválida.
+ *       500:
+ *         description: Error del servidor durante la exportación.
+ */
+router.get(
+    '/inspection-reports-export',
+    validateApiKey,
+    automationsController.exportInspectionReports
+);
+
+/**
+ * @swagger
+ * /api/automations/inspection-reports-mark-exported:
+ *   post:
+ *     summary: Marca reportes de inspección como exportados al spreadsheet
+ *     tags: [Automations]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               report_ids:
+ *                 type: array
+ *                 items:
+ *                   type: integer
+ *                 example: [1, 2, 3, 4, 5]
+ *     responses:
+ *       200:
+ *         description: Reportes marcados exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 updated:
+ *                   type: integer
+ *                   example: 5
+ *                 message:
+ *                   type: string
+ *                   example: "5 reporte(s) marcado(s) como exportado(s)"
+ *       400:
+ *         description: Request inválido - falta report_ids
+ *       401:
+ *         description: No autorizado - API Key faltante o inválida
+ *       500:
+ *         description: Error del servidor
+ */
+router.post(
+    '/inspection-reports-mark-exported',
+    validateApiKey,
+    automationsController.markInspectionReportsAsExported
+);
+
 module.exports = router; 

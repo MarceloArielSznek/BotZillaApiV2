@@ -2528,6 +2528,137 @@ class AutomationsController {
             });
         }
     }
+
+    /**
+     * Exporta todos los reportes de inspección guardados en la BD para Make.com
+     * Los reportes exportados se marcan automáticamente como exported_to_spreadsheet = true
+     * @param {Object} req - Express request object
+     * @param {Object} res - Express response object
+     * @query {boolean} all - Si es true, trae todos los reportes (incluso los ya exportados)
+     */
+    async exportInspectionReports(req, res) {
+        try {
+            const { all } = req.query;
+            const includeExported = all === 'true';
+
+            logger.info(`Exportando reportes de inspección para Make.com (incluir exportados: ${includeExported})`);
+
+            // Construir el filtro: solo traer reportes no exportados, a menos que se solicite todos
+            const where = includeExported ? {} : { exported_to_spreadsheet: false };
+
+            // Obtener reportes según el filtro
+            const reports = await InspectionReport.findAll({
+                where,
+                order: [['created_at', 'DESC']],
+                limit: null, // Sin límite - traer todos
+                raw: true // Optimización para grandes volúmenes
+            });
+
+            logger.info(`Encontrados ${reports.length} reportes de inspección en la BD`);
+
+            // Mapear los datos exactamente como en la query SQL
+            const exportData = reports.map(report => {
+                // Formatear fecha para que Google Sheets la reconozca correctamente
+                const formatDate = (date) => {
+                    if (!date) return '';
+                    const d = new Date(date);
+                    // Formato legible: DD/MM/YYYY o MM/DD/YYYY según preferencia
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    // Retornar como string explícito con prefijo para evitar conversión a número
+                    return `${month}/${day}/${year}`; // MM/DD/YYYY
+                };
+
+                return {
+                    id: report.id,
+                    estimate_name: report.estimate_name || '',
+                    salesperson_name: report.salesperson_name || '',
+                    branch_name: report.branch_name || '',
+                    full_hvac_furnace_inspection_interest: report.full_hvac_furnace_inspection_interest || false,
+                    full_roof_inspection_interest: report.full_roof_inspection_interest || false,
+                    roof_condition: report.roof_condition || '',
+                    system_condition: report.system_condition || '',
+                    updated_at: formatDate(report.updated_at),
+                    created_at: formatDate(report.created_at)
+                };
+            });
+
+            // Marcar automáticamente los reportes exportados como true (solo si no incluye ya exportados)
+            if (!includeExported && reports.length > 0) {
+                const reportIds = reports.map(r => r.id);
+                const [updatedCount] = await InspectionReport.update(
+                    { exported_to_spreadsheet: true },
+                    { where: { id: reportIds } }
+                );
+                logger.info(`✅ ${updatedCount} reportes marcados automáticamente como exportados`);
+            }
+
+            return res.status(200).json({
+                success: true,
+                total: exportData.length,
+                data: exportData,
+                message: includeExported 
+                    ? 'Todos los reportes (incluyendo ya exportados)' 
+                    : `${exportData.length} reportes nuevos exportados y marcados automáticamente`
+            });
+
+        } catch (error) {
+            logger.error('Error exportando reportes de inspección:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al exportar reportes de inspección',
+                error: error.message
+            });
+        }
+    }
+
+    /**
+     * Marca reportes de inspección como exportados al spreadsheet
+     * @param {Object} req - Express request object
+     * @param {Object} res - Express response object
+     * @body {number[]} report_ids - Array de IDs de reportes a marcar como exportados
+     */
+    async markInspectionReportsAsExported(req, res) {
+        try {
+            const { report_ids } = req.body;
+
+            if (!report_ids || !Array.isArray(report_ids) || report_ids.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Se requiere un array de report_ids'
+                });
+            }
+
+            logger.info(`Marcando ${report_ids.length} reportes como exportados`);
+
+            // Actualizar los reportes
+            const [updatedCount] = await InspectionReport.update(
+                { exported_to_spreadsheet: true },
+                { 
+                    where: { 
+                        id: report_ids 
+                    } 
+                }
+            );
+
+            logger.info(`${updatedCount} reportes marcados como exportados`);
+
+            return res.status(200).json({
+                success: true,
+                updated: updatedCount,
+                message: `${updatedCount} reporte(s) marcado(s) como exportado(s)`
+            });
+
+        } catch (error) {
+            logger.error('Error marcando reportes como exportados:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error al marcar reportes como exportados',
+                error: error.message
+            });
+        }
+    }
 }
 
 // Exportar tanto la clase como la función helper
