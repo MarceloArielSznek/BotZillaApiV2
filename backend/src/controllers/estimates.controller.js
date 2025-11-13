@@ -49,17 +49,17 @@ class EstimatesController {
                 ];
             }
             
-            // Agregar filtros de fecha
+            // Agregar filtros de fecha (usando AT updated date en lugar de created date)
             if (startDate) {
-                whereClause.at_created_date = {
+                whereClause.at_updated_date = {
                     [Op.gte]: new Date(startDate)
                 };
             }
             if (endDate) {
-                if (whereClause.at_created_date) {
-                    whereClause.at_created_date[Op.lte] = new Date(endDate + 'T23:59:59.999Z');
+                if (whereClause.at_updated_date) {
+                    whereClause.at_updated_date[Op.lte] = new Date(endDate + 'T23:59:59.999Z');
                 } else {
-                    whereClause.at_created_date = {
+                    whereClause.at_updated_date = {
                         [Op.lte]: new Date(endDate + 'T23:59:59.999Z')
                     };
                 }
