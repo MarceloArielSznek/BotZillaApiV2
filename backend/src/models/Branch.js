@@ -20,6 +20,20 @@ const Branch = sequelize.define('Branch', {
     },
     address: {
         type: DataTypes.TEXT
+    },
+    attic_tech_branch_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Branch ID in Attic Tech API (for syncing data)'
+    },
+    branch_configuration_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'branch_configuration',
+            key: 'id'
+        },
+        comment: 'FK to branch_configuration table'
     }
 }, {
     sequelize,

@@ -6,6 +6,7 @@ import theme from './theme/theme';
 import { AuthProvider } from './context/AuthContext';
 import Login from './pages/Login';
 import DashboardLayout from './layouts/DashboardLayout';
+import FollowUpLayout from './layouts/FollowUpLayout';
 import PublicLayout from './layouts/PublicLayout';
 import Dashboard from './pages/Dashboard';
 import Estimates from './pages/Estimates';
@@ -18,6 +19,7 @@ import Profile from './pages/Profile';
 import TelegramGroups from './pages/TelegramGroups'; // Importar nueva página
 import InspectionReports from './pages/InspectionReports'; // Nueva página
 import Performance from './pages/Performance'; // Nueva página
+import FollowUpEstimates from './pages/FollowUpEstimates'; // Módulo Follow-up
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -82,6 +84,20 @@ function App() {
                   <EmployeeRegistration />
                 </PublicLayout>
               } />
+              
+              {/* Módulo Follow-up (independiente del dashboard principal) */}
+              <Route
+                path="/follow-up"
+                element={
+                  <ProtectedRoute allowedRoles={['admin', 'office_manager']}>
+                    <FollowUpLayout />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="/follow-up/estimates" replace />} />
+                <Route path="estimates" element={<FollowUpEstimates />} />
+              </Route>
+
               {/* Ruta catch-all para prevenir acceso no autorizado */}
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>

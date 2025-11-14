@@ -19,7 +19,10 @@ const {
     CrewMemberBranch,
     Notification,
     NotificationTemplate,
-    InspectionReport
+    InspectionReport,
+    BranchConfiguration,
+    MultiplierRange,
+    BranchConfigurationMultiplierRange
 } = require('../models');
 const {
     logger
@@ -2659,10 +2662,437 @@ class AutomationsController {
             });
         }
     }
+
+    /**
+     * Sync branch configurations and multiplier ranges from Attic Tech
+     * GET /automations/multiplier-ranges-sync?all=true
+     * 
+     * Este endpoint automáticamente:
+     * 1. Obtiene todos los branches de la BD con attic_tech_branch_id
+     * 2. Para cada branch, consulta su configuration desde AT
+     * 3. Guarda/actualiza branch_configuration con todos los baseConstants
+     * 4. Guarda/actualiza todos los multiplier_ranges
+     * 5. Relaciona todo automáticamente
+     */
+    async syncMultiplierRanges(req, res) {
+        try {
+            logger.info('📊 Starting automatic sync of branch configurations and multiplier ranges...');
+            
+            // Obtener todos los branches con attic_tech_branch_id
+            const branches = await Branch.findAll({
+                where: {
+                    attic_tech_branch_id: { [Op.ne]: null }
+                },
+                attributes: ['id', 'name', 'attic_tech_branch_id']
+            });
+
+            if (branches.length === 0) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'No branches with attic_tech_branch_id found in database'
+                });
+            }
+
+            logger.info(`📋 Found ${branches.length} branches to sync: ${branches.map(b => b.name).join(', ')}`);
+
+            const branchesToSync = branches.map(b => ({
+                botzilla_branch_id: b.id,
+                branch_name: b.name,
+                at_branch_id: b.attic_tech_branch_id
+            }));
+
+            // Login to Attic Tech
+            logger.info('🔑 Logging into Attic Tech...');
+            const apiKey = await loginToAtticTech();
+
+            let totalRangesFetched = 0;
+            let totalRangesCreated = 0;
+            let totalRangesUpdated = 0;
+            const results = [];
+
+            // Fetch configuration for each branch
+            for (const branch of branchesToSync) {
+                try {
+                    logger.info(`\n📥 Processing: ${branch.branch_name} (AT Branch ID: ${branch.at_branch_id})...`);
+                    
+                    // 1. Primero obtener el branch desde AT para saber su configuration ID
+                    logger.info(`  🔍 Fetching branch data from Attic Tech...`);
+                    const atBranchData = await fetchBranchFromAtticTech(apiKey, branch.at_branch_id);
+                    
+                    if (!atBranchData || !atBranchData.configuration) {
+                        logger.warn(`  ⚠️  No configuration found for branch ${branch.branch_name}`);
+                        results.push({
+                            branch_name: branch.branch_name,
+                            at_branch_id: branch.at_branch_id,
+                            status: 'no_configuration'
+                        });
+                        continue;
+                    }
+
+                    // El configuration puede ser un ID o un objeto
+                    const atConfigId = typeof atBranchData.configuration === 'object' 
+                        ? atBranchData.configuration.id 
+                        : atBranchData.configuration;
+
+                    logger.info(`  ✅ Found configuration ID: ${atConfigId}`);
+
+                    // 2. Ahora obtener la configuración completa
+                    logger.info(`  📥 Fetching full configuration...`);
+                    const configuration = await fetchBranchConfigurationFromAtticTech(apiKey, atConfigId);
+                    
+                    if (!configuration) {
+                        logger.warn(`  ⚠️  Could not fetch configuration ${atConfigId}`);
+                        results.push({
+                            branch_name: branch.branch_name,
+                            at_branch_id: branch.at_branch_id,
+                            at_config_id: atConfigId,
+                            status: 'config_fetch_failed'
+                        });
+                        continue;
+                    }
+
+                    // 3. Obtener multiplier ranges (pueden venir en la config o necesitamos consultarlos)
+                    let multiplierRanges = configuration.multiplier_ranges || [];
+                    
+                    // Si no vienen en la config, consultarlos individualmente
+                    if (multiplierRanges.length === 0 && configuration.multiplierRanges) {
+                        // multiplierRanges puede ser un array de IDs
+                        logger.info(`  📊 Fetching individual multiplier ranges...`);
+                        for (const rangeIdOrObj of configuration.multiplierRanges) {
+                            const rangeId = typeof rangeIdOrObj === 'object' ? rangeIdOrObj.id : rangeIdOrObj;
+                            try {
+                                const range = await fetchMultiplierRangeFromAtticTech(apiKey, rangeId);
+                                if (range) multiplierRanges.push(range);
+                            } catch (err) {
+                                logger.warn(`    ⚠️  Could not fetch range ${rangeId}: ${err.message}`);
+                            }
+                        }
+                    }
+
+                    if (multiplierRanges.length === 0) {
+                        logger.warn(`  ⚠️  No multiplier ranges found for configuration ${atConfigId}`);
+                    }
+
+                    // 1. Save/update BranchConfiguration
+                    const baseConstants = configuration.baseConstants || {};
+                    const [branchConfig, configCreated] = await BranchConfiguration.findOrCreate({
+                        where: { at_config_id: configuration.id },
+                        defaults: {
+                            at_config_id: configuration.id,
+                            name: configuration.name,
+                            base_hourly_rate: baseConstants.baseHourlyRate,
+                            average_work_day_hours: baseConstants.averageWorkDayHours,
+                            waste_factor: baseConstants.wasteFactor,
+                            credit_card_fee: baseConstants.creditCardFee,
+                            gas_cost: baseConstants.gasCost,
+                            truck_average_mpg: baseConstants.truckAverageMPG,
+                            labor_hours_load_unload: baseConstants.laborHoursLoadUnload,
+                            sub_multiplier: baseConstants.subMultiplier,
+                            cash_factor: baseConstants.cashFactor,
+                            max_discount: baseConstants.maxDiscount,
+                            address: baseConstants.address,
+                            min_retail_price: baseConstants.minRetailPrice,
+                            b2b_max_discount: baseConstants.b2bMaxDiscount,
+                            quality_control_visit_price: baseConstants.qualityControlVisitPrice,
+                            bonus_pool_percentage: baseConstants.bonusPoolPercentage,
+                            bonus_payout_cutoff: baseConstants.bonusPayoutCutoff,
+                            leaderboard_color_percentage: baseConstants.leaderboardColorPercentage,
+                            max_open_estimates: baseConstants.maxOpenEstimates,
+                            finance_factors: baseConstants.financeFactors || null,
+                            at_created_at: configuration.createdAt ? new Date(configuration.createdAt) : null,
+                            at_updated_at: configuration.updatedAt ? new Date(configuration.updatedAt) : null
+                        }
+                    });
+
+                    if (!configCreated) {
+                        // Update existing configuration
+                        await branchConfig.update({
+                            name: configuration.name,
+                            base_hourly_rate: baseConstants.baseHourlyRate,
+                            average_work_day_hours: baseConstants.averageWorkDayHours,
+                            waste_factor: baseConstants.wasteFactor,
+                            credit_card_fee: baseConstants.creditCardFee,
+                            gas_cost: baseConstants.gasCost,
+                            truck_average_mpg: baseConstants.truckAverageMPG,
+                            labor_hours_load_unload: baseConstants.laborHoursLoadUnload,
+                            sub_multiplier: baseConstants.subMultiplier,
+                            cash_factor: baseConstants.cashFactor,
+                            max_discount: baseConstants.maxDiscount,
+                            address: baseConstants.address,
+                            min_retail_price: baseConstants.minRetailPrice,
+                            b2b_max_discount: baseConstants.b2bMaxDiscount,
+                            quality_control_visit_price: baseConstants.qualityControlVisitPrice,
+                            bonus_pool_percentage: baseConstants.bonusPoolPercentage,
+                            bonus_payout_cutoff: baseConstants.bonusPayoutCutoff,
+                            leaderboard_color_percentage: baseConstants.leaderboardColorPercentage,
+                            max_open_estimates: baseConstants.maxOpenEstimates,
+                            finance_factors: baseConstants.financeFactors || null,
+                            at_updated_at: configuration.updatedAt ? new Date(configuration.updatedAt) : null
+                        });
+                    }
+
+                    logger.info(`  ${configCreated ? '✅ Created' : '🔄 Updated'} configuration: ${configuration.name}`);
+
+                    // 2. Update branch with FK to configuration
+                    const botZillaBranch = await Branch.findByPk(branch.botzilla_branch_id);
+                    if (botZillaBranch && botZillaBranch.branch_configuration_id !== branchConfig.id) {
+                        await botZillaBranch.update({ branch_configuration_id: branchConfig.id });
+                        logger.info(`  🔗 Linked branch ${branch.branch_name} to configuration ${branchConfig.id}`);
+                    }
+
+                    // 4. Process multiplier ranges
+                    logger.info(`  📊 Found ${multiplierRanges.length} multiplier ranges`);
+                    totalRangesFetched += multiplierRanges.length;
+
+                    const branchRangesCreated = [];
+                    const branchRangesUpdated = [];
+
+                    for (const range of multiplierRanges) {
+                        try {
+                            // 1. Crear/actualizar el multiplier range (sin FK a configuración)
+                            const [multiplierRange, rangeCreated] = await MultiplierRange.findOrCreate({
+                                where: { at_multiplier_range_id: range.id },
+                                defaults: {
+                                    name: range.name,
+                                    min_cost: range.minCost,
+                                    max_cost: range.maxCost,
+                                    lowest_multiple: range.lowestMultiple,
+                                    highest_multiple: range.highestMultiple,
+                                    at_multiplier_range_id: range.id,
+                                    at_created_at: range.createdAt ? new Date(range.createdAt) : null,
+                                    at_updated_at: range.updatedAt ? new Date(range.updatedAt) : null
+                                }
+                            });
+
+                            if (rangeCreated) {
+                                totalRangesCreated++;
+                                branchRangesCreated.push(range.name);
+                                logger.info(`    ✅ Created range: ${range.name} (AT ID: ${range.id})`);
+                            } else {
+                                // Update existing
+                                await multiplierRange.update({
+                                    name: range.name,
+                                    min_cost: range.minCost,
+                                    max_cost: range.maxCost,
+                                    lowest_multiple: range.lowestMultiple,
+                                    highest_multiple: range.highestMultiple,
+                                    at_updated_at: range.updatedAt ? new Date(range.updatedAt) : null
+                                });
+                                totalRangesUpdated++;
+                                branchRangesUpdated.push(range.name);
+                                logger.info(`    🔄 Updated range: ${range.name} (AT ID: ${range.id})`);
+                            }
+
+                            // 2. Crear la relación en la tabla junction (si no existe)
+                            const [junction, junctionCreated] = await BranchConfigurationMultiplierRange.findOrCreate({
+                                where: {
+                                    branch_configuration_id: branchConfig.id,
+                                    multiplier_range_id: multiplierRange.id
+                                },
+                                defaults: {
+                                    branch_configuration_id: branchConfig.id,
+                                    multiplier_range_id: multiplierRange.id
+                                }
+                            });
+
+                            if (junctionCreated) {
+                                logger.info(`    🔗 Linked range ${range.name} to configuration ${branchConfig.name}`);
+                            }
+
+                        } catch (rangeError) {
+                            logger.error(`    ❌ Error saving range ${range.name}:`, rangeError.message);
+                        }
+                    }
+
+                    results.push({
+                        branch_name: branch.branch_name,
+                        at_branch_id: branch.at_branch_id,
+                        at_config_id: atConfigId,
+                        config_name: configuration.name,
+                        total_ranges: multiplierRanges.length,
+                        ranges_created: branchRangesCreated.length,
+                        ranges_updated: branchRangesUpdated.length,
+                        status: 'success'
+                    });
+
+                } catch (error) {
+                    logger.error(`  ❌ Error syncing ${branch.branch_name}:`, error.message);
+                    results.push({
+                        branch_name: branch.branch_name,
+                        at_branch_id: branch.at_branch_id,
+                        status: 'error',
+                        error: error.message
+                    });
+                }
+            }
+
+            const summary = `✅ Multiplier ranges sync completed. Total ranges: ${totalRangesFetched}, Created: ${totalRangesCreated}, Updated: ${totalRangesUpdated}`;
+            logger.info(summary);
+
+            return res.status(200).json({
+                success: true,
+                message: summary,
+                summary: {
+                    branches_processed: branchesToSync.length,
+                    total_ranges_fetched: totalRangesFetched,
+                    total_ranges_created: totalRangesCreated,
+                    total_ranges_updated: totalRangesUpdated
+                },
+                results: results
+            });
+
+        } catch (error) {
+            logger.error('❌ Error syncing multiplier ranges:', error);
+            return res.status(500).json({
+                success: false,
+                message: 'Error syncing multiplier ranges',
+                error: error.message
+            });
+        }
+    }
+
 }
 
-// Exportar tanto la clase como la función helper
+/**
+ * Helper function: Fetch branch data from Attic Tech to get its configuration ID
+ */
+async function fetchBranchFromAtticTech(apiKey, atBranchId) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'www.attic-tech.com',
+            path: `/api/branches/${atBranchId}?depth=2&draft=false&locale=undefined`,
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'BotZilla API v2.0'
+            },
+            timeout: 30000
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode === 200) {
+                    try {
+                        const json = JSON.parse(data);
+                        resolve(json);
+                    } catch (e) {
+                        reject(new Error('Error parsing Attic Tech API response'));
+                    }
+                } else if (res.statusCode === 404) {
+                    resolve(null);
+                } else {
+                    reject(new Error(`Attic Tech API error: ${res.statusCode}`));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request to Attic Tech API timed out'));
+        });
+        req.end();
+    });
+}
+
+/**
+ * Helper function: Fetch branch configuration from Attic Tech
+ */
+async function fetchBranchConfigurationFromAtticTech(apiKey, atConfigId) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'www.attic-tech.com',
+            path: `/api/branch-configurations/${atConfigId}?depth=2&draft=false&locale=undefined`,
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'BotZilla API v2.0'
+            },
+            timeout: 30000
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode === 200) {
+                    try {
+                        const json = JSON.parse(data);
+                        resolve(json);
+                    } catch (e) {
+                        reject(new Error('Error parsing Attic Tech API response'));
+                    }
+                } else if (res.statusCode === 404) {
+                    resolve(null);
+                } else {
+                    reject(new Error(`Attic Tech API error: ${res.statusCode}`));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request to Attic Tech API timed out'));
+        });
+        req.end();
+    });
+}
+
+/**
+ * Helper function: Fetch individual multiplier range from Attic Tech
+ */
+async function fetchMultiplierRangeFromAtticTech(apiKey, rangeId) {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'www.attic-tech.com',
+            path: `/api/multiplier-ranges/${rangeId}?depth=2&draft=false&locale=undefined`,
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'User-Agent': 'BotZilla API v2.0'
+            },
+            timeout: 30000
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', chunk => { data += chunk; });
+            res.on('end', () => {
+                if (res.statusCode === 200) {
+                    try {
+                        const json = JSON.parse(data);
+                        resolve(json);
+                    } catch (e) {
+                        reject(new Error('Error parsing Attic Tech API response'));
+                    }
+                } else if (res.statusCode === 404) {
+                    resolve(null);
+                } else {
+                    reject(new Error(`Attic Tech API error: ${res.statusCode}`));
+                }
+            });
+        });
+
+        req.on('error', reject);
+        req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Request to Attic Tech API timed out'));
+        });
+        req.end();
+    });
+}
+
+// Exportar tanto la clase como las funciones helper
 module.exports = {
     AutomationsController: new AutomationsController(),
-    findSalesPerson
+    findSalesPerson,
+    fetchBranchFromAtticTech,
+    fetchBranchConfigurationFromAtticTech,
+    fetchMultiplierRangeFromAtticTech
 };

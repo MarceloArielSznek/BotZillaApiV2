@@ -35,6 +35,12 @@ router.get('/sold',
     estimatesController.getSoldEstimates
 );
 
+// Obtener lost estimates para el módulo de follow-ups
+router.get('/lost',
+    verifyToken,
+    estimatesController.getLostEstimates
+);
+
 // Obtener detalles de un estimate específico (requiere autenticación)
 router.get('/:id', 
     verifyToken,

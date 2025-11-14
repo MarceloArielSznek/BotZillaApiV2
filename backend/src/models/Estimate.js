@@ -5,6 +5,7 @@ const sequelize = require('../config/database');
 const SalesPerson = require('./SalesPerson');
 const Branch = require('./Branch');
 const EstimateStatus = require('./EstimateStatus');
+const PaymentMethod = require('./PaymentMethod');
 
 const Estimate = sequelize.define('Estimate', {
     id: {
@@ -88,6 +89,14 @@ const Estimate = sequelize.define('Estimate', {
     attic_tech_hours: {
         type: DataTypes.DECIMAL(10, 2)
     },
+    payment_method_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+            model: 'payment_method',
+            key: 'id'
+        }
+    },
     at_created_date: {
         type: DataTypes.DATE,
         field: 'at_created_date'
@@ -120,5 +129,6 @@ const Estimate = sequelize.define('Estimate', {
 Estimate.belongsTo(SalesPerson, { as: 'SalesPerson', foreignKey: 'sales_person_id' });
 Estimate.belongsTo(Branch, { as: 'Branch', foreignKey: 'branch_id' });
 Estimate.belongsTo(EstimateStatus, { as: 'EstimateStatus', foreignKey: 'status_id' });
+Estimate.belongsTo(PaymentMethod, { as: 'PaymentMethod', foreignKey: 'payment_method_id' });
 
 module.exports = Estimate; 

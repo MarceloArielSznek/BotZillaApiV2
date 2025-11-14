@@ -32,6 +32,10 @@ const PerformanceSyncJob = require('./PerformanceSyncJob');
 const BuilderTrendShift = require('./BuilderTrendShift');
 const OverrunReport = require('./OverrunReport');
 const OperationCommandPost = require('./OperationCommandPost');
+const PaymentMethod = require('./PaymentMethod');
+const BranchConfiguration = require('./BranchConfiguration');
+const MultiplierRange = require('./MultiplierRange');
+const BranchConfigurationMultiplierRange = require('./BranchConfigurationMultiplierRange');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -75,6 +79,11 @@ Estimate.belongsTo(EstimateStatus, {
     as: 'status'
 });
 
+Estimate.belongsTo(PaymentMethod, {
+    foreignKey: 'payment_method_id',
+    as: 'paymentMethod'
+});
+
 // Asociaciones inversas
 SalesPerson.hasMany(Estimate, {
     foreignKey: 'sales_person_id',
@@ -88,6 +97,11 @@ Branch.hasMany(Estimate, {
 
 EstimateStatus.hasMany(Estimate, {
     foreignKey: 'status_id',
+    as: 'estimates'
+});
+
+PaymentMethod.hasMany(Estimate, {
+    foreignKey: 'payment_method_id',
     as: 'estimates'
 });
 
@@ -328,6 +342,33 @@ Job.hasMany(PerformanceSyncJob, { foreignKey: 'matched_job_id', as: 'performance
 BuilderTrendShift.belongsTo(PerformanceSyncJob, { foreignKey: 'matched_sync_job_id', as: 'matchedSyncJob' });
 PerformanceSyncJob.hasMany(BuilderTrendShift, { foreignKey: 'matched_sync_job_id', as: 'builderTrendShifts' });
 
+// === BRANCH CONFIGURATION ASSOCIATIONS ===
+// Branch → BranchConfiguration (1 a 1)
+Branch.belongsTo(BranchConfiguration, {
+    foreignKey: 'branch_configuration_id',
+    as: 'configuration'
+});
+
+BranchConfiguration.hasMany(Branch, {
+    foreignKey: 'branch_configuration_id',
+    as: 'branches'
+});
+
+// BranchConfiguration ←→ MultiplierRange (muchos a muchos)
+BranchConfiguration.belongsToMany(MultiplierRange, {
+    through: BranchConfigurationMultiplierRange,
+    foreignKey: 'branch_configuration_id',
+    otherKey: 'multiplier_range_id',
+    as: 'multiplierRanges'
+});
+
+MultiplierRange.belongsToMany(BranchConfiguration, {
+    through: BranchConfigurationMultiplierRange,
+    foreignKey: 'multiplier_range_id',
+    otherKey: 'branch_configuration_id',
+    as: 'configurations'
+});
+
 
 module.exports = {
     User,
@@ -361,5 +402,9 @@ module.exports = {
     PerformanceSyncJob,
     BuilderTrendShift,
     OverrunReport,
-    OperationCommandPost
+    OperationCommandPost,
+    PaymentMethod,
+    BranchConfiguration,
+    MultiplierRange,
+    BranchConfigurationMultiplierRange
 }; 

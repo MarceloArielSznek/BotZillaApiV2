@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Estimate, SalesPerson, Branch, EstimateStatus, Job, SalesPersonBranch } = require('../models');
+const { Estimate, SalesPerson, Branch, EstimateStatus, Job, SalesPersonBranch, PaymentMethod } = require('../models');
 const https = require('https');
 const { findOrCreateBranch: branchHelperFindOrCreate } = require('../utils/branchHelper');
 
@@ -127,6 +127,94 @@ class EstimatesController {
 
     } catch (error) {
             res.status(500).json({ message: 'Error fetching estimate details', error: error.message });
+        }
+    }
+
+    /**
+     * Obtener lost estimates para el módulo de follow-ups
+     * Optimizado para mostrar información relevante para re-engagement
+     */
+    async getLostEstimates(req, res) {
+        try {
+            const { page = 1, limit = 10, branch, salesperson, startDate, endDate, search } = req.query;
+            const offset = (page - 1) * limit;
+
+            // Buscar el status "Lost"
+            const lostStatus = await EstimateStatus.findOne({ where: { name: 'Lost' } });
+            if (!lostStatus) {
+                return res.status(404).json({ message: 'Status "Lost" not found' });
+            }
+
+            const whereClause = {
+                status_id: lostStatus.id // Solo lost estimates
+            };
+
+            // Filtros adicionales
+            if (branch) whereClause.branch_id = branch;
+            if (salesperson) whereClause.sales_person_id = salesperson;
+
+            // Incluir relaciones
+            const includeClause = [
+                { model: SalesPerson, as: 'salesperson', attributes: ['name', 'email'] },
+                { model: Branch, as: 'branch', attributes: ['name'] },
+                { model: EstimateStatus, as: 'status', attributes: ['name'] }
+            ];
+
+            // Búsqueda por texto
+            if (search && search.trim()) {
+                const searchTerm = search.trim();
+                whereClause[Op.or] = [
+                    { name: { [Op.iLike]: `%${searchTerm}%` } },
+                    { customer_name: { [Op.iLike]: `%${searchTerm}%` } },
+                    { '$salesperson.name$': { [Op.iLike]: `%${searchTerm}%` } },
+                    { '$branch.name$': { [Op.iLike]: `%${searchTerm}%` } }
+                ];
+            }
+
+            // Filtros de fecha (usando at_updated_date)
+            if (startDate) {
+                whereClause.at_updated_date = {
+                    [Op.gte]: new Date(startDate)
+                };
+            }
+            if (endDate) {
+                if (whereClause.at_updated_date) {
+                    whereClause.at_updated_date[Op.lte] = new Date(endDate + 'T23:59:59.999Z');
+                } else {
+                    whereClause.at_updated_date = {
+                        [Op.lte]: new Date(endDate + 'T23:59:59.999Z')
+                    };
+                }
+            }
+
+            // Ordenar por fecha de actualización descendente (más recientes primero)
+            const orderClause = [['at_updated_date', 'DESC']];
+
+            console.log('🔍 Lost Estimates - Filtros aplicados:', {
+                query: req.query,
+                whereClause: whereClause
+            });
+
+            const estimates = await Estimate.findAndCountAll({
+                where: whereClause,
+                include: includeClause,
+                limit: parseInt(limit),
+                offset: offset,
+                order: orderClause
+            });
+
+            const transformedData = estimates.rows.map(e => transformEstimateForFrontend(e));
+
+            res.json({
+                total: estimates.count,
+                pages: Math.ceil(estimates.count / limit),
+                currentPage: parseInt(page),
+                data: transformedData
+            });
+
+        } catch (error) {
+            console.error('Error fetching lost estimates:', error);
+            res.status(500).json({ message: 'Error fetching lost estimates', error: error.message });
         }
     }
 
@@ -440,7 +528,8 @@ class EstimatesController {
                 customer_address: lead.property?.address || null,
                 customer_email: typeof customerEmail === 'string' ? customerEmail.slice(0, 200).trim() : null,
                 customer_phone: typeof customerPhone === 'string' ? customerPhone.replace(/[^0-9+()\-\s]/g, '').slice(0, 50).trim() : null,
-                crew_notes: lead.crew_notes
+                crew_notes: lead.crew_notes,
+                payment_method: lead.payment_method || null
             };
         });
     }
@@ -459,6 +548,7 @@ class EstimatesController {
                 const branch = await this.findOrCreateBranch(estimateData.branchName, logMessages);
                 const salesPerson = await this.findOrCreateSalesPerson(estimateData.salespersonName, branch ? branch.id : null, logMessages);
                 const status = await this.findOrCreateEstimateStatus(estimateData.status, logMessages);
+                const paymentMethod = await this.findOrCreatePaymentMethod(estimateData.payment_method, logMessages);
 
                 const estimatePayload = {
                     attic_tech_estimate_id: estimateData.attic_tech_estimate_id,
@@ -478,7 +568,8 @@ class EstimatesController {
                     attic_tech_hours: estimateData.attic_tech_hours ? Math.round(estimateData.attic_tech_hours) : null,
                     branch_id: branch ? branch.id : null,
                     sales_person_id: salesPerson ? salesPerson.id : null,
-                    status_id: status ? status.id : null
+                    status_id: status ? status.id : null,
+                    payment_method_id: paymentMethod ? paymentMethod.id : null
                 };
 
                 const [estimate, created] = await Estimate.findOrCreate({
@@ -768,6 +859,38 @@ class EstimatesController {
         }
 
         return newStatus;
+    }
+
+    async findOrCreatePaymentMethod(name, logMessages = []) {
+        if (!name || typeof name !== 'string') return null;
+
+        const normalizedName = name.trim().toLowerCase();
+        if (normalizedName === '') return null;
+
+        // Find case-insensitively using iLike (for PostgreSQL)
+        let paymentMethod = await PaymentMethod.findOne({
+            where: {
+                name: {
+                    [Op.iLike]: normalizedName
+                }
+            }
+        });
+
+        if (paymentMethod) {
+            return paymentMethod; // Return the existing payment method.
+        }
+
+        // If not found, create it using the normalized name to ensure consistency.
+        const [newPaymentMethod, created] = await PaymentMethod.findOrCreate({
+            where: { name: normalizedName },
+            defaults: { name: normalizedName }
+        });
+
+        if (created) {
+            logMessages.push(`💳 Created new payment method: ${normalizedName}`);
+        }
+
+        return newPaymentMethod;
     }
 
     // Actualizar un estimate

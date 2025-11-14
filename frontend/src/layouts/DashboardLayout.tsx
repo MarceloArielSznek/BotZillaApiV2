@@ -78,6 +78,7 @@ const DashboardLayout = () => {
     { text: 'Jobs', icon: <JobsIcon />, path: '/dashboard/jobs' },
     { text: 'Employees', icon: <EmployeesIcon />, path: '/dashboard/employees' },
     { text: 'Inspection Reports', icon: <ReportsIcon />, path: '/dashboard/inspection-reports' },
+    { text: 'Follow-Ups', icon: <EstimatesIcon sx={{ transform: 'rotate(180deg)' }} />, path: '/follow-up', isExternal: true },
     { text: 'Notifications', icon: <NotificationsIcon />, path: '/dashboard/notifications' },
     { text: 'Settings', icon: <SettingsIcon />, path: '/dashboard/settings' },
   ];
@@ -114,7 +115,7 @@ const DashboardLayout = () => {
               navigate(item.path);
               if (isMobile) setMobileOpen(false);
             }}
-            selected={location.pathname === item.path}
+            selected={(item as any).isExternal ? location.pathname.startsWith(item.path) : location.pathname === item.path}
             sx={{
               my: 0.5,
               borderRadius: 1,

@@ -468,4 +468,83 @@ router.post(
     automationsController.markInspectionReportsAsExported
 );
 
+/**
+ * @swagger
+ * /api/automations/multiplier-ranges-sync:
+ *   get:
+ *     summary: Sincroniza multiplier ranges desde Attic Tech para branches específicos o todos
+ *     description: Obtiene los rangos de multiplicadores de precios desde AT API y los guarda en la BD
+ *     tags: [Automations]
+ *     security:
+ *       - ApiKeyAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: branchIds
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: IDs de branches en Attic Tech separados por comas (ej. "9,10,11")
+ *         example: "9,10,11"
+ *       - in: query
+ *         name: all
+ *         required: false
+ *         schema:
+ *           type: boolean
+ *         description: Si es true, sincroniza todos los branches que tienen attic_tech_branch_id
+ *         example: true
+ *     responses:
+ *       200:
+ *         description: Sincronización completada exitosamente
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 message:
+ *                   type: string
+ *                   example: "Multiplier ranges sync completed. Fetched: 3, Created: 2, Updated: 1"
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     total_fetched:
+ *                       type: integer
+ *                       example: 3
+ *                     total_created:
+ *                       type: integer
+ *                       example: 2
+ *                     total_updated:
+ *                       type: integer
+ *                       example: 1
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       at_branch_id:
+ *                         type: integer
+ *                       botzilla_branch_id:
+ *                         type: integer
+ *                       multiplier_range_id:
+ *                         type: integer
+ *                       name:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [created, updated, not_found, error]
+ *       400:
+ *         description: Request inválido - falta branchIds parameter
+ *       401:
+ *         description: No autorizado - API Key faltante o inválida
+ *       500:
+ *         description: Error del servidor
+ */
+router.get(
+    '/multiplier-ranges-sync',
+    validateApiKey,
+    automationsController.syncMultiplierRanges
+);
+
 module.exports = router; 
