@@ -41,3 +41,6 @@ yarn-error.log*
 *.swo 
 # Exported JSON files from scripts
 backend/exports/
+# Debug files (add to existing .gitignore)
+backend/src/scripts/*_debug.json
+analizar.json

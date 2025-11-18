@@ -32,6 +32,29 @@ export interface Estimate {
     id: number;
     name: string;
   } | null;
+  PaymentMethod: {
+    id: number;
+    name: string;
+  } | null;
+  calculated_multiplier: number | null;
+  payment_method_factor: number | null;
+  sub_multiplier: number | null;
+  snapshot_multiplier_ranges: Array<{
+    id: number;
+    name: string;
+    minCost: number;
+    maxCost: number | null;
+    lowestMultiple: number;
+    highestMultiple: number;
+  }> | null;
+  city_tax_rate: number | null;
+  state_tax_rate: number | null;
+  total_tax_rate: number | null;
+  city_tax_amount: number | null;
+  state_tax_amount: number | null;
+  total_tax_amount: number | null;
+  price_before_taxes: number | null;
+  price_after_taxes: number | null;
   has_job?: boolean;
   job?: { id: number; name: string };
 }
@@ -145,6 +168,51 @@ const estimateService = {
     } catch (error: any) {
       console.error('Error fetching estimates:', error.response?.data || error.message);
       // En lugar de hacer throw, devolver estructura vacía
+      return {
+        data: [],
+        total: 0,
+        pages: 0,
+        currentPage: 1
+      };
+    }
+  },
+
+  // Fetch LOST estimates (uses dedicated endpoint with correct aliases)
+  fetchLostEstimates: async (params: FetchEstimatesParams = {}): Promise<FetchEstimatesResponse> => {
+    try {
+      const response = await api.get('/estimates/lost', {
+        params: params
+      });
+      
+      const data = response?.data;
+      if (!data) {
+        console.warn('Empty response from lost estimates API');
+        return {
+          data: [],
+          total: 0,
+          pages: 0,
+          currentPage: 1
+        };
+      }
+      
+      if (typeof data === 'object' && Array.isArray(data.data)) {
+        return {
+          data: data.data,
+          total: data.total || data.data.length,
+          pages: data.pages || Math.ceil((data.total || data.data.length) / (params.limit || 10)),
+          currentPage: data.currentPage || 1
+        };
+      }
+      
+      console.warn('Unexpected lost estimates response structure:', data);
+      return {
+        data: [],
+        total: 0,
+        pages: 0,
+        currentPage: 1
+      };
+    } catch (error: any) {
+      console.error('Error fetching lost estimates:', error.response?.data || error.message);
       return {
         data: [],
         total: 0,

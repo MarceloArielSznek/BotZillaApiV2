@@ -22,7 +22,9 @@ const {
     InspectionReport,
     BranchConfiguration,
     MultiplierRange,
-    BranchConfigurationMultiplierRange
+    BranchConfigurationMultiplierRange,
+    FollowUpTicket,
+    FollowUpStatus
 } = require('../models');
 const {
     logger
@@ -571,6 +573,46 @@ async function findOrCreateEstimateStatus(name, logMessages = []) {
     return newStatus;
 }
 
+/**
+ * Auto-crear Follow-Up Ticket para estimates "Lost"
+ */
+async function autoCreateFollowUpTicket(estimate, estimateName, logMessages = []) {
+    try {
+        // Buscar el status del estimate
+        const estimateStatus = await EstimateStatus.findByPk(estimate.status_id);
+        
+        if (estimateStatus && estimateStatus.name === 'Lost') {
+            // Verificar si ya tiene un ticket
+            const existingTicket = await FollowUpTicket.findOne({
+                where: { estimate_id: estimate.id }
+            });
+
+            if (!existingTicket) {
+                // Buscar el status "Negotiating" por defecto
+                const negotiatingStatus = await FollowUpStatus.findOne({
+                    where: { name: 'Negotiating' }
+                });
+
+                // Crear el ticket
+                await FollowUpTicket.create({
+                    estimate_id: estimate.id,
+                    followed_up: false,
+                    status_id: negotiatingStatus ? negotiatingStatus.id : null,
+                    label_id: null,
+                    chat_id: null,
+                    notes: 'Auto-created during estimate sync',
+                    follow_up_date: null,
+                    last_contact_date: null
+                });
+
+                logMessages.push(`🎫 Created follow-up ticket for Lost estimate: ${estimateName}`);
+            }
+        }
+    } catch (ticketError) {
+        logMessages.push(`⚠️  Failed to create follow-up ticket for ${estimateName}: ${ticketError.message}`);
+    }
+}
+
 async function saveEstimatesToDb(estimatesData, logMessages = []) {
     let newCount = 0;
     let updatedCount = 0;
@@ -627,11 +669,17 @@ async function saveEstimatesToDb(estimatesData, logMessages = []) {
             await Estimate.destroy({ where: { id: { [Op.in]: legacyIdsToDelete } } });
             logMessages.push(`🗑️ Removed ${legacyRecords.length} legacy duplicate(s). IDs: ${legacyIdsToDelete.join(', ')}`);
 
+            // Auto-crear follow-up ticket si es Lost
+            await autoCreateFollowUpTicket(recordById, data.name, logMessages);
+
         } else if (recordById) {
             // Standard update, no legacy records found.
             await recordById.update(estimatePayload);
             updatedCount++;
             logMessages.push(`🔄 Updated estimate by ID: ${recordById.name}`);
+
+            // Auto-crear follow-up ticket si es Lost
+            await autoCreateFollowUpTicket(recordById, data.name, logMessages);
 
         } else if (legacyRecords.length > 0) {
             // No record with the ID exists yet, but we found a legacy one to update.
@@ -646,13 +694,20 @@ async function saveEstimatesToDb(estimatesData, logMessages = []) {
                 await Estimate.destroy({ where: { id: { [Op.in]: legacyIdsToDelete } } });
                 logMessages.push(`🗑️ Removed ${legacyIdsToDelete.length} extra legacy duplicate(s).`);
             }
+
+            // Auto-crear follow-up ticket si es Lost
+            await autoCreateFollowUpTicket(masterLegacy, data.name, logMessages);
+
         } else {
             // This is a completely new estimate. Only create if it's not a legacy record.
             const creationDateCutoff = new Date('2025-06-15');
             if (data.atCreatedDate && new Date(data.atCreatedDate) >= creationDateCutoff) {
-                await Estimate.create(estimatePayload);
+                const newEstimate = await Estimate.create(estimatePayload);
                 newCount++;
                 logMessages.push(`✨ Created new estimate: ${data.name}`);
+
+                // Auto-crear follow-up ticket si es Lost
+                await autoCreateFollowUpTicket(newEstimate, data.name, logMessages);
             } else {
                 logMessages.push(`🚫 Skipped creating old estimate (created before ${creationDateCutoff.toISOString().split('T')[0]}): ${data.name}`);
             }

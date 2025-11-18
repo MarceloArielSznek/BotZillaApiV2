@@ -36,6 +36,12 @@ const PaymentMethod = require('./PaymentMethod');
 const BranchConfiguration = require('./BranchConfiguration');
 const MultiplierRange = require('./MultiplierRange');
 const BranchConfigurationMultiplierRange = require('./BranchConfigurationMultiplierRange');
+const WaTaxRate = require('./WaTaxRate');
+const FollowUpStatus = require('./FollowUpStatus');
+const FollowUpLabel = require('./FollowUpLabel');
+const Chat = require('./Chat');
+const ChatMessage = require('./ChatMessage');
+const FollowUpTicket = require('./FollowUpTicket');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -369,6 +375,68 @@ MultiplierRange.belongsToMany(BranchConfiguration, {
     as: 'configurations'
 });
 
+// === FOLLOW-UP SYSTEM ASSOCIATIONS ===
+
+// Chat → ChatMessage (1 a muchos)
+Chat.hasMany(ChatMessage, {
+    foreignKey: 'chat_id',
+    as: 'messages'
+});
+ChatMessage.belongsTo(Chat, {
+    foreignKey: 'chat_id',
+    as: 'chat'
+});
+
+// FollowUpTicket → Estimate (muchos a 1)
+FollowUpTicket.belongsTo(Estimate, {
+    foreignKey: 'estimate_id',
+    as: 'estimate'
+});
+Estimate.hasOne(FollowUpTicket, {
+    foreignKey: 'estimate_id',
+    as: 'followUpTicket'
+});
+
+// FollowUpTicket → FollowUpStatus (muchos a 1)
+FollowUpTicket.belongsTo(FollowUpStatus, {
+    foreignKey: 'status_id',
+    as: 'status'
+});
+FollowUpStatus.hasMany(FollowUpTicket, {
+    foreignKey: 'status_id',
+    as: 'tickets'
+});
+
+// FollowUpTicket → FollowUpLabel (muchos a 1)
+FollowUpTicket.belongsTo(FollowUpLabel, {
+    foreignKey: 'label_id',
+    as: 'label'
+});
+FollowUpLabel.hasMany(FollowUpTicket, {
+    foreignKey: 'label_id',
+    as: 'tickets'
+});
+
+// FollowUpTicket → Chat (1 a 1)
+FollowUpTicket.belongsTo(Chat, {
+    foreignKey: 'chat_id',
+    as: 'chat'
+});
+Chat.hasOne(FollowUpTicket, {
+    foreignKey: 'chat_id',
+    as: 'ticket'
+});
+
+// FollowUpTicket → User (assigned_to) (muchos a 1)
+FollowUpTicket.belongsTo(User, {
+    foreignKey: 'assigned_to',
+    as: 'assignedUser'
+});
+User.hasMany(FollowUpTicket, {
+    foreignKey: 'assigned_to',
+    as: 'assignedTickets'
+});
+
 
 module.exports = {
     User,
@@ -406,5 +474,11 @@ module.exports = {
     PaymentMethod,
     BranchConfiguration,
     MultiplierRange,
-    BranchConfigurationMultiplierRange
+    BranchConfigurationMultiplierRange,
+    WaTaxRate,
+    FollowUpStatus,
+    FollowUpLabel,
+    Chat,
+    ChatMessage,
+    FollowUpTicket
 }; 

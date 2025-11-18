@@ -109,6 +109,170 @@ const EstimateDetailsModal: React.FC<EstimateDetailsModalProps> = ({ estimateId,
               </Table>
             </TableContainer>
 
+            {/* Pricing Breakdown Section */}
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
+                Pricing Breakdown
+              </Typography>
+              
+              <TableContainer component={Paper} variant="outlined">
+                <Table size="small">
+                  <TableBody>
+                    {/* True Cost Breakdown */}
+                    {(() => {
+                      const trueCost = estimate.price != null ? Number(estimate.price) : 0;
+                      const subRetailCost = estimate.sub_service_retail_cost != null ? Number(estimate.sub_service_retail_cost) : 0;
+                      const subFactor = estimate.sub_multiplier || 1.75;
+                      const hasSubServices = subRetailCost > 0;
+                      const subMaterialBase = hasSubServices ? subRetailCost / subFactor : 0;
+                      const trueCostNonSub = hasSubServices ? trueCost - subMaterialBase : trueCost;
+                      
+                      return (
+                        <>
+                          {hasSubServices ? (
+                            <>
+                              <InfoRow 
+                                label="True Cost (Non-Sub)" 
+                                value={<Typography sx={{ color: 'success.main', fontWeight: 600 }}>{formatCurrency(trueCostNonSub)}</Typography>} 
+                              />
+                              <InfoRow 
+                                label="Sub Material Base" 
+                                value={<Typography sx={{ color: 'info.main', fontWeight: 600 }}>{formatCurrency(subMaterialBase)}</Typography>} 
+                              />
+                              <InfoRow 
+                                label="True Cost Total" 
+                                value={<Typography sx={{ fontWeight: 600 }}>{formatCurrency(trueCost)}</Typography>} 
+                              />
+                            </>
+                          ) : (
+                            <InfoRow 
+                              label="True Cost" 
+                              value={<Typography sx={{ fontWeight: 600 }}>{formatCurrency(trueCost)}</Typography>} 
+                            />
+                          )}
+                        </>
+                      );
+                    })()}
+                    
+                    {/* Multipliers */}
+                    {estimate.calculated_multiplier != null && (
+                      <InfoRow 
+                        label="Multiplier (Theoretical)" 
+                        value={<Chip label={`${estimate.calculated_multiplier}x`} size="small" color="success" />} 
+                      />
+                    )}
+                    
+                    {/* Effective Multiplier */}
+                    {(() => {
+                      const trueCost = estimate.price != null ? Number(estimate.price) : 0;
+                      const finalPrice = estimate.final_price != null ? Number(estimate.final_price) : 0;
+                      const retailCost = estimate.retail_cost != null ? Number(estimate.retail_cost) : 0;
+                      const subRetailCost = estimate.sub_service_retail_cost != null ? Number(estimate.sub_service_retail_cost) : 0;
+                      const paymentMethodFactor = estimate.payment_method_factor || 1.065;
+                      const subFactor = estimate.sub_multiplier || 1.75;
+                      const hasSubServices = subRetailCost > 0;
+                      
+                      // Calculate true cost non-sub
+                      const subMaterialBase = hasSubServices ? subRetailCost / subFactor : 0;
+                      const trueCostNonSub = hasSubServices ? trueCost - subMaterialBase : trueCost;
+                      
+                      // Calculate effective multiplier
+                      if (trueCostNonSub > 0 && finalPrice > 0 && retailCost > 0) {
+                        // 1. Remove payment method factor from both
+                        const finalBeforePM = finalPrice / paymentMethodFactor;
+                        const retailBeforePM = retailCost / paymentMethodFactor;
+                        
+                        // 2. Calculate Non-Sub portion (discount distributed proportionally)
+                        const nonSubRetailOriginal = retailBeforePM - subRetailCost;
+                        const nonSubPercentage = nonSubRetailOriginal / retailBeforePM;
+                        const nonSubRetailEffective = finalBeforePM * nonSubPercentage;
+                        
+                        // 3. Calculate effective multiplier
+                        const effectiveMultiplier = nonSubRetailEffective / trueCostNonSub;
+                        
+                        return (
+                          <InfoRow 
+                            label="Multiplier (Effective)" 
+                            value={
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Chip label={`${effectiveMultiplier.toFixed(2)}x`} size="small" color="warning" />
+                                <Typography variant="caption" color="textSecondary">
+                                  (after discount)
+                                </Typography>
+                              </Box>
+                            } 
+                          />
+                        );
+                      }
+                      return null;
+                    })()}
+                    
+                    {estimate.sub_multiplier != null && estimate.sub_service_retail_cost != null && estimate.sub_service_retail_cost > 0 && (
+                      <InfoRow 
+                        label="Sub Multiplier" 
+                        value={<Chip label={`${estimate.sub_multiplier}x`} size="small" color="info" />} 
+                      />
+                    )}
+                    {estimate.payment_method_factor != null && (
+                      <InfoRow 
+                        label="Payment Method Factor" 
+                        value={<Chip label={`${estimate.payment_method_factor}x`} size="small" color="primary" />} 
+                      />
+                    )}
+                    
+                    {/* Payment Method */}
+                    {estimate.PaymentMethod && (
+                      <InfoRow 
+                        label="Payment Method" 
+                        value={<Chip label={estimate.PaymentMethod.name} size="small" variant="outlined" sx={{ textTransform: 'capitalize' }} />} 
+                      />
+                    )}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Box>
+
+            {/* Snapshot Multiplier Ranges */}
+            {estimate.snapshot_multiplier_ranges && Array.isArray(estimate.snapshot_multiplier_ranges) && estimate.snapshot_multiplier_ranges.length > 0 && (
+              <Box sx={{ mt: 3 }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 2 }}>
+                  Multiplier Ranges Snapshot
+                </Typography>
+                <Typography variant="caption" color="textSecondary" sx={{ display: 'block', mb: 1 }}>
+                  Historical multiplier ranges when this estimate was created
+                </Typography>
+                
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableBody>
+                      {estimate.snapshot_multiplier_ranges
+                        .sort((a: any, b: any) => a.minCost - b.minCost)
+                        .map((range: any, index: number) => (
+                          <TableRow key={index}>
+                            <TableCell sx={{ fontWeight: 'bold', width: 200 }}>
+                              {range.name}
+                            </TableCell>
+                            <TableCell>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body2">
+                                  {formatCurrency(range.minCost)} - {range.maxCost ? formatCurrency(range.maxCost) : '∞'}
+                                </Typography>
+                                <Chip 
+                                  label={`${range.lowestMultiple}x`} 
+                                  size="small" 
+                                  color={estimate.calculated_multiplier === range.lowestMultiple ? 'success' : 'default'}
+                                  sx={{ ml: 1 }}
+                                />
+                              </Box>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+            )}
+
             {estimate.crew_notes && (
               <Box sx={{ mt: 2 }}>
                 <Typography variant="subtitle2" gutterBottom>Crew Notes</Typography>

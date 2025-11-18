@@ -1,19 +1,111 @@
 const { Op } = require('sequelize');
-const { Estimate, SalesPerson, Branch, EstimateStatus, Job, SalesPersonBranch, PaymentMethod } = require('../models');
+const { Estimate, SalesPerson, Branch, EstimateStatus, Job, SalesPersonBranch, PaymentMethod, BranchConfiguration, MultiplierRange, FollowUpTicket, FollowUpStatus } = require('../models');
 const https = require('https');
+const XLSX = require('xlsx');
 const { findOrCreateBranch: branchHelperFindOrCreate } = require('../utils/branchHelper');
+const { logger } = require('../utils/logger');
+const { calculateWashingtonTaxes } = require('../utils/taxCalculator');
+
+/**
+ * Calcula el multiplier correcto basado en el true cost y los multiplier ranges del branch
+ * Usa el snapshot del estimate si está disponible, sino consulta la configuración actual
+ */
+const calculatePricingFactors = async (estimate) => {
+    try {
+        if (!estimate.price) {
+            return {
+                calculated_multiplier: null,
+                payment_method_factor: null,
+                sub_multiplier: null
+            };
+        }
+
+        const trueCost = parseFloat(estimate.price);
+        let calculatedMultiplier = null;
+        let subMultiplier = null;
+
+        // PRIORIDAD 1: Usar snapshot_multiplier_ranges si existe (datos históricos correctos)
+        if (estimate.snapshot_multiplier_ranges && Array.isArray(estimate.snapshot_multiplier_ranges)) {
+            const sortedRanges = estimate.snapshot_multiplier_ranges.sort((a, b) => a.minCost - b.minCost);
+            
+            for (const range of sortedRanges) {
+                const minCost = parseFloat(range.minCost);
+                const maxCost = range.maxCost ? parseFloat(range.maxCost) : Infinity;
+                
+                if (trueCost >= minCost && trueCost <= maxCost) {
+                    calculatedMultiplier = parseFloat(range.lowestMultiple);
+                    logger.info(`✅ Using snapshot multiplier: ${calculatedMultiplier}x for cost $${trueCost} (from ${range.name})`);
+                    break;
+                }
+            }
+        }
+
+        // PRIORIDAD 2: Si no hay snapshot, usar la configuración actual del branch
+        if (calculatedMultiplier === null && estimate.branch_id) {
+            const branch = await Branch.findByPk(estimate.branch_id, {
+                include: [{
+                    model: BranchConfiguration,
+                    as: 'configuration',
+                    include: [{
+                        model: MultiplierRange,
+                        as: 'multiplierRanges'
+                    }]
+                }]
+            });
+
+            if (branch && branch.configuration) {
+                const config = branch.configuration;
+                
+                if (config.multiplierRanges && config.multiplierRanges.length > 0) {
+                    const sortedRanges = config.multiplierRanges.sort((a, b) => a.min_cost - b.min_cost);
+                    
+                    for (const range of sortedRanges) {
+                        const minCost = parseFloat(range.min_cost);
+                        const maxCost = range.max_cost ? parseFloat(range.max_cost) : Infinity;
+                        
+                        if (trueCost >= minCost && trueCost <= maxCost) {
+                            calculatedMultiplier = parseFloat(range.lowest_multiple);
+                            logger.info(`⚠️  Using current multiplier (no snapshot): ${calculatedMultiplier}x for cost $${trueCost}`);
+                            break;
+                        }
+                    }
+                }
+
+                // Sub multiplier de la configuración
+                subMultiplier = config.sub_multiplier || null;
+            }
+        }
+
+        // PM factor siempre es 1.065 por ahora
+        const paymentMethodFactor = 1.065;
+
+        return {
+            calculated_multiplier: calculatedMultiplier,
+            payment_method_factor: paymentMethodFactor,
+            sub_multiplier: subMultiplier
+        };
+    } catch (error) {
+        logger.error('Error calculating pricing factors:', error);
+        return {
+            calculated_multiplier: null,
+            payment_method_factor: null,
+            sub_multiplier: null
+        };
+    }
+};
 
 // Función para transformar la estructura de los datos para el frontend
-const transformEstimateForFrontend = (estimate) => {
+const transformEstimateForFrontend = async (estimate) => {
     const plainEstimate = estimate.get({ plain: true });
+    
+    // Calcular los factores de pricing
+    const pricingFactors = await calculatePricingFactors(plainEstimate);
+    
+    // Los aliases ya están correctos después de get({ plain: true })
+    // Solo necesitamos agregar los factores calculados
     return {
         ...plainEstimate,
-        SalesPerson: plainEstimate.salesperson,
-        Branch: plainEstimate.branch,
-        EstimateStatus: plainEstimate.status,
-        salesperson: undefined, // Limpiar para no enviar datos duplicados
-        branch: undefined,
-        status: undefined
+        ...pricingFactors
     };
 };
 
@@ -35,7 +127,8 @@ class EstimatesController {
             const includeClause = [
                 { model: SalesPerson, as: 'salesperson', attributes: ['name'] },
                 { model: Branch, as: 'branch', attributes: ['name'] },
-                { model: EstimateStatus, as: 'status', attributes: ['name'] }
+                { model: EstimateStatus, as: 'status', attributes: ['name'] },
+                { model: PaymentMethod, as: 'PaymentMethod', attributes: ['id', 'name'] }
             ];
 
             // Agregar búsqueda por texto
@@ -87,9 +180,9 @@ class EstimatesController {
                 order: orderClause
             });
 
-            const transformedData = estimates.rows.map(e => {
-                return transformEstimateForFrontend(e);
-            });
+            const transformedData = await Promise.all(
+                estimates.rows.map(e => transformEstimateForFrontend(e))
+            );
 
             res.json({
                 total: estimates.count,
@@ -107,9 +200,10 @@ class EstimatesController {
         try {
             const estimate = await Estimate.findByPk(req.params.id, {
                 include: [
-                    { model: SalesPerson, as: 'salesperson' },
-                    { model: Branch, as: 'branch' },
-                    { model: EstimateStatus, as: 'status' }
+                    { model: SalesPerson, as: 'SalesPerson' },
+                    { model: Branch, as: 'Branch' },
+                    { model: EstimateStatus, as: 'EstimateStatus' },
+                    { model: PaymentMethod, as: 'PaymentMethod' }
                 ]
             });
 
@@ -117,15 +211,18 @@ class EstimatesController {
                 return res.status(404).json({ message: 'Estimate not found' });
             }
             
-            const transformedEstimate = transformEstimateForFrontend(estimate);
+            const transformedEstimate = await transformEstimateForFrontend(estimate);
+            
             // Incluir job relacionado si existe
             const job = await Job.findOne({ where: { estimate_id: estimate.id }, attributes: ['id', 'name', 'branch_id'] });
             if (job) {
                 transformedEstimate.job = { id: job.id, name: job.name };
             }
+            
             res.json(transformedEstimate);
 
-    } catch (error) {
+        } catch (error) {
+            logger.error('Error fetching estimate details:', error);
             res.status(500).json({ message: 'Error fetching estimate details', error: error.message });
         }
     }
@@ -153,21 +250,22 @@ class EstimatesController {
             if (branch) whereClause.branch_id = branch;
             if (salesperson) whereClause.sales_person_id = salesperson;
 
-            // Incluir relaciones
+            // Incluir relaciones (usando aliases correctos definidos en el modelo)
             const includeClause = [
-                { model: SalesPerson, as: 'salesperson', attributes: ['name', 'email'] },
-                { model: Branch, as: 'branch', attributes: ['name'] },
-                { model: EstimateStatus, as: 'status', attributes: ['name'] }
+                { model: SalesPerson, as: 'SalesPerson', attributes: ['name'] }, // SalesPerson no tiene 'email'
+                { model: Branch, as: 'Branch', attributes: ['name'] },
+                { model: EstimateStatus, as: 'EstimateStatus', attributes: ['name'] },
+                { model: PaymentMethod, as: 'PaymentMethod', attributes: ['id', 'name'] }
             ];
 
-            // Búsqueda por texto
+            // Búsqueda por texto (actualizar alias en búsqueda)
             if (search && search.trim()) {
                 const searchTerm = search.trim();
                 whereClause[Op.or] = [
                     { name: { [Op.iLike]: `%${searchTerm}%` } },
                     { customer_name: { [Op.iLike]: `%${searchTerm}%` } },
-                    { '$salesperson.name$': { [Op.iLike]: `%${searchTerm}%` } },
-                    { '$branch.name$': { [Op.iLike]: `%${searchTerm}%` } }
+                    { '$SalesPerson.name$': { [Op.iLike]: `%${searchTerm}%` } },
+                    { '$Branch.name$': { [Op.iLike]: `%${searchTerm}%` } }
                 ];
             }
 
@@ -203,7 +301,22 @@ class EstimatesController {
                 order: orderClause
             });
 
-            const transformedData = estimates.rows.map(e => transformEstimateForFrontend(e));
+            // Debug: Log first estimate to check associations
+            if (estimates.rows.length > 0) {
+                const firstEstimate = estimates.rows[0].get({ plain: true });
+                console.log('🔍 Debug - First estimate structure:', {
+                    id: firstEstimate.id,
+                    name: firstEstimate.name,
+                    hasSalesPerson: !!firstEstimate.SalesPerson,
+                    hasBranch: !!firstEstimate.Branch,
+                    salesPersonName: firstEstimate.SalesPerson?.name,
+                    branchName: firstEstimate.Branch?.name
+                });
+            }
+
+            const transformedData = await Promise.all(
+                estimates.rows.map(e => transformEstimateForFrontend(e))
+            );
 
             res.json({
                 total: estimates.count,
@@ -510,6 +623,9 @@ class EstimatesController {
                 finalPrice = lead.tax_details.final_price_after_taxes;
             }
 
+            // Extraer multiplier ranges del snapshot (si existe)
+            const snapshotMultiplierRanges = lead.estimateSnapshot?.snapshotData?.multiplierRanges || null;
+
             return {
                 attic_tech_estimate_id: lead.id,
                 name: lead.name || 'Unnamed Estimate',
@@ -529,7 +645,8 @@ class EstimatesController {
                 customer_email: typeof customerEmail === 'string' ? customerEmail.slice(0, 200).trim() : null,
                 customer_phone: typeof customerPhone === 'string' ? customerPhone.replace(/[^0-9+()\-\s]/g, '').slice(0, 50).trim() : null,
                 crew_notes: lead.crew_notes,
-                payment_method: lead.payment_method || null
+                payment_method: lead.payment_method || null,
+                snapshot_multiplier_ranges: snapshotMultiplierRanges
             };
         });
     }
@@ -569,7 +686,8 @@ class EstimatesController {
                     branch_id: branch ? branch.id : null,
                     sales_person_id: salesPerson ? salesPerson.id : null,
                     status_id: status ? status.id : null,
-                    payment_method_id: paymentMethod ? paymentMethod.id : null
+                    payment_method_id: paymentMethod ? paymentMethod.id : null,
+                    snapshot_multiplier_ranges: estimateData.snapshot_multiplier_ranges || null
                 };
 
                 const [estimate, created] = await Estimate.findOrCreate({
@@ -585,6 +703,58 @@ class EstimatesController {
                     await estimate.update(estimatePayload);
                     updatedCount++;
                     logMessages.push(`🔄 Updated existing estimate: ${estimateData.name}`);
+                }
+
+                // Calcular taxes para Washington State
+                if (estimate.customer_address && estimate.final_price) {
+                    try {
+                        const taxData = await calculateWashingtonTaxes(
+                            parseFloat(estimate.final_price),
+                            estimate.customer_address
+                        );
+                        
+                        // Solo actualizar si se calcularon taxes (es de WA)
+                        if (taxData.total_tax_amount !== null) {
+                            await estimate.update(taxData);
+                            logMessages.push(`💰 Taxes calculated for estimate: ${estimateData.name} (${taxData.city_tax_rate ? (taxData.city_tax_rate * 100).toFixed(2) : '0'}% city + ${(taxData.state_tax_rate * 100).toFixed(2)}% state = $${taxData.total_tax_amount})`);
+                        }
+                    } catch (taxError) {
+                        logMessages.push(`⚠️  Tax calculation failed for ${estimateData.name}: ${taxError.message}`);
+                    }
+                }
+
+                // Auto-crear Follow-Up Ticket para estimates "Lost"
+                const estimateStatus = await EstimateStatus.findByPk(estimate.status_id);
+                if (estimateStatus && estimateStatus.name === 'Lost') {
+                    try {
+                        // Verificar si ya tiene un ticket
+                        const existingTicket = await FollowUpTicket.findOne({
+                            where: { estimate_id: estimate.id }
+                        });
+
+                        if (!existingTicket) {
+                            // Buscar el status "Negotiating" por defecto
+                            const negotiatingStatus = await FollowUpStatus.findOne({
+                                where: { name: 'Negotiating' }
+                            });
+
+                            // Crear el ticket
+                            await FollowUpTicket.create({
+                                estimate_id: estimate.id,
+                                followed_up: false,
+                                status_id: negotiatingStatus ? negotiatingStatus.id : null,
+                                label_id: null,
+                                chat_id: null,
+                                notes: 'Auto-created during estimate sync',
+                                follow_up_date: null,
+                                last_contact_date: null
+                            });
+
+                            logMessages.push(`🎫 Created follow-up ticket for Lost estimate: ${estimateData.name}`);
+                        }
+                    } catch (ticketError) {
+                        logMessages.push(`⚠️  Failed to create follow-up ticket for ${estimateData.name}: ${ticketError.message}`);
+                    }
                 }
 
             } catch (error) {
@@ -979,6 +1149,174 @@ class EstimatesController {
         } catch (error) {
             console.error('Error deleting estimate:', error);
             res.status(500).json({ message: 'Error deleting estimate', error: error.message });
+        }
+    }
+
+    /**
+     * Exportar lista de clientes para Mailchimp
+     * Query params:
+     * - branchIds: array de IDs de branches (ej: ?branchIds=1,2,3)
+     * - statusIds: array de IDs de statuses (ej: ?statusIds=5) - REQUERIDO
+     * - startDate: fecha inicio (YYYY-MM-DD)
+     * - endDate: fecha fin (YYYY-MM-DD)
+     */
+    async exportMailchimpList(req, res) {
+        try {
+            const { branchIds, statusIds, startDate, endDate } = req.query;
+
+            logger.info('📧 Mailchimp export request:', { branchIds, statusIds, startDate, endDate });
+
+            // Construir filtros
+            const whereClause = {};
+
+            // Filtrar por statuses (requerido)
+            if (statusIds) {
+                const statusIdsArray = statusIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+                if (statusIdsArray.length > 0) {
+                    whereClause.status_id = { [Op.in]: statusIdsArray };
+                } else {
+                    return res.status(400).json({ 
+                        success: false,
+                        message: 'Please select at least one estimate status' 
+                    });
+                }
+            } else {
+                return res.status(400).json({ 
+                    success: false,
+                    message: 'Please select at least one estimate status' 
+                });
+            }
+
+            // Filtrar por branches si se especifican
+            if (branchIds) {
+                const branchIdsArray = branchIds.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+                if (branchIdsArray.length > 0) {
+                    whereClause.branch_id = { [Op.in]: branchIdsArray };
+                }
+            }
+
+            // Filtrar por rango de fechas (usando at_updated_date)
+            if (startDate || endDate) {
+                whereClause.at_updated_date = {};
+                if (startDate) {
+                    whereClause.at_updated_date[Op.gte] = new Date(startDate);
+                }
+                if (endDate) {
+                    const endDateTime = new Date(endDate);
+                    endDateTime.setHours(23, 59, 59, 999); // Incluir todo el día
+                    whereClause.at_updated_date[Op.lte] = endDateTime;
+                }
+            }
+
+            logger.info('🔍 Fetching estimates with filters:', whereClause);
+
+            // Obtener estimates con los filtros (filtra por statuses seleccionados)
+            const estimates = await Estimate.findAll({
+                where: whereClause,
+                include: [
+                    {
+                        model: Branch,
+                        as: 'Branch',
+                        attributes: ['id', 'name']
+                    },
+                    {
+                        model: EstimateStatus,
+                        as: 'EstimateStatus',
+                        attributes: ['id', 'name']
+                    }
+                ],
+                attributes: ['id', 'customer_name', 'customer_address', 'customer_phone', 'customer_email', 'branch_id', 'status_id', 'at_updated_date'],
+                order: [['at_updated_date', 'DESC']],
+                raw: false
+            });
+
+            logger.info(`✅ Found ${estimates.length} estimates for export`);
+
+            if (estimates.length === 0) {
+                return res.status(404).json({ 
+                    success: false,
+                    message: 'No estimates found with the specified filters' 
+                });
+            }
+
+            // Preparar datos para el Excel
+            const excelData = estimates.map(estimate => {
+                const plainEstimate = estimate.get({ plain: true });
+                
+                // Formatear fecha de actualización
+                let updatedAt = 'N/A';
+                if (plainEstimate.at_updated_date) {
+                    const date = new Date(plainEstimate.at_updated_date);
+                    updatedAt = date.toLocaleDateString('en-US', { 
+                        month: '2-digit', 
+                        day: '2-digit', 
+                        year: 'numeric' 
+                    });
+                }
+                
+                // Dividir nombre en First Name y Last Name
+                let firstName = 'N/A';
+                let lastName = '';
+                
+                if (plainEstimate.customer_name) {
+                    const nameParts = plainEstimate.customer_name.trim().split(/\s+/);
+                    if (nameParts.length > 0) {
+                        firstName = nameParts[0];
+                        lastName = nameParts.slice(1).join(' ');
+                    }
+                }
+                
+                return {
+                    'First Name': firstName,
+                    'Last Name': lastName || '',
+                    'Address': plainEstimate.customer_address || 'N/A',
+                    'Phone': plainEstimate.customer_phone || 'N/A',
+                    'Email': plainEstimate.customer_email || 'N/A',
+                    'Branch': plainEstimate.Branch?.name || 'N/A',
+                    'Status': plainEstimate.EstimateStatus?.name || 'N/A',
+                    'Updated At': updatedAt
+                };
+            });
+
+            // Crear workbook y worksheet
+            const workbook = XLSX.utils.book_new();
+            const worksheet = XLSX.utils.json_to_sheet(excelData);
+
+            // Ajustar ancho de columnas
+            worksheet['!cols'] = [
+                { wch: 20 }, // First Name
+                { wch: 20 }, // Last Name
+                { wch: 40 }, // Address
+                { wch: 15 }, // Phone
+                { wch: 30 }, // Email
+                { wch: 20 }, // Branch
+                { wch: 12 }  // Updated At
+            ];
+
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Mailchimp Contacts');
+
+            // Generar el archivo Excel
+            const excelBuffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+            // Generar nombre del archivo
+            const dateStr = new Date().toISOString().split('T')[0];
+            const branchesStr = branchIds ? `_branches-${branchIds.replace(/,/g, '-')}` : '_all-branches';
+            const filename = `mailchimp_contacts${branchesStr}_${dateStr}.xlsx`;
+
+            // Enviar el archivo
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+            res.send(excelBuffer);
+
+            logger.info(`✅ Mailchimp list exported: ${filename} (${estimates.length} contacts)`);
+
+        } catch (error) {
+            logger.error('❌ Error exporting Mailchimp list:', error);
+            res.status(500).json({ 
+                success: false,
+                message: 'Error exporting Mailchimp list', 
+                error: error.message 
+            });
         }
     }
 }

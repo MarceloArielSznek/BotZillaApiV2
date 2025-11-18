@@ -31,6 +31,8 @@ import {
   Edit as EditIcon,
   Visibility as VisibilityIcon,
   Clear as ClearIcon,
+  Download as DownloadIcon,
+  Assignment as AssignmentIcon,
 } from '@mui/icons-material';
 import estimateService, {
   type Estimate,
@@ -42,6 +44,8 @@ import estimateService, {
 import { api } from '../config/api';
 import { format } from 'date-fns';
 import EstimateDetailsModal from '../components/estimates/EstimateDetailsModal';
+import MailchimpExportModal from '../components/estimates/MailchimpExportModal';
+import FollowUpTicketModal from '../components/followUp/FollowUpTicketModal';
 
 const FollowUpEstimates: React.FC = () => {
   // Estados principales
@@ -50,6 +54,9 @@ const FollowUpEstimates: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [selectedEstimateId, setSelectedEstimateId] = useState<number | null>(null);
+  const [mailchimpExportOpen, setMailchimpExportOpen] = useState(false);
+  const [followUpTicketOpen, setFollowUpTicketOpen] = useState(false);
+  const [selectedEstimateForTicket, setSelectedEstimateForTicket] = useState<Estimate | null>(null);
 
   // Estados de paginación
   const [page, setPage] = useState(0);
@@ -107,8 +114,6 @@ const FollowUpEstimates: React.FC = () => {
   }, []);
 
   const fetchEstimates = async () => {
-    if (!lostStatusId) return;
-    
     try {
       setLoading(true);
       setError(null);
@@ -116,7 +121,7 @@ const FollowUpEstimates: React.FC = () => {
       const params: FetchEstimatesParams = {
         page: page + 1,
         limit: rowsPerPage,
-        status: lostStatusId, // Solo traer estimates con status "Lost"
+        // No enviamos status porque el endpoint /lost ya filtra por "Lost"
         search: searchQuery || undefined,
         branch: selectedBranch || undefined,
         salesperson: selectedSalesperson || undefined,
@@ -124,7 +129,7 @@ const FollowUpEstimates: React.FC = () => {
         endDate: endDate || undefined,
       };
 
-      const response = await estimateService.fetchEstimates(params);
+      const response = await estimateService.fetchLostEstimates(params);
       setEstimates(response.data);
       setTotalEstimates(response.total);
     } catch (err) {
@@ -139,7 +144,7 @@ const FollowUpEstimates: React.FC = () => {
   useEffect(() => {
     fetchEstimates();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page, rowsPerPage, lostStatusId]);
+  }, [page, rowsPerPage]);
 
   const handleSearch = () => {
     setPage(0);
@@ -206,14 +211,24 @@ const FollowUpEstimates: React.FC = () => {
         <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
           Lost Estimates
         </Typography>
-        <Button
-          variant="outlined"
-          startIcon={<RefreshIcon />}
-          onClick={fetchEstimates}
-          disabled={loading}
-        >
-          Refresh
-        </Button>
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            color="success"
+            startIcon={<DownloadIcon />}
+            onClick={() => setMailchimpExportOpen(true)}
+          >
+            Export for Mailchimp
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={fetchEstimates}
+            disabled={loading}
+          >
+            Refresh
+          </Button>
+        </Box>
       </Box>
 
       {/* Filters */}
@@ -323,9 +338,9 @@ const FollowUpEstimates: React.FC = () => {
                       <TableCell sx={{ fontWeight: 'bold' }}>Name</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>Branch</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>Salesperson</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Status</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Final Price</TableCell>
-                      <TableCell sx={{ fontWeight: 'bold' }}>Discount</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Costs</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Details</TableCell>
+                      <TableCell sx={{ fontWeight: 'bold' }}>Prices</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>Hours</TableCell>
                       <TableCell sx={{ fontWeight: 'bold' }}>Dates</TableCell>
                       <TableCell sx={{ fontWeight: 'bold', textAlign: 'center' }}>Actions</TableCell>
@@ -347,18 +362,173 @@ const FollowUpEstimates: React.FC = () => {
                         </TableCell>
                         <TableCell>{estimate.Branch?.name || 'N/A'}</TableCell>
                         <TableCell>{estimate.SalesPerson?.name || 'N/A'}</TableCell>
+                        
+                        {/* Costs Column */}
                         <TableCell>
-                          <Chip
-                            label="Lost"
-                            color="error"
-                            size="small"
-                          />
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 160 }}>
+                            {(() => {
+                              const trueCost = estimate.price != null ? Number(estimate.price) : 0;
+                              const subRetailCost = estimate.sub_service_retail_cost != null ? Number(estimate.sub_service_retail_cost) : 0;
+                              const subFactor = estimate.sub_multiplier || 1.75; // Default sub multiplier
+                              const hasSubServices = subRetailCost > 0;
+                              
+                              // Calculate separated costs
+                              const subMaterialBase = hasSubServices ? subRetailCost / subFactor : 0;
+                              const trueCostNonSub = hasSubServices ? trueCost - subMaterialBase : trueCost;
+                              
+                              return (
+                                <>
+                                  {hasSubServices ? (
+                                    <>
+                                      <Typography variant="caption" sx={{ color: 'success.main', fontSize: '0.7rem', fontWeight: 600 }}>
+                                        True Cost (Non-Sub): {formatCurrency(trueCostNonSub)}
+                                      </Typography>
+                                      <Typography variant="caption" sx={{ color: 'info.main', fontSize: '0.7rem', fontWeight: 600 }}>
+                                        Sub Price: {formatCurrency(subMaterialBase)}
+                                      </Typography>
+                                      <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.65rem', mt: 0.5 }}>
+                                        Total: {formatCurrency(trueCost)}
+                                      </Typography>
+                                    </>
+                                  ) : (
+                                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                                      True Cost: {formatCurrency(trueCost)}
+                                    </Typography>
+                                  )}
+                                </>
+                              );
+                            })()}
+                            {estimate.PaymentMethod && (
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.5 }}>
+                                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                                  Payment:
+                                </Typography>
+                                <Chip
+                                  label={estimate.PaymentMethod.name}
+                                  size="small"
+                                  color="primary"
+                                  variant="outlined"
+                                  sx={{ 
+                                    height: 18, 
+                                    fontSize: '0.65rem',
+                                    textTransform: 'capitalize'
+                                  }}
+                                />
+                              </Box>
+                            )}
+                            {estimate.discount != null && estimate.discount > 0 && (
+                              <Typography variant="caption" sx={{ color: 'error.main', fontSize: '0.7rem', fontWeight: 600 }}>
+                                Discount: -{parseFloat(String(estimate.discount)).toFixed(1)}%
+                              </Typography>
+                            )}
+                          </Box>
                         </TableCell>
+
+                        {/* Details Column */}
                         <TableCell>
-                          {estimate.final_price != null ? formatCurrency(Number(estimate.final_price)) : 'N/A'}
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 140 }}>
+                            {estimate.calculated_multiplier != null && (
+                              <Box>
+                                <Typography variant="caption" sx={{ color: 'success.main', fontSize: '0.7rem', fontWeight: 600 }}>
+                                  Multiplier: {estimate.calculated_multiplier}x
+                                </Typography>
+                              </Box>
+                            )}
+                            
+                            {/* Effective Multiplier (real after discount) */}
+                            {(() => {
+                              const trueCost = estimate.price != null ? Number(estimate.price) : 0;
+                              const finalPrice = estimate.final_price != null ? Number(estimate.final_price) : 0;
+                              const retailCost = estimate.retail_cost != null ? Number(estimate.retail_cost) : 0;
+                              const subRetailCost = estimate.sub_service_retail_cost != null ? Number(estimate.sub_service_retail_cost) : 0;
+                              const paymentMethodFactor = estimate.payment_method_factor || 1.065;
+                              const subFactor = estimate.sub_multiplier || 1.75;
+                              const hasSubServices = subRetailCost > 0;
+                              
+                              // Calculate true cost non-sub
+                              const subMaterialBase = hasSubServices ? subRetailCost / subFactor : 0;
+                              const trueCostNonSub = hasSubServices ? trueCost - subMaterialBase : trueCost;
+                              
+                              // Calculate effective multiplier working backwards from final price
+                              if (trueCostNonSub > 0 && finalPrice > 0 && retailCost > 0) {
+                                // 1. Remove payment method factor from both final and retail
+                                const finalBeforePM = finalPrice / paymentMethodFactor;
+                                const retailBeforePM = retailCost / paymentMethodFactor;
+                                
+                                // 2. Calculate what portion of the retail was Non-Sub
+                                const nonSubRetailOriginal = retailBeforePM - subRetailCost;
+                                const nonSubPercentage = nonSubRetailOriginal / retailBeforePM;
+                                
+                                // 3. Apply the same percentage to the final price (discount distributed proportionally)
+                                const nonSubRetailEffective = finalBeforePM * nonSubPercentage;
+                                
+                                // 4. Calculate effective multiplier
+                                const effectiveMultiplier = nonSubRetailEffective / trueCostNonSub;
+                                
+                                // Only show if different from theoretical multiplier (more than 0.05 difference)
+                                const theoreticalMultiplier = estimate.calculated_multiplier || 0;
+                                const difference = Math.abs(effectiveMultiplier - theoreticalMultiplier);
+                                
+                                if (difference > 0.05) {
+                                  return (
+                                    <Typography variant="caption" sx={{ color: 'warning.main', fontSize: '0.7rem', fontWeight: 600 }}>
+                                      Effective: {effectiveMultiplier.toFixed(2)}x
+                                    </Typography>
+                                  );
+                                }
+                              }
+                              return null;
+                            })()}
+                            
+                            {estimate.sub_multiplier != null && estimate.sub_service_retail_cost != null && estimate.sub_service_retail_cost > 0 && (
+                              <Typography variant="caption" sx={{ color: 'secondary.main', fontSize: '0.7rem', fontWeight: 600 }}>
+                                Sub Multi: {estimate.sub_multiplier}x
+                              </Typography>
+                            )}
+                            {estimate.payment_method_factor != null && (
+                              <Typography variant="caption" sx={{ color: 'primary.main', fontSize: '0.7rem' }}>
+                                PM Factor: {estimate.payment_method_factor}x
+                              </Typography>
+                            )}
+                          </Box>
                         </TableCell>
+
+                        {/* Prices Column */}
                         <TableCell>
-                          {estimate.discount != null ? `${parseFloat(String(estimate.discount)).toFixed(2)}%` : '0.00%'}
+                          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 140 }}>
+                            <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                              Retail Price:
+                            </Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                              {estimate.retail_cost != null ? formatCurrency(Number(estimate.retail_cost)) : 'N/A'}
+                            </Typography>
+                            {estimate.discount != null && estimate.discount > 0 && (
+                              <>
+                                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', mt: 0.5 }}>
+                                  After Discount:
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.9rem' }}>
+                                  {estimate.final_price != null ? formatCurrency(Number(estimate.final_price)) : 'N/A'}
+                                </Typography>
+                              </>
+                            )}
+                            {estimate.total_tax_amount != null && estimate.total_tax_amount > 0 && (
+                              <>
+                                <Typography variant="caption" sx={{ color: 'info.main', fontSize: '0.7rem', mt: 0.5 }}>
+                                  + Taxes ({(estimate.total_tax_rate! * 100).toFixed(2)}%):
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem', color: 'info.main' }}>
+                                  {formatCurrency(Number(estimate.total_tax_amount))}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', mt: 0.5 }}>
+                                  Final w/ Taxes:
+                                </Typography>
+                                <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '0.95rem', color: 'primary.main' }}>
+                                  {estimate.price_after_taxes != null ? formatCurrency(Number(estimate.price_after_taxes)) : 'N/A'}
+                                </Typography>
+                              </>
+                            )}
+                          </Box>
                         </TableCell>
                         <TableCell>
                           {estimate.attic_tech_hours != null ? `${Number(estimate.attic_tech_hours).toFixed(2)}h` : 'N/A'}
@@ -372,6 +542,19 @@ const FollowUpEstimates: React.FC = () => {
                           </Typography>
                         </TableCell>
                         <TableCell sx={{ textAlign: 'center' }}>
+                          <Tooltip title="Follow-Up Ticket">
+                            <IconButton
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedEstimateForTicket(estimate);
+                                setFollowUpTicketOpen(true);
+                              }}
+                              size="small"
+                              color="primary"
+                            >
+                              <AssignmentIcon />
+                            </IconButton>
+                          </Tooltip>
                           <Tooltip title="View details">
                             <IconButton
                               onClick={(e) => {
@@ -388,7 +571,7 @@ const FollowUpEstimates: React.FC = () => {
                     ))}
                     {estimates.length === 0 && !loading && (
                       <TableRow>
-                        <TableCell colSpan={9} align="center" sx={{ py: 4 }}>
+                        <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
                           <Typography variant="body1" color="text.secondary">
                             No estimates found with applied filters
                           </Typography>
@@ -419,6 +602,25 @@ const FollowUpEstimates: React.FC = () => {
         onClose={() => setDetailsOpen(false)}
         estimateId={selectedEstimateId}
       />
+
+      {/* Mailchimp Export Modal */}
+      <MailchimpExportModal
+        open={mailchimpExportOpen}
+        onClose={() => setMailchimpExportOpen(false)}
+      />
+
+      {/* Follow-Up Ticket Modal */}
+      {selectedEstimateForTicket && (
+        <FollowUpTicketModal
+          open={followUpTicketOpen}
+          onClose={() => {
+            setFollowUpTicketOpen(false);
+            setSelectedEstimateForTicket(null);
+          }}
+          estimateId={selectedEstimateForTicket.id}
+          estimateName={selectedEstimateForTicket.name}
+        />
+      )}
     </Box>
   );
 };

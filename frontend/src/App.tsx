@@ -20,6 +20,7 @@ import TelegramGroups from './pages/TelegramGroups'; // Importar nueva página
 import InspectionReports from './pages/InspectionReports'; // Nueva página
 import Performance from './pages/Performance'; // Nueva página
 import FollowUpEstimates from './pages/FollowUpEstimates'; // Módulo Follow-up
+import BranchConfiguration from './pages/BranchConfiguration'; // Módulo Follow-up - Configuration
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -96,6 +97,7 @@ function App() {
               >
                 <Route index element={<Navigate to="/follow-up/estimates" replace />} />
                 <Route path="estimates" element={<FollowUpEstimates />} />
+                <Route path="configuration" element={<BranchConfiguration />} />
               </Route>
 
               {/* Ruta catch-all para prevenir acceso no autorizado */}

@@ -41,6 +41,12 @@ router.get('/lost',
     estimatesController.getLostEstimates
 );
 
+// Exportar lista de clientes para Mailchimp
+router.get('/export/mailchimp',
+    verifyToken,
+    estimatesController.exportMailchimpList
+);
+
 // Obtener detalles de un estimate específico (requiere autenticación)
 router.get('/:id', 
     verifyToken,

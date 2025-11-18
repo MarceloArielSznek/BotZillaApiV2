@@ -223,4 +223,10 @@ export const cancelAllPendingRequests = () => {
         }
     });
     pendingRequests.clear();
+};
+
+// Servicio para branch configurations
+export const branchConfigurationsService = {
+    getAll: () => api.get('/branch-configurations'),
+    getById: (id: number) => api.get(`/branch-configurations/${id}`)
 }; 

@@ -36,6 +36,7 @@ const atticTechUserRoutes = require('./routes/atticTechUser.routes');
 const atticTechSyncRoutes = require('./routes/atticTechSync.routes');
 const performanceRoutes = require('./routes/performance.routes');
 const overrunReportRoutes = require('./routes/overrunReport.routes');
+const followUpTicketsRoutes = require('./routes/followUpTickets.routes');
 // const botRoutes = require('./routes/bot.routes'); // No longer needed
 const { logger, requestLogger, errorLogger } = require('./utils/logger');
 const { caches } = require('./utils/cache');
@@ -202,6 +203,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/estimates', estimatesRoutes);
 app.use('/api/branches', branchesRoutes);
+app.use('/api/branch-configurations', require('./routes/branchConfiguration.routes'));
 app.use('/api/salespersons', salespersonsRoutes);
 app.use('/api/estimate-statuses', statusesRoutes);
 app.use('/api/crew-members', crewRoutes);
@@ -230,6 +232,7 @@ app.use('/api/job-sync', jobSyncRoutes);
 app.use('/api/job-statuses', jobStatusRoutes);
 app.use('/api/performance', performanceRoutes);
 app.use('/api/overrun-reports', overrunReportRoutes);
+app.use('/api/follow-up-tickets', followUpTicketsRoutes);
 // app.use('/api/bot', botRoutes); // No longer needed
 
 // Health check endpoint

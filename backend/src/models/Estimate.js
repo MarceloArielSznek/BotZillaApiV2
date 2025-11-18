@@ -97,6 +97,43 @@ const Estimate = sequelize.define('Estimate', {
             key: 'id'
         }
     },
+    city_tax_rate: {
+        type: DataTypes.DECIMAL(5, 4),
+        allowNull: true
+    },
+    state_tax_rate: {
+        type: DataTypes.DECIMAL(5, 4),
+        allowNull: true
+    },
+    total_tax_rate: {
+        type: DataTypes.DECIMAL(5, 4),
+        allowNull: true
+    },
+    city_tax_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    state_tax_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    total_tax_amount: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    price_before_taxes: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    price_after_taxes: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true
+    },
+    snapshot_multiplier_ranges: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Snapshot de multiplier ranges vigentes cuando se creó el estimate'
+    },
     at_created_date: {
         type: DataTypes.DATE,
         field: 'at_created_date'
