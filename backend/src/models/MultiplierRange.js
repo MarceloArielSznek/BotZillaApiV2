@@ -34,7 +34,7 @@ MultiplierRange.init({
         allowNull: false,
         comment: 'Highest multiplier for this range'
     },
-    at_multiplier_range_id: {
+    at_multiplier_id: {
         type: DataTypes.INTEGER,
         unique: true,
         allowNull: false,
