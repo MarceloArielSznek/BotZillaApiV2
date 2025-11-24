@@ -125,9 +125,9 @@ class EstimatesController {
             
             // Para la búsqueda, usaremos include con where en lugar de whereClause
             const includeClause = [
-                { model: SalesPerson, as: 'salesperson', attributes: ['name'] },
-                { model: Branch, as: 'branch', attributes: ['name'] },
-                { model: EstimateStatus, as: 'status', attributes: ['name'] },
+                { model: SalesPerson, as: 'SalesPerson', attributes: ['name'] },
+                { model: Branch, as: 'Branch', attributes: ['name'] },
+                { model: EstimateStatus, as: 'EstimateStatus', attributes: ['name'] },
                 { model: PaymentMethod, as: 'PaymentMethod', attributes: ['id', 'name'] }
             ];
 
@@ -137,8 +137,8 @@ class EstimatesController {
                 whereClause[Op.or] = [
                     { name: { [Op.iLike]: `%${searchTerm}%` } },
                     { customer_name: { [Op.iLike]: `%${searchTerm}%` } },
-                    { '$salesperson.name$': { [Op.iLike]: `%${searchTerm}%` } },
-                    { '$branch.name$': { [Op.iLike]: `%${searchTerm}%` } }
+                    { '$SalesPerson.name$': { [Op.iLike]: `%${searchTerm}%` } },
+                    { '$Branch.name$': { [Op.iLike]: `%${searchTerm}%` } }
                 ];
             }
             
@@ -353,8 +353,8 @@ class EstimatesController {
                     id: { [Op.notIn]: usedEstimateIds } // Excluir los IDs en uso
                 },
                 include: [
-                    { model: SalesPerson, as: 'salesperson', attributes: ['name'] },
-                    { model: Branch, as: 'branch', attributes: ['name'] }
+                    { model: SalesPerson, as: 'SalesPerson', attributes: ['name'] },
+                    { model: Branch, as: 'Branch', attributes: ['name'] }
                 ],
                 order: [['at_created_date', 'DESC']]
             });
@@ -1110,9 +1110,9 @@ class EstimatesController {
             // Obtener el estimate actualizado con relaciones
             const updatedEstimate = await Estimate.findByPk(id, {
                 include: [
-                    { model: SalesPerson, as: 'salesperson', attributes: ['id', 'name'] },
-                    { model: Branch, as: 'branch', attributes: ['id', 'name'] },
-                    { model: EstimateStatus, as: 'status', attributes: ['id', 'name'] }
+                    { model: SalesPerson, as: 'SalesPerson', attributes: ['id', 'name'] },
+                    { model: Branch, as: 'Branch', attributes: ['id', 'name'] },
+                    { model: EstimateStatus, as: 'EstimateStatus', attributes: ['id', 'name'] }
                 ]
             });
 
