@@ -2906,14 +2906,14 @@ class AutomationsController {
                         try {
                             // 1. Crear/actualizar el multiplier range (sin FK a configuración)
                             const [multiplierRange, rangeCreated] = await MultiplierRange.findOrCreate({
-                                where: { at_multiplier_range_id: range.id },
+                                where: { at_multiplier_id: range.id },
                                 defaults: {
                                     name: range.name,
                                     min_cost: range.minCost,
                                     max_cost: range.maxCost,
                                     lowest_multiple: range.lowestMultiple,
                                     highest_multiple: range.highestMultiple,
-                                    at_multiplier_range_id: range.id,
+                                    at_multiplier_id: range.id,
                                     at_created_at: range.createdAt ? new Date(range.createdAt) : null,
                                     at_updated_at: range.updatedAt ? new Date(range.updatedAt) : null
                                 }

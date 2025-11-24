@@ -29,7 +29,7 @@ class BranchConfigurationController {
                             'max_cost',
                             'lowest_multiple',
                             'highest_multiple',
-                            'at_multiplier_range_id'
+                            'at_multiplier_id'
                         ]
                     }
                 ],
@@ -84,7 +84,7 @@ class BranchConfigurationController {
                             'max_cost',
                             'lowest_multiple',
                             'highest_multiple',
-                            'at_multiplier_range_id'
+                            'at_multiplier_id'
                         ]
                     }
                 ],

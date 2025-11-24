@@ -33,7 +33,7 @@ interface MultiplierRange {
   max_cost: number | null;
   lowest_multiple: number;
   highest_multiple: number;
-  at_multiplier_range_id: number;
+  at_multiplier_id: number;
 }
 
 interface Branch {
