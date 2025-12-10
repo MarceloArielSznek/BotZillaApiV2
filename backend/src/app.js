@@ -35,7 +35,14 @@ const jobStatusRoutes = require('./routes/jobStatus.routes');
 const atticTechUserRoutes = require('./routes/atticTechUser.routes');
 const atticTechSyncRoutes = require('./routes/atticTechSync.routes');
 const performanceRoutes = require('./routes/performance.routes');
-const newPerformanceRoutes = require('./routes/newPerformance.routes');
+// newPerformanceRoutes es opcional (solo existe en desarrollo)
+let newPerformanceRoutes;
+try {
+    newPerformanceRoutes = require('./routes/newPerformance.routes');
+} catch (e) {
+    // Archivo no existe en producción, continuar sin él
+    newPerformanceRoutes = null;
+}
 const overrunReportRoutes = require('./routes/overrunReport.routes');
 const followUpTicketsRoutes = require('./routes/followUpTickets.routes');
 const smsBatchesRoutes = require('./routes/smsBatches.routes');
@@ -233,7 +240,9 @@ app.use('/api/inspection-reports', inspectionReportsRoutes);
 app.use('/api/job-sync', jobSyncRoutes);
 app.use('/api/job-statuses', jobStatusRoutes);
 app.use('/api/performance', performanceRoutes);
-app.use('/api/new-performance', newPerformanceRoutes);
+if (newPerformanceRoutes) {
+    app.use('/api/new-performance', newPerformanceRoutes);
+}
 app.use('/api/overrun-reports', overrunReportRoutes);
 app.use('/api/follow-up-tickets', followUpTicketsRoutes);
 app.use('/api/sms-batches', smsBatchesRoutes);
