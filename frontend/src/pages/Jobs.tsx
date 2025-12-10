@@ -36,6 +36,7 @@ import branchService from '../services/branchService';
 import Performance from './Performance';
 import PerformanceApproval from '../components/PerformanceApproval';
 import OverrunJobs from './OverrunJobs';
+import DailyShiftUpload from './DailyShiftUpload';
 import salespersonService from '../services/salespersonService';
 import crewService from '../services/crewService';
 import { getJobStatuses } from '../services/statusService';
@@ -261,6 +262,7 @@ const Jobs: React.FC = () => {
                 >
                     <Tab label="Jobs List" />
                     <Tab label="Performance" />
+                    <Tab label="Daily Shift Upload" />
                     <Tab label="Jobs Analysis" />
                 </Tabs>
             </Box>
@@ -480,6 +482,10 @@ const Jobs: React.FC = () => {
             )}
 
             {currentTab === 2 && (
+                <DailyShiftUpload />
+            )}
+
+            {currentTab === 3 && (
                 <OverrunJobs />
             )}
 

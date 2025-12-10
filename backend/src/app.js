@@ -38,6 +38,7 @@ const performanceRoutes = require('./routes/performance.routes');
 const overrunReportRoutes = require('./routes/overrunReport.routes');
 const followUpTicketsRoutes = require('./routes/followUpTickets.routes');
 const smsBatchesRoutes = require('./routes/smsBatches.routes');
+const dailyShiftUploadRoutes = require('./routes/dailyShiftUpload.routes');
 // const botRoutes = require('./routes/bot.routes'); // No longer needed
 const { logger, requestLogger, errorLogger } = require('./utils/logger');
 const { caches } = require('./utils/cache');
@@ -235,6 +236,7 @@ app.use('/api/performance', performanceRoutes);
 app.use('/api/overrun-reports', overrunReportRoutes);
 app.use('/api/follow-up-tickets', followUpTicketsRoutes);
 app.use('/api/sms-batches', smsBatchesRoutes);
+app.use('/api/daily-shift-upload', dailyShiftUploadRoutes);
 // app.use('/api/bot', botRoutes); // No longer needed
 
 // Health check endpoint
