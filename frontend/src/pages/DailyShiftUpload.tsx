@@ -299,18 +299,18 @@ const DailyShiftUpload: React.FC = () => {
                         );
                       })}
                       {/* Totals Row */}
-                      <TableRow sx={{ bgcolor: 'grey.100', fontWeight: 600 }}>
-                        <TableCell sx={{ fontWeight: 600 }}>Total</TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                      <TableRow sx={{ bgcolor: 'grey.200', fontWeight: 600 }}>
+                        <TableCell sx={{ fontWeight: 600, color: 'text.primary' }}>Total</TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 600, color: 'text.primary' }}>
                           {jobTotals.shifts}
                         </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                        <TableCell align="right" sx={{ fontWeight: 600, color: 'text.primary' }}>
                           {jobTotals.regular.toFixed(2)}
                         </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                        <TableCell align="right" sx={{ fontWeight: 600, color: 'text.primary' }}>
                           {jobTotals.ot.toFixed(2)}
                         </TableCell>
-                        <TableCell align="right" sx={{ fontWeight: 600 }}>
+                        <TableCell align="right" sx={{ fontWeight: 600, color: 'text.primary' }}>
                           {jobTotals.ot2.toFixed(2)}
                         </TableCell>
                         <TableCell align="right" sx={{ fontWeight: 600, color: 'primary.main' }}>
