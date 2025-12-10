@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { getSocket, disconnectSocket } from '../../config/socket';
 import {
   Dialog,
   DialogTitle,
@@ -91,6 +92,8 @@ const FollowUpTicketModal: React.FC<FollowUpTicketModalProps> = ({
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [sendingMessage, setSendingMessage] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const lastMessageIdRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (open) {
@@ -99,6 +102,100 @@ const FollowUpTicketModal: React.FC<FollowUpTicketModalProps> = ({
       loadLabels();
     }
   }, [open, estimateId]);
+
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages]);
+
+  // WebSocket para actualizar el chat en tiempo real
+  useEffect(() => {
+    if (open && tabValue === 1 && ticket?.chat_id) {
+      const socket = getSocket();
+      const chatId = Number(ticket.chat_id); // Asegurar que sea número
+
+      console.log(`🔌 Setting up WebSocket for chat ${chatId} (type: ${typeof chatId}), socket connected: ${socket.connected}, socket id: ${socket.id}`);
+
+      // Función para unirse a la sala
+      const joinChatRoom = () => {
+        if (!socket.connected) {
+          console.warn('⚠️ Socket not connected, cannot join room');
+          return;
+        }
+        
+        // Asegurar que chatId sea un número
+        const numericChatId = Number(chatId);
+        if (isNaN(numericChatId)) {
+          console.error('❌ Invalid chatId:', chatId);
+          return;
+        }
+        
+        socket.emit('join-chat', numericChatId);
+        console.log(`🔌 Emitted join-chat for chat-${numericChatId} (socket: ${socket.id})`);
+        
+        // Verificar después de un momento si se unió correctamente
+        setTimeout(() => {
+          // No hay forma directa de verificar, pero podemos confiar en el backend
+          console.log(`✅ Should be joined to chat-${numericChatId}`);
+        }, 500);
+      };
+
+      // Esperar a que el socket esté conectado
+      if (socket.connected) {
+        joinChatRoom();
+      } else {
+        console.log('⏳ Socket not connected, waiting for connection...');
+        const connectHandler = () => {
+          console.log('✅ Socket connected, joining chat room');
+          joinChatRoom();
+        };
+        socket.once('connect', connectHandler);
+      }
+
+      // Escuchar nuevos mensajes
+      const handleNewMessage = (newMessage: ChatMessage) => {
+        console.log('📥 Received new message via WebSocket:', {
+          id: newMessage.id,
+          sender: newMessage.sender_name,
+          text: newMessage.message_text.substring(0, 50) + '...'
+        });
+        setChatMessages((prevMessages) => {
+          // Evitar duplicados
+          if (prevMessages.some(msg => msg.id === newMessage.id)) {
+            console.log('⚠️ Duplicate message ignored:', newMessage.id);
+            return prevMessages;
+          }
+          console.log('✅ Adding new message to chat, total messages:', prevMessages.length + 1);
+          return [...prevMessages, newMessage];
+        });
+        lastMessageIdRef.current = newMessage.id;
+        
+        // Auto-scroll
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        }, 100);
+      };
+
+      socket.on('new-message', handleNewMessage);
+
+      // También escuchar eventos de conexión para debugging y re-join si se desconecta
+      const handleConnect = () => {
+        console.log('✅ Socket reconnected, rejoining chat room');
+        joinChatRoom();
+      };
+      socket.on('connect', handleConnect);
+
+      // Limpiar al desmontar o cambiar de pestaña
+      return () => {
+        console.log(`🔌 Cleaning up WebSocket for chat ${chatId}`);
+        if (socket.connected) {
+          socket.emit('leave-chat', Number(chatId));
+        }
+        socket.off('new-message', handleNewMessage);
+        socket.off('connect', handleConnect);
+      };
+    }
+  }, [open, tabValue, ticket?.chat_id]);
 
   const loadTicketData = async () => {
     try {
@@ -121,7 +218,12 @@ const FollowUpTicketModal: React.FC<FollowUpTicketModalProps> = ({
       
       // Load chat if exists
       if (ticketData.chat_id && ticketData.chat) {
-        setChatMessages(ticketData.chat.messages || []);
+        const messages = ticketData.chat.messages || [];
+        setChatMessages(messages);
+        // Guardar el ID del último mensaje para comparar en polling
+        if (messages.length > 0) {
+          lastMessageIdRef.current = messages[messages.length - 1].id;
+        }
       }
     } catch (err: any) {
       // Ignorar errores de requests canceladas (navegación rápida)
@@ -157,6 +259,7 @@ const FollowUpTicketModal: React.FC<FollowUpTicketModalProps> = ({
       setLabels([]);
     }
   };
+
 
   const handleSave = async () => {
     if (!ticket) return;
@@ -202,15 +305,19 @@ const FollowUpTicketModal: React.FC<FollowUpTicketModalProps> = ({
         chatId = chat.id;
       }
 
-      // Send message
+      // Send message (también envía SMS automáticamente si hay teléfono)
       const message = await followUpTicketService.addMessageToChat(chatId, {
         sender_type: 'agent',
         sender_name: 'Agent', // TODO: Get from current user
-        message_text: newMessage
+        message_text: newMessage,
+        send_sms: true // Enviar SMS a través del webhook
       });
 
-      // Add to local messages
+      console.log('✅ Message sent, waiting for WebSocket update:', message.id);
+
+      // Agregar inmediatamente para feedback visual, pero el WebSocket lo actualizará
       setChatMessages([...chatMessages, message]);
+      lastMessageIdRef.current = message.id;
       setNewMessage('');
 
     } catch (err: any) {
@@ -379,62 +486,177 @@ const FollowUpTicketModal: React.FC<FollowUpTicketModalProps> = ({
 
             {/* Chat Tab */}
             <TabPanel value={tabValue} index={1}>
-              <Box sx={{ display: 'flex', flexDirection: 'column', height: '400px' }}>
+              <Box sx={{ display: 'flex', flexDirection: 'column', height: '500px' }}>
                 
                 {/* Messages Container */}
-                <Paper 
-                  variant="outlined" 
+                <Box 
                   sx={{ 
                     flex: 1, 
                     p: 2, 
                     mb: 2, 
                     overflowY: 'auto',
-                    backgroundColor: '#f5f5f5'
+                    backgroundColor: '#e5ddd5',
+                    backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'100\' height=\'100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cdefs%3E%3Cpattern id=\'grid\' width=\'100\' height=\'100\' patternUnits=\'userSpaceOnUse\'%3E%3Cpath d=\'M 100 0 L 0 0 0 100\' fill=\'none\' stroke=\'%23ffffff\' stroke-width=\'0.5\' opacity=\'0.1\'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width=\'100\' height=\'100\' fill=\'url(%23grid)\'/%3E%3C/svg%3E")',
+                    borderRadius: 1,
+                    border: '1px solid',
+                    borderColor: 'divider'
                   }}
                 >
                   {chatMessages.length === 0 ? (
-                    <Box sx={{ textAlign: 'center', py: 4 }}>
-                      <Typography color="textSecondary">
+                    <Box sx={{ textAlign: 'center', py: 8 }}>
+                      <Typography color="text.secondary" variant="body2" sx={{ fontStyle: 'italic' }}>
                         No messages yet. Start the conversation!
                       </Typography>
                     </Box>
                   ) : (
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                      {chatMessages.map((message) => (
-                        <Box
-                          key={message.id}
-                          sx={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            alignItems: message.sender_type === 'agent' ? 'flex-end' : 'flex-start'
-                          }}
-                        >
-                          <Paper
-                            sx={{
-                              p: 1.5,
-                              maxWidth: '70%',
-                              backgroundColor: message.sender_type === 'agent' ? '#1976d2' : '#fff',
-                              color: message.sender_type === 'agent' ? '#fff' : '#000'
-                            }}
-                          >
-                            <Typography variant="caption" sx={{ fontWeight: 'bold', display: 'block' }}>
-                              {message.sender_name}
-                            </Typography>
-                            <Typography variant="body2">
-                              {message.message_text}
-                            </Typography>
-                            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, opacity: 0.7 }}>
-                              {new Date(message.sent_at).toLocaleString()}
-                            </Typography>
-                          </Paper>
-                        </Box>
-                      ))}
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                      {chatMessages.map((message, index) => {
+                        const isAgent = message.sender_type === 'agent';
+                        const showDateSeparator = index === 0 || 
+                          new Date(message.sent_at).toDateString() !== 
+                          new Date(chatMessages[index - 1].sent_at).toDateString();
+                        
+                        return (
+                          <React.Fragment key={message.id}>
+                            {showDateSeparator && (
+                              <Box sx={{ textAlign: 'center', my: 1 }}>
+                                <Chip 
+                                  label={new Date(message.sent_at).toLocaleDateString('en-US', { 
+                                    weekday: 'long', 
+                                    year: 'numeric', 
+                                    month: 'long', 
+                                    day: 'numeric' 
+                                  })}
+                                  size="small"
+                                  sx={{ 
+                                    backgroundColor: 'rgba(0, 0, 0, 0.15)',
+                                    color: 'rgba(0, 0, 0, 0.7)',
+                                    fontSize: '0.7rem',
+                                    fontWeight: 500,
+                                    border: '1px solid rgba(0, 0, 0, 0.1)'
+                                  }}
+                                />
+                              </Box>
+                            )}
+                            <Box
+                              sx={{
+                                display: 'flex',
+                                justifyContent: isAgent ? 'flex-end' : 'flex-start',
+                                alignItems: 'flex-end',
+                                gap: 1
+                              }}
+                            >
+                              {!isAgent && (
+                                <Box
+                                  sx={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: '50%',
+                                    backgroundColor: 'primary.main',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  {message.sender_name.charAt(0).toUpperCase()}
+                                </Box>
+                              )}
+                              <Box
+                                sx={{
+                                  maxWidth: '75%',
+                                  display: 'flex',
+                                  flexDirection: 'column',
+                                  alignItems: isAgent ? 'flex-end' : 'flex-start'
+                                }}
+                              >
+                                {!isAgent && (
+                                  <Typography 
+                                    variant="caption" 
+                                    sx={{ 
+                                      mb: 0.5, 
+                                      px: 1,
+                                      color: 'text.secondary',
+                                      fontSize: '0.7rem'
+                                    }}
+                                  >
+                                    {message.sender_name}
+                                  </Typography>
+                                )}
+                                <Paper
+                                  elevation={0}
+                                  sx={{
+                                    p: 1.5,
+                                    px: 2,
+                                    borderRadius: isAgent 
+                                      ? '18px 18px 4px 18px' 
+                                      : '18px 18px 18px 4px',
+                                    backgroundColor: isAgent ? '#dcf8c6' : '#ffffff',
+                                    boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                                    wordBreak: 'break-word'
+                                  }}
+                                >
+                                  <Typography 
+                                    variant="body2" 
+                                    sx={{ 
+                                      color: isAgent ? '#000' : '#000',
+                                      lineHeight: 1.4,
+                                      whiteSpace: 'pre-wrap'
+                                    }}
+                                  >
+                                    {message.message_text}
+                                  </Typography>
+                                </Paper>
+                                <Typography 
+                                  variant="caption" 
+                                  sx={{ 
+                                    mt: 0.5, 
+                                    px: 1,
+                                    color: 'rgba(0, 0, 0, 0.6)',
+                                    fontSize: '0.65rem',
+                                    fontWeight: 500
+                                  }}
+                                >
+                                  {new Date(message.sent_at).toLocaleTimeString('en-US', { 
+                                    hour: 'numeric', 
+                                    minute: '2-digit',
+                                    hour12: true 
+                                  })}
+                                </Typography>
+                              </Box>
+                              {isAgent && (
+                                <Box
+                                  sx={{
+                                    width: 32,
+                                    height: 32,
+                                    borderRadius: '50%',
+                                    backgroundColor: 'primary.main',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    color: 'white',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 'bold',
+                                    flexShrink: 0
+                                  }}
+                                >
+                                  A
+                                </Box>
+                              )}
+                            </Box>
+                          </React.Fragment>
+                        );
+                      })}
+                      <div ref={messagesEndRef} />
                     </Box>
                   )}
-                </Paper>
+                </Box>
 
                 {/* Message Input */}
-                <Box sx={{ display: 'flex', gap: 1 }}>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
                   <TextField
                     fullWidth
                     placeholder="Type a message..."
@@ -447,16 +669,38 @@ const FollowUpTicketModal: React.FC<FollowUpTicketModalProps> = ({
                       }
                     }}
                     multiline
-                    maxRows={3}
+                    maxRows={4}
+                    variant="outlined"
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        borderRadius: '24px',
+                        backgroundColor: 'background.paper',
+                      }
+                    }}
                   />
-                  <Button
-                    variant="contained"
+                  <IconButton
                     onClick={handleSendMessage}
                     disabled={!newMessage.trim() || sendingMessage}
-                    endIcon={sendingMessage ? <CircularProgress size={20} /> : <SendIcon />}
+                    sx={{
+                      backgroundColor: 'primary.main',
+                      color: 'white',
+                      width: 48,
+                      height: 48,
+                      '&:hover': {
+                        backgroundColor: 'primary.dark',
+                      },
+                      '&:disabled': {
+                        backgroundColor: 'action.disabledBackground',
+                        color: 'action.disabled'
+                      }
+                    }}
                   >
-                    Send
-                  </Button>
+                    {sendingMessage ? (
+                      <CircularProgress size={20} color="inherit" />
+                    ) : (
+                      <SendIcon />
+                    )}
+                  </IconButton>
                 </Box>
               </Box>
             </TabPanel>

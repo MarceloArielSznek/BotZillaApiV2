@@ -30,6 +30,7 @@ const TelegramGroupCategory = require('./TelegramGroupCategory'); // Importar nu
 const InspectionReport = require('./InspectionReport');
 const PerformanceSyncJob = require('./PerformanceSyncJob');
 const BuilderTrendShift = require('./BuilderTrendShift');
+const DailyShift = require('./DailyShift');
 const OverrunReport = require('./OverrunReport');
 const OperationCommandPost = require('./OperationCommandPost');
 const PaymentMethod = require('./PaymentMethod');
@@ -42,6 +43,9 @@ const FollowUpLabel = require('./FollowUpLabel');
 const Chat = require('./Chat');
 const ChatMessage = require('./ChatMessage');
 const FollowUpTicket = require('./FollowUpTicket');
+const SmsBatch = require('./SmsBatch');
+const SmsBatchEstimate = require('./SmsBatchEstimate');
+const SmsWebhookConfig = require('./SmsWebhookConfig');
 
 // Definir las asociaciones de User
 User.belongsTo(UserRol, {
@@ -348,6 +352,13 @@ Job.hasMany(PerformanceSyncJob, { foreignKey: 'matched_job_id', as: 'performance
 BuilderTrendShift.belongsTo(PerformanceSyncJob, { foreignKey: 'matched_sync_job_id', as: 'matchedSyncJob' });
 PerformanceSyncJob.hasMany(BuilderTrendShift, { foreignKey: 'matched_sync_job_id', as: 'builderTrendShifts' });
 
+// === DAILY SHIFT ASSOCIATIONS (NEW PERFORMANCE SYSTEM) ===
+DailyShift.belongsTo(Job, { foreignKey: 'job_id', as: 'job', onDelete: 'CASCADE' });
+Job.hasMany(DailyShift, { foreignKey: 'job_id', as: 'dailyShifts' });
+
+DailyShift.belongsTo(Employee, { foreignKey: 'employee_id', as: 'employee' });
+Employee.hasMany(DailyShift, { foreignKey: 'employee_id', as: 'dailyShifts' });
+
 // === BRANCH CONFIGURATION ASSOCIATIONS ===
 // Branch → BranchConfiguration (1 a 1)
 Branch.belongsTo(BranchConfiguration, {
@@ -437,6 +448,52 @@ User.hasMany(FollowUpTicket, {
     as: 'assignedTickets'
 });
 
+// === SMS BATCH SYSTEM ASSOCIATIONS ===
+
+// SmsBatch → User (created_by) (muchos a 1)
+SmsBatch.belongsTo(User, {
+    foreignKey: 'created_by',
+    as: 'creator'
+});
+User.hasMany(SmsBatch, {
+    foreignKey: 'created_by',
+    as: 'createdBatches'
+});
+
+// SmsBatch ↔ Estimate (many-to-many through SmsBatchEstimate)
+SmsBatch.belongsToMany(Estimate, {
+    through: SmsBatchEstimate,
+    foreignKey: 'batch_id',
+    otherKey: 'estimate_id',
+    as: 'estimates'
+});
+Estimate.belongsToMany(SmsBatch, {
+    through: SmsBatchEstimate,
+    foreignKey: 'estimate_id',
+    otherKey: 'batch_id',
+    as: 'smsBatches'
+});
+
+// SmsBatchEstimate → SmsBatch (muchos a 1)
+SmsBatchEstimate.belongsTo(SmsBatch, {
+    foreignKey: 'batch_id',
+    as: 'batch'
+});
+SmsBatch.hasMany(SmsBatchEstimate, {
+    foreignKey: 'batch_id',
+    as: 'batchEstimates'
+});
+
+// SmsBatchEstimate → Estimate (muchos a 1)
+SmsBatchEstimate.belongsTo(Estimate, {
+    foreignKey: 'estimate_id',
+    as: 'estimate'
+});
+Estimate.hasMany(SmsBatchEstimate, {
+    foreignKey: 'estimate_id',
+    as: 'batchEstimates'
+});
+
 
 module.exports = {
     User,
@@ -480,5 +537,9 @@ module.exports = {
     FollowUpLabel,
     Chat,
     ChatMessage,
-    FollowUpTicket
+    FollowUpTicket,
+    DailyShift,
+    SmsBatch,
+    SmsBatchEstimate,
+    SmsWebhookConfig
 }; 

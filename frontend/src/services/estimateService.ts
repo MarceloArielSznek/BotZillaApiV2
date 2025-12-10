@@ -11,6 +11,7 @@ export interface Estimate {
   sub_service_retail_cost: number | null;
   discount: number | null;
   attic_tech_hours: number | null;
+  attic_tech_estimate_id: number | null;
   customer_name: string;
   customer_address: string;
   customer_email?: string | null;
@@ -57,9 +58,30 @@ export interface Estimate {
   price_after_taxes: number | null;
   has_job?: boolean;
   job?: { id: number; name: string };
+  followUpTicket?: {
+    id: number;
+    status_id: number | null;
+    label_id: number | null;
+    follow_up_date: string | null;
+    followed_up: boolean;
+    notes?: string | null;
+    status?: {
+      id: number;
+      name: string;
+      color: string;
+    } | null;
+    label?: {
+      id: number;
+      name: string;
+      color: string;
+    } | null;
+  } | null;
 }
 
 export interface FetchEstimatesParams {
+  followUpStatus?: number;
+  followUpLabel?: number;
+  followUpDate?: string;
   page?: number;
   limit?: number;
   branch?: number;
@@ -299,23 +321,54 @@ const estimateService = {
   // Get estimate statuses for filters
   getEstimateStatuses: async (): Promise<EstimateStatus[]> => {
     try {
+      console.log('🔍 Fetching estimate statuses...');
       const response = await api.get('/estimate-statuses', {
-        params: { limit: 50 } // Límite ajustado a 50
+        params: { limit: 100, page: 1 } // Límite alto para asegurar que traiga todos
+      });
+      
+      console.log('📦 Response received:', {
+        status: response.status,
+        hasData: !!response.data,
+        dataKeys: response.data ? Object.keys(response.data) : [],
+        dataType: Array.isArray(response.data) ? 'array' : typeof response.data
       });
       
       // Manejo defensivo de la respuesta
       const data = response.data;
+      
+      // Si la respuesta es un array directo
       if (Array.isArray(data)) {
+        console.log('✅ Received array directly:', data.length, 'statuses');
         return data;
       }
+      
+      // Si la respuesta tiene la estructura { statuses: [...], pagination: {...} }
       if (data && Array.isArray(data.statuses)) {
+        console.log('✅ Received statuses in data.statuses:', data.statuses.length, 'statuses');
         return data.statuses;
       }
       
-      console.warn('Unexpected statuses response structure:', data);
+      // Si la respuesta tiene rows (Sequelize findAndCountAll)
+      if (data && Array.isArray(data.rows)) {
+        console.log('✅ Received statuses in data.rows:', data.rows.length, 'statuses');
+        return data.rows;
+      }
+      
+      console.warn('⚠️ Unexpected statuses response structure:', {
+        data,
+        dataType: typeof data,
+        isArray: Array.isArray(data),
+        keys: data ? Object.keys(data) : []
+      });
       return []; // Devolver array vacío en lugar de null
     } catch (error: any) {
-      console.error('Error fetching estimate statuses:', error.response?.data || error.message);
+      console.error('❌ Error fetching estimate statuses:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        url: error.config?.url
+      });
       return []; // Devolver array vacío en caso de error
     }
   },

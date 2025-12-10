@@ -26,6 +26,8 @@ import {
   Logout as LogoutIcon,
   TrendingUp as FollowUpIcon,
   Settings as SettingsIcon,
+  Message as MessageIcon,
+  Inbox as InboxIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -65,7 +67,9 @@ const FollowUpLayout = () => {
   };
 
   const menuItems = [
+    { text: 'Inbox', icon: <InboxIcon />, path: '/follow-up/inbox' },
     { text: 'Estimates', icon: <EstimatesIcon />, path: '/follow-up/estimates' },
+    { text: 'SMS Batches', icon: <MessageIcon />, path: '/follow-up/sms-batches' },
     { text: 'Configuration', icon: <SettingsIcon />, path: '/follow-up/configuration' },
     // Agregar más opciones del módulo follow-up aquí en el futuro
   ];
@@ -120,7 +124,7 @@ const FollowUpLayout = () => {
           >
             <ListItemButton
               onClick={() => navigate(item.path)}
-              selected={location.pathname === item.path}
+              selected={location.pathname === item.path || location.pathname.startsWith(item.path)}
               sx={{
                 justifyContent: drawerOpen ? 'initial' : 'center',
                 px: 2.5,

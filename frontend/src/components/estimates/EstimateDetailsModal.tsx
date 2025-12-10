@@ -17,6 +17,7 @@ import {
   Chip,
   Divider
 } from '@mui/material';
+import { OpenInNew as OpenInNewIcon } from '@mui/icons-material';
 import estimateService, { type Estimate } from '../../services/estimateService';
 import JobDetailsModal from '../jobs/JobDetailsModal';
 
@@ -39,6 +40,7 @@ const EstimateDetailsModal: React.FC<EstimateDetailsModalProps> = ({ estimateId,
         const data = await estimateService.getEstimateDetails(estimateId);
         setEstimate(data);
       } catch (e) {
+        console.error('Error loading estimate:', e);
         // noop (podemos mostrar snackbar en el futuro)
       } finally {
         setLoading(false);
@@ -285,6 +287,19 @@ const EstimateDetailsModal: React.FC<EstimateDetailsModalProps> = ({ estimateId,
         )}
       </DialogContent>
       <DialogActions>
+        <Button
+          variant="outlined"
+          color="primary"
+          startIcon={<OpenInNewIcon />}
+          disabled={!estimate?.attic_tech_estimate_id}
+          onClick={() => {
+            if (estimate?.attic_tech_estimate_id) {
+              window.open(`https://www.attic-tech.com/calculator?jobId=${estimate.attic_tech_estimate_id}`, '_blank');
+            }
+          }}
+        >
+          Open in Attic Tech
+        </Button>
         {estimate?.job?.id && (
           <Button
             variant="contained"

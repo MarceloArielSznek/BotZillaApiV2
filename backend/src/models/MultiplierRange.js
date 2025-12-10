@@ -38,6 +38,7 @@ MultiplierRange.init({
         type: DataTypes.INTEGER,
         unique: true,
         allowNull: false,
+        field: 'at_multiplier_range_id', // Mapear al nombre real de la columna en BD
         comment: 'Multiplier range ID in Attic Tech API (unique identifier)'
     },
     at_created_at: {

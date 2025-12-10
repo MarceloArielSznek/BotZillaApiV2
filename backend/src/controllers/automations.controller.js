@@ -588,16 +588,16 @@ async function autoCreateFollowUpTicket(estimate, estimateName, logMessages = []
             });
 
             if (!existingTicket) {
-                // Buscar el status "Negotiating" por defecto
-                const negotiatingStatus = await FollowUpStatus.findOne({
-                    where: { name: 'Negotiating' }
+                // Buscar el status "Pending FU" por defecto
+                const pendingFUStatus = await FollowUpStatus.findOne({
+                    where: { name: 'Pending FU' }
                 });
 
                 // Crear el ticket
                 await FollowUpTicket.create({
                     estimate_id: estimate.id,
                     followed_up: false,
-                    status_id: negotiatingStatus ? negotiatingStatus.id : null,
+                    status_id: pendingFUStatus ? pendingFUStatus.id : null,
                     label_id: null,
                     chat_id: null,
                     notes: 'Auto-created during estimate sync',

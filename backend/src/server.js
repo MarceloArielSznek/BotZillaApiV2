@@ -1,5 +1,7 @@
+const http = require('http');
 const app = require('./app');
 const sequelize = require('./config/database');
+const { initializeSocket } = require('./socket/socketServer');
 require('dotenv').config();
 
 const PORT = process.env.PORT || 3000;
@@ -52,8 +54,16 @@ async function startServer() {
         // Iniciar heartbeat para mantener conexión viva
         setupDatabaseHeartbeat();
         
-        app.listen(PORT, () => {
+        // Crear servidor HTTP
+        const server = http.createServer(app);
+        
+        // Inicializar Socket.io
+        initializeSocket(server);
+        
+        // Iniciar servidor
+        server.listen(PORT, () => {
             console.log(`🚀 Server is running on port ${PORT}`);
+            console.log(`🔌 WebSocket server ready`);
         });
     } catch (error) {
         console.error('🚫 Unable to start server due to database connection issue.');

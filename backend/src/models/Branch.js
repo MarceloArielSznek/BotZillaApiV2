@@ -26,6 +26,12 @@ const Branch = sequelize.define('Branch', {
         allowNull: true,
         comment: 'Branch ID in Attic Tech API (for syncing data)'
     },
+    attic_branch_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        unique: true,
+        comment: 'Branch ID in Attic MS SQL DB (dim_attic_branch.branch_id) for New Performance System'
+    },
     branch_configuration_id: {
         type: DataTypes.INTEGER,
         allowNull: true,

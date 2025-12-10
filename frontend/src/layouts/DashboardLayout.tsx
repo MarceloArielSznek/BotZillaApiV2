@@ -31,6 +31,7 @@ import {
   Menu as MenuIcon,
   Dashboard as DashboardIcon,
   Summarize as ReportsIcon,
+  Message as MessageIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';

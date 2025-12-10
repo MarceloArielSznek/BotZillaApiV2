@@ -20,7 +20,11 @@ import TelegramGroups from './pages/TelegramGroups'; // Importar nueva página
 import InspectionReports from './pages/InspectionReports'; // Nueva página
 import Performance from './pages/Performance'; // Nueva página
 import FollowUpEstimates from './pages/FollowUpEstimates'; // Módulo Follow-up
+import Inbox from './pages/Inbox'; // Inbox
 import BranchConfiguration from './pages/BranchConfiguration'; // Módulo Follow-up - Configuration
+import SmsBatches from './pages/SmsBatches'; // SMS Batches
+import CreateSmsBatch from './pages/CreateSmsBatch'; // Create SMS Batch
+import SmsBatchDetail from './pages/SmsBatchDetail'; // SMS Batch Detail
 import ProtectedRoute from './components/ProtectedRoute';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -95,8 +99,13 @@ function App() {
                   </ProtectedRoute>
                 }
               >
-                <Route index element={<Navigate to="/follow-up/estimates" replace />} />
+                <Route index element={<Navigate to="/follow-up/inbox" replace />} />
+                <Route path="inbox" element={<Inbox />} />
                 <Route path="estimates" element={<FollowUpEstimates />} />
+                <Route path="sms-batches" element={<SmsBatches />} />
+                <Route path="sms-batches/create" element={<CreateSmsBatch />} />
+                <Route path="sms-batches/:id" element={<SmsBatchDetail />} />
+                <Route path="sms-batches/:id/edit" element={<CreateSmsBatch />} />
                 <Route path="configuration" element={<BranchConfiguration />} />
               </Route>
 

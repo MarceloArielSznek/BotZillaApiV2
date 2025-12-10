@@ -19,13 +19,35 @@ export default defineConfig(({ mode }) => {
         changeOrigin: true,
         secure: false,
         configure: (proxy, options) => {
-          console.log('🔗 Proxy configurado: /api -> http://localhost:3000')
+          console.log('🔗 Proxy configurado: /api -> http://localhost:3333')
         }
       },
       '/health': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:3333',
         changeOrigin: true,
         secure: false,
+      },
+      '/socket.io': {
+        target: 'http://localhost:3333',
+        changeOrigin: true,
+        secure: false,
+        ws: true, // Habilitar WebSocket
+        rewrite: (path) => path, // No reescribir la ruta
+        configure: (proxy, options) => {
+          proxy.on('proxyReqWs', (proxyReq, req, socket) => {
+            console.log('🔌 WebSocket proxy request:', req.url);
+          });
+          proxy.on('error', (err, req, res) => {
+            console.error('❌ Proxy error:', err);
+          });
+          proxy.on('open', (proxySocket) => {
+            console.log('✅ WebSocket proxy connection opened');
+          });
+          proxy.on('close', (res, socket, head) => {
+            console.log('🔌 WebSocket proxy connection closed');
+          });
+          console.log('🔗 Proxy configurado: /socket.io -> http://localhost:3333 (WebSocket enabled)')
+        }
       }
     },
     // Hot reload más agresivo en desarrollo

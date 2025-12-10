@@ -264,6 +264,20 @@ const JobDetailsModalSimple: React.FC<JobDetailsModalSimpleProps> = ({ jobId, op
                                                     </Paper>
                                                 </Box>
                                             )}
+                                            {estimate.attic_tech_estimate_id && (
+                                                <Box sx={{ mt: 2 }}>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="primary"
+                                                        startIcon={<span>🔗</span>}
+                                                        onClick={() => {
+                                                            window.open(`https://www.attic-tech.com/calculator?jobId=${estimate.attic_tech_estimate_id}`, '_blank');
+                                                        }}
+                                                    >
+                                                        Open in Attic Tech
+                                                    </Button>
+                                                </Box>
+                                            )}
                                         </Box>
                                     ) : (
                                         <Typography>No estimate data available</Typography>

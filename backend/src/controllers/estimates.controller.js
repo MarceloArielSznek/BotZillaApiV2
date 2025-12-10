@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Estimate, SalesPerson, Branch, EstimateStatus, Job, SalesPersonBranch, PaymentMethod, BranchConfiguration, MultiplierRange, FollowUpTicket, FollowUpStatus } = require('../models');
+const { Estimate, SalesPerson, Branch, EstimateStatus, Job, SalesPersonBranch, PaymentMethod, BranchConfiguration, MultiplierRange, FollowUpTicket, FollowUpStatus, FollowUpLabel } = require('../models');
 const https = require('https');
 const XLSX = require('xlsx');
 const { findOrCreateBranch: branchHelperFindOrCreate } = require('../utils/branchHelper');
@@ -233,7 +233,7 @@ class EstimatesController {
      */
     async getLostEstimates(req, res) {
         try {
-            const { page = 1, limit = 10, branch, salesperson, startDate, endDate, search } = req.query;
+            const { page = 1, limit = 10, branch, salesperson, startDate, endDate, search, followUpStatus, followUpLabel, followUpDate } = req.query;
             const offset = (page - 1) * limit;
 
             // Buscar el status "Lost"
@@ -255,8 +255,40 @@ class EstimatesController {
                 { model: SalesPerson, as: 'SalesPerson', attributes: ['name'] }, // SalesPerson no tiene 'email'
                 { model: Branch, as: 'Branch', attributes: ['name'] },
                 { model: EstimateStatus, as: 'EstimateStatus', attributes: ['name'] },
-                { model: PaymentMethod, as: 'PaymentMethod', attributes: ['id', 'name'] }
+                { model: PaymentMethod, as: 'PaymentMethod', attributes: ['id', 'name'] },
+                {
+                    model: FollowUpTicket,
+                    as: 'followUpTicket',
+                    required: false, // LEFT JOIN para incluir estimates sin ticket
+                    include: [
+                        { model: FollowUpStatus, as: 'status', attributes: ['id', 'name', 'color'] },
+                        { model: FollowUpLabel, as: 'label', attributes: ['id', 'name', 'color'] }
+                    ],
+                    attributes: ['id', 'status_id', 'label_id', 'follow_up_date', 'followed_up', 'notes']
+                }
             ];
+
+            // Filtros de follow-up
+            const followUpWhere = {};
+            let hasFollowUpFilter = false;
+            
+            if (followUpStatus) {
+                followUpWhere.status_id = parseInt(followUpStatus);
+                hasFollowUpFilter = true;
+            }
+            if (followUpLabel) {
+                followUpWhere.label_id = parseInt(followUpLabel);
+                hasFollowUpFilter = true;
+            }
+            if (followUpDate) {
+                followUpWhere.follow_up_date = followUpDate;
+                hasFollowUpFilter = true;
+            }
+            
+            if (hasFollowUpFilter) {
+                includeClause[4].where = followUpWhere;
+                includeClause[4].required = true; // INNER JOIN para filtrar
+            }
 
             // Búsqueda por texto (actualizar alias en búsqueda)
             if (search && search.trim()) {
