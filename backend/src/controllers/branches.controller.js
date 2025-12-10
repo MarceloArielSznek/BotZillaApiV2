@@ -43,8 +43,12 @@ exports.getAllBranches = async (req, res) => {
             );
         }
 
+        // Excluir attic_branch_id (campo opcional que puede no existir en producción)
+        const branchAttributes = ['id', 'name', 'telegram_group_id', 'address', 'attic_tech_branch_id', 'branch_configuration_id'];
+        
         const { count, rows } = await Branch.findAndCountAll({
             where,
+            attributes: branchAttributes, // Especificar attributes explícitamente para evitar errores
             include: includeOptions,
             limit: parseInt(limit),
             offset: parseInt(offset),

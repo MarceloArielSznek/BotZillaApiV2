@@ -28,8 +28,8 @@ class BranchConfigurationController {
                             'min_cost',
                             'max_cost',
                             'lowest_multiple',
-                            'highest_multiple',
-                            'at_multiplier_id'
+                            'highest_multiple'
+                            // Excluir at_multiplier_id (mapea a at_multiplier_range_id que puede no existir)
                         ]
                     }
                 ],
@@ -83,8 +83,8 @@ class BranchConfigurationController {
                             'min_cost',
                             'max_cost',
                             'lowest_multiple',
-                            'highest_multiple',
-                            'at_multiplier_id'
+                            'highest_multiple'
+                            // Excluir at_multiplier_id (mapea a at_multiplier_range_id que puede no existir)
                         ]
                     }
                 ],

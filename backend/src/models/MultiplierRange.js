@@ -58,7 +58,13 @@ MultiplierRange.init({
     timestamps: true,
     underscored: true,
     createdAt: 'created_at',
-    updatedAt: 'updated_at'
+    updatedAt: 'updated_at',
+    // Excluir at_multiplier_id por defecto (mapea a at_multiplier_range_id que puede no existir)
+    defaultScope: {
+        attributes: {
+            exclude: ['at_multiplier_id'] // Excluir por defecto, se puede incluir explícitamente si existe
+        }
+    }
 });
 
 module.exports = MultiplierRange;

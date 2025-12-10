@@ -43,12 +43,14 @@ const calculatePricingFactors = async (estimate) => {
         // PRIORIDAD 2: Si no hay snapshot, usar la configuración actual del branch
         if (calculatedMultiplier === null && estimate.branch_id) {
             const branch = await Branch.findByPk(estimate.branch_id, {
+                attributes: ['id', 'name', 'attic_tech_branch_id', 'branch_configuration_id'], // Excluir attic_branch_id
                 include: [{
                     model: BranchConfiguration,
                     as: 'configuration',
                     include: [{
                         model: MultiplierRange,
-                        as: 'multiplierRanges'
+                        as: 'multiplierRanges',
+                        attributes: ['id', 'name', 'min_cost', 'max_cost', 'lowest_multiple', 'highest_multiple'] // Excluir at_multiplier_id
                     }]
                 }]
             });
