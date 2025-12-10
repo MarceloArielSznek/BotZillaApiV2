@@ -104,3 +104,7 @@ COMMIT;
 -- AND column_name = 'attic_tech_branch_id';
 -- Should return: 0 rows
 
+
+
+
+
