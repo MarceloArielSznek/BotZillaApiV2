@@ -161,9 +161,14 @@ class EstimatesController {
             }
 
 
+            // Determinar ordenamiento: si hay sort_by, usarlo; sino, ordenar por defecto (más nuevo primero)
             const orderClause = [];
             if (sort_by) {
                 orderClause.push([sort_by, sort_order === 'desc' ? 'DESC' : 'ASC']);
+            } else {
+                // Ordenamiento por defecto: más nuevo primero
+                // Intentar usar at_updated_date si existe, sino usar created_at
+                orderClause.push(['at_updated_date', 'DESC'], ['created_at', 'DESC']);
             }
 
             // Log de los filtros aplicados
@@ -171,7 +176,8 @@ class EstimatesController {
                 query: req.query,
                 whereClause: whereClause,
                 startDate: startDate,
-                endDate: endDate
+                endDate: endDate,
+                orderClause: orderClause
             });
 
             const estimates = await Estimate.findAndCountAll({

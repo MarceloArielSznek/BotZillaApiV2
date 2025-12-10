@@ -358,6 +358,22 @@ class JobsController {
                 includeWhereClause.estimate.sales_person_id = salespersonId;
             }
 
+            // Determinar ordenamiento: si hay filtros de fecha, usar closing_date, sino usar id (más nuevo primero)
+            const hasDateFilters = startDate && endDate;
+            const hasAnyFilters = branchId || salespersonId || crewLeaderId || statusId || search || (inPayload !== undefined && inPayload !== '');
+            
+            let orderClause;
+            if (hasDateFilters) {
+                // Si hay filtros de fecha, ordenar por closing_date
+                orderClause = [['closing_date', 'DESC']];
+            } else if (!hasAnyFilters) {
+                // Si no hay filtros, ordenar por id DESC (más nuevo primero)
+                orderClause = [['id', 'DESC']];
+            } else {
+                // Si hay otros filtros pero no de fecha, también ordenar por id DESC
+                orderClause = [['id', 'DESC']];
+            }
+
             const { count, rows: jobs } = await Job.findAndCountAll({
                 where: whereClause,
                 include: [
@@ -401,7 +417,7 @@ class JobsController {
                         required: false
                     }
                 ],
-                order: [['closing_date', 'DESC']],
+                order: orderClause,
                 limit: parseInt(limit),
                 offset: offset,
                 distinct: true // Necesario para un conteo correcto con joins
