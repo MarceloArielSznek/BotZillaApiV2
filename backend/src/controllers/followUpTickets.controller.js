@@ -337,10 +337,27 @@ class FollowUpTicketsController {
                                     }
                                 });
 
-                                // Actualizar last_contact_date del ticket
-                                await ticket.update({
-                                    last_contact_date: new Date()
+                                // Obtener el status "Texted" para actualizar el ticket
+                                const textedStatus = await FollowUpStatus.findOne({
+                                    where: { name: 'Texted' }
                                 });
+
+                                // Actualizar el follow-up ticket: estado a "Texted", fecha de follow-up y marcado como seguido
+                                const today = new Date();
+                                today.setHours(0, 0, 0, 0); // Establecer a medianoche para DATEONLY
+                                
+                                const ticketUpdates = {
+                                    last_contact_date: new Date(),
+                                    follow_up_date: today,
+                                    followed_up: true
+                                };
+
+                                // Si existe el status "Texted", actualizarlo
+                                if (textedStatus) {
+                                    ticketUpdates.status_id = textedStatus.id;
+                                }
+
+                                await ticket.update(ticketUpdates);
 
                                 logger.info(`✅ SMS sent via webhook for chat ${chatId}, estimate ${ticket.estimate.id}`);
                             }

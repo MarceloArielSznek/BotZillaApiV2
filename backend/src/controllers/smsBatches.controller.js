@@ -1,6 +1,6 @@
 'use strict';
 
-const { SmsBatch, SmsBatchEstimate, Estimate, User, SalesPerson, Branch, EstimateStatus, PaymentMethod, BranchConfiguration, MultiplierRange, FollowUpTicket, Chat, ChatMessage } = require('../models');
+const { SmsBatch, SmsBatchEstimate, Estimate, User, SalesPerson, Branch, EstimateStatus, PaymentMethod, BranchConfiguration, MultiplierRange, FollowUpTicket, FollowUpStatus, Chat, ChatMessage } = require('../models');
 const { Op } = require('sequelize');
 const { logger } = require('../utils/logger');
 const axios = require('axios');
@@ -853,6 +853,11 @@ class SmsBatchesController {
                 }
             );
 
+            // Obtener el status "Texted" para actualizar los tickets
+            const textedStatus = await FollowUpStatus.findOne({
+                where: { name: 'Texted' }
+            });
+
             // Agregar mensajes al chat de cada follow-up ticket
             for (const msg of messages) {
                 try {
@@ -885,12 +890,24 @@ class SmsBatchesController {
                             sent_at: new Date()
                         });
 
-                        // Actualizar last_contact_date del ticket
-                        await followUpTicket.update({
-                            last_contact_date: new Date()
-                        });
+                        // Actualizar el follow-up ticket: estado a "Texted", fecha de follow-up y marcado como seguido
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0); // Establecer a medianoche para DATEONLY
+                        
+                        const ticketUpdates = {
+                            last_contact_date: new Date(),
+                            follow_up_date: today,
+                            followed_up: true
+                        };
 
-                        logger.info(`✅ Added SMS message to chat for estimate ${msg.estimate_id}`);
+                        // Si existe el status "Texted", actualizarlo
+                        if (textedStatus) {
+                            ticketUpdates.status_id = textedStatus.id;
+                        }
+
+                        await followUpTicket.update(ticketUpdates);
+
+                        logger.info(`✅ Added SMS message to chat and updated follow-up ticket for estimate ${msg.estimate_id}`);
                     }
                 } catch (chatError) {
                     // No fallar el proceso si hay error al agregar al chat
