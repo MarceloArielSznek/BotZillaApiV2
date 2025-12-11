@@ -1,6 +1,7 @@
 'use strict';
 
 const { FollowUpTicket, FollowUpStatus, FollowUpLabel, Chat, ChatMessage, Estimate, User } = require('../models');
+const { Op } = require('sequelize');
 const { logger } = require('../utils/logger');
 const axios = require('axios');
 const { emitNewMessage, emitInboxUpdate } = require('../socket/socketServer');
