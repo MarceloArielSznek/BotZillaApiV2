@@ -5,6 +5,62 @@ const { logger } = require('../utils/logger');
 const axios = require('axios');
 const { emitNewMessage, emitInboxUpdate } = require('../socket/socketServer');
 
+/**
+ * Normaliza un número de teléfono al formato +1xxxxxxxxxx requerido por Make.com
+ * @param {string} phone - Número de teléfono en cualquier formato
+ * @returns {string|null} - Número normalizado en formato +1xxxxxxxxxx o null si no es válido
+ */
+function normalizePhoneNumber(phone) {
+    if (!phone) {
+        return null;
+    }
+
+    // Convertir a string si no lo es
+    const phoneStr = String(phone).trim();
+    
+    if (!phoneStr || phoneStr.length === 0) {
+        return null;
+    }
+
+    // Remover todos los caracteres no numéricos excepto el +
+    let cleaned = phoneStr.replace(/[^\d+]/g, '');
+
+    // Si no tiene dígitos, retornar null
+    if (cleaned.length === 0 || cleaned === '+') {
+        logger.warn(`⚠️ Invalid phone number (no digits): ${phone}`);
+        return null;
+    }
+
+    // Remover el + si existe para procesar solo los dígitos
+    const hasPlus = cleaned.startsWith('+');
+    const digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
+
+    // Si empieza con 1 y tiene 11 dígitos, es +1 + 10 dígitos
+    if (digitsOnly.startsWith('1') && digitsOnly.length === 11) {
+        return '+1' + digitsOnly.substring(1);
+    }
+    
+    // Si empieza con 1 y tiene más de 11 dígitos, tomar solo los primeros 11
+    if (digitsOnly.startsWith('1') && digitsOnly.length > 11) {
+        return '+1' + digitsOnly.substring(1, 11);
+    }
+
+    // Si tiene exactamente 10 dígitos, agregar +1
+    if (digitsOnly.length === 10) {
+        return '+1' + digitsOnly;
+    }
+
+    // Si tiene más de 10 dígitos pero no empieza con 1, tomar los últimos 10
+    if (digitsOnly.length > 10) {
+        const last10 = digitsOnly.substring(digitsOnly.length - 10);
+        return '+1' + last10;
+    }
+
+    // Si tiene menos de 10 dígitos, no es válido
+    logger.warn(`⚠️ Invalid phone number (too short): ${phone} -> ${digitsOnly} (${digitsOnly.length} digits)`);
+    return null;
+}
+
 class FollowUpTicketsController {
     
     /**
@@ -246,41 +302,48 @@ class FollowUpTicketsController {
                         const webhookUrl = process.env.QUO_SMS_WEBHOOK_URL;
                         
                         if (webhookUrl) {
-                            // Preparar payload en el mismo formato que los batches
-                            const payload = {
-                                messages: [{
-                                    phone: ticket.estimate.customer_phone,
-                                    message: message_text
-                                }]
-                            };
+                            // Normalizar número de teléfono al formato +1xxxxxxxxxx
+                            const normalizedPhone = normalizePhoneNumber(ticket.estimate.customer_phone);
+                            
+                            if (!normalizedPhone) {
+                                logger.warn(`⚠️ Cannot send SMS - invalid phone number: ${ticket.estimate.customer_phone}`);
+                            } else {
+                                // Preparar payload en el mismo formato que los batches
+                                const payload = {
+                                    messages: [{
+                                        phone: normalizedPhone,
+                                        message: message_text
+                                    }]
+                                };
 
-                            // Enviar al webhook
-                            await axios.post(
-                                webhookUrl,
-                                payload,
-                                {
-                                    headers: {
-                                        'Content-Type': 'application/json'
-                                    },
-                                    timeout: 30000
-                                }
-                            );
+                                // Enviar al webhook
+                                await axios.post(
+                                    webhookUrl,
+                                    payload,
+                                    {
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        timeout: 30000
+                                    }
+                                );
 
-                            // Actualizar metadata del mensaje para indicar que se envió SMS
-                            await message.update({
-                                metadata: {
-                                    ...(metadata || {}),
-                                    sms_sent: true,
-                                    sms_sent_at: new Date().toISOString()
-                                }
-                            });
+                                // Actualizar metadata del mensaje para indicar que se envió SMS
+                                await message.update({
+                                    metadata: {
+                                        ...(metadata || {}),
+                                        sms_sent: true,
+                                        sms_sent_at: new Date().toISOString()
+                                    }
+                                });
 
-                            // Actualizar last_contact_date del ticket
-                            await ticket.update({
-                                last_contact_date: new Date()
-                            });
+                                // Actualizar last_contact_date del ticket
+                                await ticket.update({
+                                    last_contact_date: new Date()
+                                });
 
-                            logger.info(`✅ SMS sent via webhook for chat ${chatId}, estimate ${ticket.estimate.id}`);
+                                logger.info(`✅ SMS sent via webhook for chat ${chatId}, estimate ${ticket.estimate.id}`);
+                            }
                         } else {
                             logger.warn('QUO_SMS_WEBHOOK_URL not configured, skipping SMS send');
                         }

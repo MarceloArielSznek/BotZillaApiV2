@@ -6,6 +6,62 @@ const { logger } = require('../utils/logger');
 const axios = require('axios');
 
 /**
+ * Normaliza un número de teléfono al formato +1xxxxxxxxxx requerido por Make.com
+ * @param {string} phone - Número de teléfono en cualquier formato
+ * @returns {string|null} - Número normalizado en formato +1xxxxxxxxxx o null si no es válido
+ */
+function normalizePhoneNumber(phone) {
+    if (!phone) {
+        return null;
+    }
+
+    // Convertir a string si no lo es
+    const phoneStr = String(phone).trim();
+    
+    if (!phoneStr || phoneStr.length === 0) {
+        return null;
+    }
+
+    // Remover todos los caracteres no numéricos excepto el +
+    let cleaned = phoneStr.replace(/[^\d+]/g, '');
+
+    // Si no tiene dígitos, retornar null
+    if (cleaned.length === 0 || cleaned === '+') {
+        logger.warn(`⚠️ Invalid phone number (no digits): ${phone}`);
+        return null;
+    }
+
+    // Remover el + si existe para procesar solo los dígitos
+    const hasPlus = cleaned.startsWith('+');
+    const digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
+
+    // Si empieza con 1 y tiene 11 dígitos, es +1 + 10 dígitos
+    if (digitsOnly.startsWith('1') && digitsOnly.length === 11) {
+        return '+1' + digitsOnly.substring(1);
+    }
+    
+    // Si empieza con 1 y tiene más de 11 dígitos, tomar solo los primeros 11
+    if (digitsOnly.startsWith('1') && digitsOnly.length > 11) {
+        return '+1' + digitsOnly.substring(1, 11);
+    }
+
+    // Si tiene exactamente 10 dígitos, agregar +1
+    if (digitsOnly.length === 10) {
+        return '+1' + digitsOnly;
+    }
+
+    // Si tiene más de 10 dígitos pero no empieza con 1, tomar los últimos 10
+    if (digitsOnly.length > 10) {
+        const last10 = digitsOnly.substring(digitsOnly.length - 10);
+        return '+1' + last10;
+    }
+
+    // Si tiene menos de 10 dígitos, no es válido
+    logger.warn(`⚠️ Invalid phone number (too short): ${phone} -> ${digitsOnly} (${digitsOnly.length} digits)`);
+    return null;
+}
+
+/**
  * Calcula los pricing factors para un estimate
  */
 const calculatePricingFactors = async (estimate) => {
@@ -694,15 +750,23 @@ class SmsBatchesController {
                 renderedMessage = renderedMessage.replace(/\{\{salesperson_name\}\}/g, estimate.SalesPerson?.name || 'N/A');
                 renderedMessage = renderedMessage.replace(/\{\{discount\}\}/g, estimate.discount ? `${estimate.discount}%` : '0%');
 
+                // Normalizar número de teléfono al formato +1xxxxxxxxxx
+                const normalizedPhone = normalizePhoneNumber(estimate.customer_phone);
+                
+                if (!normalizedPhone) {
+                    logger.warn(`⚠️ Skipping estimate ${estimate.id} - invalid phone number: ${estimate.customer_phone}`);
+                    return null;
+                }
+
                 return {
                     estimate_id: estimate.id,
-                    phone_number: estimate.customer_phone || '',
+                    phone_number: normalizedPhone,
                     message: renderedMessage,
                     customer_name: customerName,
                     first_name: firstName,
                     last_name: lastName
                 };
-            }).filter(msg => msg.phone_number && msg.phone_number.trim() !== ''); // Filtrar estimates sin teléfono
+            }).filter(msg => msg !== null && msg.phone_number && msg.phone_number.trim() !== ''); // Filtrar estimates sin teléfono válido
 
             if (messages.length === 0) {
                 return res.status(400).json({
