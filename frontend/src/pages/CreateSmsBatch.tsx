@@ -78,7 +78,12 @@ const CreateSmsBatch: React.FC = () => {
   const [salespeople, setSalespeople] = useState<SalesPerson[]>([]);
   const [followUpStatuses, setFollowUpStatuses] = useState<any[]>([]);
   const [followUpLabels, setFollowUpLabels] = useState<any[]>([]);
-  const [warnings, setWarnings] = useState<{ estimatesWithoutPhone: number; estimatesWithoutPhoneNames: string[] } | null>(null);
+  const [warnings, setWarnings] = useState<{ 
+    estimatesWithoutPhone?: number; 
+    estimatesWithoutPhoneNames?: string[];
+    estimatesAlreadyTexted?: number;
+    estimatesAlreadyTextedNames?: string[];
+  } | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -268,11 +273,16 @@ const CreateSmsBatch: React.FC = () => {
           result = await smsBatchService.createBatchFromSelection(params);
         }
         
-        // Verificar si hay warnings sobre estimates sin teléfono
-        if (result && result.warnings && result.warnings.estimatesWithoutPhone > 0) {
+        // Verificar si hay warnings sobre estimates sin teléfono o ya texted
+        if (result && result.warnings && (
+          (result.warnings.estimatesWithoutPhone && result.warnings.estimatesWithoutPhone > 0) ||
+          (result.warnings.estimatesAlreadyTexted && result.warnings.estimatesAlreadyTexted > 0)
+        )) {
           setWarnings({
             estimatesWithoutPhone: result.warnings.estimatesWithoutPhone,
-            estimatesWithoutPhoneNames: result.warnings.estimatesWithoutPhoneNames || []
+            estimatesWithoutPhoneNames: result.warnings.estimatesWithoutPhoneNames || [],
+            estimatesAlreadyTexted: result.warnings.estimatesAlreadyTexted,
+            estimatesAlreadyTextedNames: result.warnings.estimatesAlreadyTextedNames || []
           });
           // No navegar inmediatamente, mostrar el aviso primero
           return;
@@ -282,7 +292,20 @@ const CreateSmsBatch: React.FC = () => {
       }
     } catch (err: any) {
       console.error(`Error ${isEditMode ? 'updating' : 'creating'} batch:`, err);
-      setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} batch`);
+      
+      // Si el error tiene información sobre estimates excluidos, mostrarla
+      if (err.response?.data?.errors) {
+        const errors = err.response.data.errors;
+        setWarnings({
+          estimatesWithoutPhone: errors.estimatesWithoutPhone,
+          estimatesWithoutPhoneNames: errors.estimatesWithoutPhoneNames || [],
+          estimatesAlreadyTexted: errors.estimatesAlreadyTexted,
+          estimatesAlreadyTextedNames: errors.estimatesAlreadyTextedNames || []
+        });
+        setError(err.response?.data?.message || 'No se pudo crear el batch');
+      } else {
+        setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} batch`);
+      }
     } finally {
       setSaving(false);
     }
@@ -328,7 +351,7 @@ const CreateSmsBatch: React.FC = () => {
         </Alert>
       )}
 
-      {/* Warning Alert - Estimates sin teléfono */}
+      {/* Warning Alert - Estimates sin teléfono o ya texted */}
       {warnings && (
         <Alert 
           severity="warning" 
@@ -338,28 +361,58 @@ const CreateSmsBatch: React.FC = () => {
             navigate('/follow-up/sms-batches');
           }}
         >
-          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
-            ⚠️ {warnings.estimatesWithoutPhone} estimate(s) sin teléfono
-          </Typography>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            Los siguientes estimates no tienen número de teléfono y no se podrán enviar SMS:
-          </Typography>
-          <Box component="ul" sx={{ pl: 2, mb: 1 }}>
-            {warnings.estimatesWithoutPhoneNames.slice(0, 10).map((name, idx) => (
-              <li key={idx}>
-                <Typography variant="body2">{name}</Typography>
-              </li>
-            ))}
-            {warnings.estimatesWithoutPhoneNames.length > 10 && (
-              <li>
-                <Typography variant="body2">
-                  ... y {warnings.estimatesWithoutPhoneNames.length - 10} más
-                </Typography>
-              </li>
-            )}
-          </Box>
-          <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
-            El batch se creó exitosamente, pero estos estimates serán omitidos al enviar SMS.
+          {warnings.estimatesAlreadyTexted && warnings.estimatesAlreadyTexted > 0 && (
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                ⚠️ {warnings.estimatesAlreadyTexted} estimate(s) ya tienen SMS enviado
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Los siguientes estimates ya recibieron un SMS y fueron excluidos del batch:
+              </Typography>
+              <Box component="ul" sx={{ pl: 2, mb: 2 }}>
+                {(warnings.estimatesAlreadyTextedNames || []).slice(0, 10).map((name, idx) => (
+                  <li key={idx}>
+                    <Typography variant="body2">{name}</Typography>
+                  </li>
+                ))}
+                {(warnings.estimatesAlreadyTextedNames || []).length > 10 && (
+                  <li>
+                    <Typography variant="body2">
+                      ... y {(warnings.estimatesAlreadyTextedNames || []).length - 10} más
+                    </Typography>
+                  </li>
+                )}
+              </Box>
+            </>
+          )}
+          
+          {warnings.estimatesWithoutPhone && warnings.estimatesWithoutPhone > 0 && (
+            <>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, mt: warnings.estimatesAlreadyTexted ? 2 : 0 }}>
+                ⚠️ {warnings.estimatesWithoutPhone} estimate(s) sin teléfono
+              </Typography>
+              <Typography variant="body2" sx={{ mb: 1 }}>
+                Los siguientes estimates no tienen número de teléfono y fueron excluidos del batch:
+              </Typography>
+              <Box component="ul" sx={{ pl: 2, mb: 1 }}>
+                {(warnings.estimatesWithoutPhoneNames || []).slice(0, 10).map((name, idx) => (
+                  <li key={idx}>
+                    <Typography variant="body2">{name}</Typography>
+                  </li>
+                ))}
+                {(warnings.estimatesWithoutPhoneNames || []).length > 10 && (
+                  <li>
+                    <Typography variant="body2">
+                      ... y {(warnings.estimatesWithoutPhoneNames || []).length - 10} más
+                    </Typography>
+                  </li>
+                )}
+              </Box>
+            </>
+          )}
+          
+          <Typography variant="body2" sx={{ fontStyle: 'italic', mt: 2 }}>
+            El batch se creó exitosamente solo con los estimates válidos.
           </Typography>
         </Alert>
       )}

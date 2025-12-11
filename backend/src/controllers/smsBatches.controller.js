@@ -330,10 +330,70 @@ class SmsBatchesController {
                 });
             }
 
-            // Verificar cuántos estimates no tienen teléfono
+            // Obtener el status "Texted" para verificar si ya se envió SMS
+            const textedStatus = await FollowUpStatus.findOne({
+                where: { name: 'Texted' }
+            });
+
+            // Verificar qué estimates ya tienen SMS enviado
+            const estimateIds = estimates.map(est => est.id);
+            
+            // Verificar en follow-up tickets con status "Texted"
+            const alreadyTextedTickets = textedStatus ? await FollowUpTicket.findAll({
+                where: {
+                    estimate_id: { [Op.in]: estimateIds },
+                    status_id: textedStatus.id
+                },
+                attributes: ['estimate_id']
+            }) : [];
+
+            // Verificar en SmsBatchEstimate con status "sent"
+            const alreadySentInBatches = await SmsBatchEstimate.findAll({
+                where: {
+                    estimate_id: { [Op.in]: estimateIds },
+                    status: 'sent'
+                },
+                attributes: ['estimate_id'],
+                group: ['estimate_id']
+            });
+
+            // Combinar ambos conjuntos de IDs
+            const alreadyTextedIds = new Set([
+                ...alreadyTextedTickets.map(t => t.estimate_id),
+                ...alreadySentInBatches.map(b => b.estimate_id)
+            ]);
+
+            // Filtrar estimates que ya tienen SMS enviado
+            const estimatesAlreadyTexted = estimates.filter(est => alreadyTextedIds.has(est.id));
+            const estimatesAlreadyTextedIds = estimatesAlreadyTexted.map(est => est.id);
+            const estimatesAlreadyTextedNames = estimatesAlreadyTexted.map(est => est.name || `Estimate #${est.id}`);
+
+            // Filtrar estimates que no tienen teléfono
             const estimatesWithoutPhone = estimates.filter(est => !est.customer_phone || est.customer_phone.trim() === '');
             const estimatesWithoutPhoneIds = estimatesWithoutPhone.map(est => est.id);
             const estimatesWithoutPhoneNames = estimatesWithoutPhone.map(est => est.name || `Estimate #${est.id}`);
+
+            // Filtrar estimates válidos (que no estén ya texted y que tengan teléfono)
+            const validEstimates = estimates.filter(est => 
+                !alreadyTextedIds.has(est.id) && 
+                est.customer_phone && 
+                est.customer_phone.trim() !== ''
+            );
+
+            if (validEstimates.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No valid estimates found. All estimates either already have SMS sent or are missing phone numbers.',
+                    errors: {
+                        estimatesAlreadyTexted: estimatesAlreadyTexted.length,
+                        estimatesWithoutPhone: estimatesWithoutPhone.length,
+                        estimatesAlreadyTextedIds,
+                        estimatesAlreadyTextedNames: estimatesAlreadyTextedNames.slice(0, 10),
+                        estimatesWithoutPhoneIds,
+                        estimatesWithoutPhoneNames: estimatesWithoutPhoneNames.slice(0, 10)
+                    }
+                });
+            }
 
             // Crear batch
             const batch = await SmsBatch.create({
@@ -344,8 +404,8 @@ class SmsBatchesController {
                 metadata: filters || {}
             });
 
-            // Agregar estimates al batch
-            const batchEstimates = estimates.map(est => ({
+            // Agregar solo estimates válidos al batch
+            const batchEstimates = validEstimates.map(est => ({
                 batch_id: batch.id,
                 estimate_id: est.id,
                 status: 'pending'
@@ -360,16 +420,19 @@ class SmsBatchesController {
                 ]
             });
 
-            logger.info(`✅ Created SMS batch: ${name} with ${estimates.length} estimates (${estimatesWithoutPhone.length} without phone)`);
+            logger.info(`✅ Created SMS batch: ${name} with ${validEstimates.length} valid estimates (${estimatesAlreadyTexted.length} already texted, ${estimatesWithoutPhone.length} without phone)`);
 
             res.json({
                 success: true,
                 data: createdBatch,
-                message: `Batch created with ${estimates.length} estimates`,
-                warnings: estimatesWithoutPhone.length > 0 ? {
+                message: `Batch created with ${validEstimates.length} estimates`,
+                warnings: (estimatesAlreadyTexted.length > 0 || estimatesWithoutPhone.length > 0) ? {
+                    estimatesAlreadyTexted: estimatesAlreadyTexted.length,
+                    estimatesAlreadyTextedIds,
+                    estimatesAlreadyTextedNames: estimatesAlreadyTextedNames.slice(0, 10),
                     estimatesWithoutPhone: estimatesWithoutPhone.length,
                     estimatesWithoutPhoneIds,
-                    estimatesWithoutPhoneNames
+                    estimatesWithoutPhoneNames: estimatesWithoutPhoneNames.slice(0, 10)
                 } : undefined
             });
 
@@ -418,10 +481,70 @@ class SmsBatchesController {
                 });
             }
 
-            // Verificar cuántos estimates no tienen teléfono
+            // Obtener el status "Texted" para verificar si ya se envió SMS
+            const textedStatus = await FollowUpStatus.findOne({
+                where: { name: 'Texted' }
+            });
+
+            // Verificar qué estimates ya tienen SMS enviado
+            const estimateIdsArray = estimates.map(est => est.id);
+            
+            // Verificar en follow-up tickets con status "Texted"
+            const alreadyTextedTickets = textedStatus ? await FollowUpTicket.findAll({
+                where: {
+                    estimate_id: { [Op.in]: estimateIdsArray },
+                    status_id: textedStatus.id
+                },
+                attributes: ['estimate_id']
+            }) : [];
+
+            // Verificar en SmsBatchEstimate con status "sent"
+            const alreadySentInBatches = await SmsBatchEstimate.findAll({
+                where: {
+                    estimate_id: { [Op.in]: estimateIdsArray },
+                    status: 'sent'
+                },
+                attributes: ['estimate_id'],
+                group: ['estimate_id']
+            });
+
+            // Combinar ambos conjuntos de IDs
+            const alreadyTextedIds = new Set([
+                ...alreadyTextedTickets.map(t => t.estimate_id),
+                ...alreadySentInBatches.map(b => b.estimate_id)
+            ]);
+
+            // Filtrar estimates que ya tienen SMS enviado
+            const estimatesAlreadyTexted = estimates.filter(est => alreadyTextedIds.has(est.id));
+            const estimatesAlreadyTextedIds = estimatesAlreadyTexted.map(est => est.id);
+            const estimatesAlreadyTextedNames = estimatesAlreadyTexted.map(est => est.name || `Estimate #${est.id}`);
+
+            // Filtrar estimates que no tienen teléfono
             const estimatesWithoutPhone = estimates.filter(est => !est.customer_phone || est.customer_phone.trim() === '');
             const estimatesWithoutPhoneIds = estimatesWithoutPhone.map(est => est.id);
             const estimatesWithoutPhoneNames = estimatesWithoutPhone.map(est => est.name || `Estimate #${est.id}`);
+
+            // Filtrar estimates válidos (que no estén ya texted y que tengan teléfono)
+            const validEstimates = estimates.filter(est => 
+                !alreadyTextedIds.has(est.id) && 
+                est.customer_phone && 
+                est.customer_phone.trim() !== ''
+            );
+
+            if (validEstimates.length === 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'No valid estimates found. All selected estimates either already have SMS sent or are missing phone numbers.',
+                    errors: {
+                        estimatesAlreadyTexted: estimatesAlreadyTexted.length,
+                        estimatesWithoutPhone: estimatesWithoutPhone.length,
+                        estimatesAlreadyTextedIds,
+                        estimatesAlreadyTextedNames: estimatesAlreadyTextedNames.slice(0, 10),
+                        estimatesWithoutPhoneIds,
+                        estimatesWithoutPhoneNames: estimatesWithoutPhoneNames.slice(0, 10)
+                    }
+                });
+            }
 
             // Crear batch
             const batch = await SmsBatch.create({
@@ -432,10 +555,10 @@ class SmsBatchesController {
                 metadata: { selectionType: 'manual', estimateIds }
             });
 
-            // Agregar estimates al batch
-            const batchEstimates = estimateIds.map(estId => ({
+            // Agregar solo estimates válidos al batch
+            const batchEstimates = validEstimates.map(est => ({
                 batch_id: batch.id,
-                estimate_id: estId,
+                estimate_id: est.id,
                 status: 'pending'
             }));
 
@@ -448,16 +571,19 @@ class SmsBatchesController {
                 ]
             });
 
-            logger.info(`✅ Created SMS batch: ${name} with ${estimateIds.length} estimates (${estimatesWithoutPhone.length} without phone)`);
+            logger.info(`✅ Created SMS batch: ${name} with ${validEstimates.length} valid estimates (${estimatesAlreadyTexted.length} already texted, ${estimatesWithoutPhone.length} without phone)`);
 
             res.json({
                 success: true,
                 data: createdBatch,
-                message: `Batch created with ${estimateIds.length} estimates`,
-                warnings: estimatesWithoutPhone.length > 0 ? {
+                message: `Batch created with ${validEstimates.length} estimates`,
+                warnings: (estimatesAlreadyTexted.length > 0 || estimatesWithoutPhone.length > 0) ? {
+                    estimatesAlreadyTexted: estimatesAlreadyTexted.length,
+                    estimatesAlreadyTextedIds,
+                    estimatesAlreadyTextedNames: estimatesAlreadyTextedNames.slice(0, 10),
                     estimatesWithoutPhone: estimatesWithoutPhone.length,
                     estimatesWithoutPhoneIds,
-                    estimatesWithoutPhoneNames
+                    estimatesWithoutPhoneNames: estimatesWithoutPhoneNames.slice(0, 10)
                 } : undefined
             });
 
