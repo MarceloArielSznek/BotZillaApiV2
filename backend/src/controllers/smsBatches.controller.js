@@ -317,10 +317,10 @@ class SmsBatchesController {
                 if (filters.salesperson) whereClause.sales_person_id = parseInt(filters.salesperson);
             }
 
-            // Buscar estimates
+            // Buscar estimates con información de teléfono
             const estimates = await Estimate.findAll({
                 where: whereClause,
-                attributes: ['id']
+                attributes: ['id', 'customer_phone', 'name']
             });
 
             if (estimates.length === 0) {
@@ -329,6 +329,11 @@ class SmsBatchesController {
                     message: 'No estimates found matching the filters'
                 });
             }
+
+            // Verificar cuántos estimates no tienen teléfono
+            const estimatesWithoutPhone = estimates.filter(est => !est.customer_phone || est.customer_phone.trim() === '');
+            const estimatesWithoutPhoneIds = estimatesWithoutPhone.map(est => est.id);
+            const estimatesWithoutPhoneNames = estimatesWithoutPhone.map(est => est.name || `Estimate #${est.id}`);
 
             // Crear batch
             const batch = await SmsBatch.create({
@@ -355,12 +360,17 @@ class SmsBatchesController {
                 ]
             });
 
-            logger.info(`✅ Created SMS batch: ${name} with ${estimates.length} estimates`);
+            logger.info(`✅ Created SMS batch: ${name} with ${estimates.length} estimates (${estimatesWithoutPhone.length} without phone)`);
 
             res.json({
                 success: true,
                 data: createdBatch,
-                message: `Batch created with ${estimates.length} estimates`
+                message: `Batch created with ${estimates.length} estimates`,
+                warnings: estimatesWithoutPhone.length > 0 ? {
+                    estimatesWithoutPhone: estimatesWithoutPhone.length,
+                    estimatesWithoutPhoneIds,
+                    estimatesWithoutPhoneNames
+                } : undefined
             });
 
         } catch (error) {
@@ -395,10 +405,10 @@ class SmsBatchesController {
                 });
             }
 
-            // Verificar que los estimates existen
+            // Verificar que los estimates existen y obtener información de teléfono
             const estimates = await Estimate.findAll({
                 where: { id: { [Op.in]: estimateIds } },
-                attributes: ['id']
+                attributes: ['id', 'customer_phone', 'name']
             });
 
             if (estimates.length !== estimateIds.length) {
@@ -407,6 +417,11 @@ class SmsBatchesController {
                     message: 'Some estimate IDs are invalid'
                 });
             }
+
+            // Verificar cuántos estimates no tienen teléfono
+            const estimatesWithoutPhone = estimates.filter(est => !est.customer_phone || est.customer_phone.trim() === '');
+            const estimatesWithoutPhoneIds = estimatesWithoutPhone.map(est => est.id);
+            const estimatesWithoutPhoneNames = estimatesWithoutPhone.map(est => est.name || `Estimate #${est.id}`);
 
             // Crear batch
             const batch = await SmsBatch.create({
@@ -433,12 +448,17 @@ class SmsBatchesController {
                 ]
             });
 
-            logger.info(`✅ Created SMS batch: ${name} with ${estimateIds.length} estimates`);
+            logger.info(`✅ Created SMS batch: ${name} with ${estimateIds.length} estimates (${estimatesWithoutPhone.length} without phone)`);
 
             res.json({
                 success: true,
                 data: createdBatch,
-                message: `Batch created with ${estimateIds.length} estimates`
+                message: `Batch created with ${estimateIds.length} estimates`,
+                warnings: estimatesWithoutPhone.length > 0 ? {
+                    estimatesWithoutPhone: estimatesWithoutPhone.length,
+                    estimatesWithoutPhoneIds,
+                    estimatesWithoutPhoneNames
+                } : undefined
             });
 
         } catch (error) {

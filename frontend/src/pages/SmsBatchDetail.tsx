@@ -157,6 +157,21 @@ const SmsBatchDetail: React.FC = () => {
     setDetailsOpen(true);
   };
 
+  const handleRemoveEstimate = async (estimateId: number, estimateName: string) => {
+    if (!id || !window.confirm(`¿Estás seguro de que quieres remover "${estimateName}" del batch?`)) {
+      return;
+    }
+
+    try {
+      await smsBatchService.removeEstimateFromBatch(parseInt(id), estimateId);
+      // Recargar el batch para actualizar la lista
+      await fetchBatch();
+    } catch (err: any) {
+      console.error('Error removing estimate from batch:', err);
+      setError(err.response?.data?.message || 'Failed to remove estimate from batch');
+    }
+  };
+
   const getBranchName = (branchId: number) => {
     const branch = branches.find(b => b.id === branchId);
     return branch?.name || `Branch #${branchId}`;
@@ -714,6 +729,18 @@ const SmsBatchDetail: React.FC = () => {
                             size="small"
                           >
                             <VisibilityIcon />
+                          </IconButton>
+                        </Tooltip>
+                        <Tooltip title="Remove from batch">
+                          <IconButton
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleRemoveEstimate(estimate.id, estimate.name || `Estimate #${estimate.id}`);
+                            }}
+                            size="small"
+                            color="error"
+                          >
+                            <DeleteIcon />
                           </IconButton>
                         </Tooltip>
                       </TableCell>

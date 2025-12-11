@@ -78,6 +78,7 @@ const CreateSmsBatch: React.FC = () => {
   const [salespeople, setSalespeople] = useState<SalesPerson[]>([]);
   const [followUpStatuses, setFollowUpStatuses] = useState<any[]>([]);
   const [followUpLabels, setFollowUpLabels] = useState<any[]>([]);
+  const [warnings, setWarnings] = useState<{ estimatesWithoutPhone: number; estimatesWithoutPhoneNames: string[] } | null>(null);
 
   useEffect(() => {
     loadInitialData();
@@ -230,8 +231,11 @@ const CreateSmsBatch: React.FC = () => {
           description: description.trim() || undefined,
           status: status,
         });
+        navigate('/follow-up/sms-batches');
       } else {
         // Modo creación: crear nuevo batch
+        let result: any;
+        
         if (method === 'filters') {
           const params: CreateBatchFromFiltersParams = {
             name: name.trim(),
@@ -248,7 +252,7 @@ const CreateSmsBatch: React.FC = () => {
             },
           };
 
-          await smsBatchService.createBatchFromFilters(params);
+          result = await smsBatchService.createBatchFromFilters(params);
         } else {
           if (selectedEstimates.size === 0) {
             setError('Please select at least one estimate');
@@ -261,11 +265,21 @@ const CreateSmsBatch: React.FC = () => {
             estimateIds: Array.from(selectedEstimates),
           };
 
-          await smsBatchService.createBatchFromSelection(params);
+          result = await smsBatchService.createBatchFromSelection(params);
         }
-      }
+        
+        // Verificar si hay warnings sobre estimates sin teléfono
+        if (result && result.warnings && result.warnings.estimatesWithoutPhone > 0) {
+          setWarnings({
+            estimatesWithoutPhone: result.warnings.estimatesWithoutPhone,
+            estimatesWithoutPhoneNames: result.warnings.estimatesWithoutPhoneNames || []
+          });
+          // No navegar inmediatamente, mostrar el aviso primero
+          return;
+        }
 
-      navigate('/follow-up/sms-batches');
+        navigate('/follow-up/sms-batches');
+      }
     } catch (err: any) {
       console.error(`Error ${isEditMode ? 'updating' : 'creating'} batch:`, err);
       setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'create'} batch`);
@@ -311,6 +325,42 @@ const CreateSmsBatch: React.FC = () => {
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
           {error}
+        </Alert>
+      )}
+
+      {/* Warning Alert - Estimates sin teléfono */}
+      {warnings && (
+        <Alert 
+          severity="warning" 
+          sx={{ mb: 3 }} 
+          onClose={() => {
+            setWarnings(null);
+            navigate('/follow-up/sms-batches');
+          }}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+            ⚠️ {warnings.estimatesWithoutPhone} estimate(s) sin teléfono
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Los siguientes estimates no tienen número de teléfono y no se podrán enviar SMS:
+          </Typography>
+          <Box component="ul" sx={{ pl: 2, mb: 1 }}>
+            {warnings.estimatesWithoutPhoneNames.slice(0, 10).map((name, idx) => (
+              <li key={idx}>
+                <Typography variant="body2">{name}</Typography>
+              </li>
+            ))}
+            {warnings.estimatesWithoutPhoneNames.length > 10 && (
+              <li>
+                <Typography variant="body2">
+                  ... y {warnings.estimatesWithoutPhoneNames.length - 10} más
+                </Typography>
+              </li>
+            )}
+          </Box>
+          <Typography variant="body2" sx={{ fontStyle: 'italic' }}>
+            El batch se creó exitosamente, pero estos estimates serán omitidos al enviar SMS.
+          </Typography>
         </Alert>
       )}
 

@@ -69,7 +69,7 @@ const smsBatchService = {
   },
 
   // Crear batch desde filtros
-  createBatchFromFilters: async (params: CreateBatchFromFiltersParams): Promise<SmsBatch> => {
+  createBatchFromFilters: async (params: CreateBatchFromFiltersParams): Promise<SmsBatch & { warnings?: any }> => {
     const response = await api.post('/sms-batches/filter', params);
     if (!response.data || response.data.canceled) {
       throw new Error('Request was canceled');
@@ -77,11 +77,14 @@ const smsBatchService = {
     if (!response.data || !response.data.data) {
       throw new Error('Invalid response structure');
     }
-    return response.data.data;
+    return {
+      ...response.data.data,
+      warnings: response.data.warnings
+    };
   },
 
   // Crear batch desde selección manual
-  createBatchFromSelection: async (params: CreateBatchFromSelectionParams): Promise<SmsBatch> => {
+  createBatchFromSelection: async (params: CreateBatchFromSelectionParams): Promise<SmsBatch & { warnings?: any }> => {
     const response = await api.post('/sms-batches/selection', params);
     if (!response.data || response.data.canceled) {
       throw new Error('Request was canceled');
@@ -89,7 +92,10 @@ const smsBatchService = {
     if (!response.data || !response.data.data) {
       throw new Error('Invalid response structure');
     }
-    return response.data.data;
+    return {
+      ...response.data.data,
+      warnings: response.data.warnings
+    };
   },
 
   // Actualizar batch
