@@ -7,6 +7,81 @@ const axios = require('axios');
 const { emitNewMessage, emitInboxUpdate } = require('../socket/socketServer');
 
 /**
+ * Genera todas las variaciones posibles de un número de teléfono para búsqueda
+ * @param {string} phone - Número de teléfono en cualquier formato
+ * @returns {string[]} - Array con todas las variaciones posibles del número
+ */
+function generatePhoneVariations(phone) {
+    if (!phone) return [];
+    
+    const phoneStr = String(phone).trim();
+    if (!phoneStr || phoneStr.length === 0) return [];
+    
+    // Remover todos los caracteres no numéricos excepto el +
+    let cleaned = phoneStr.replace(/[^\d+]/g, '');
+    
+    // Si no tiene dígitos, retornar array vacío
+    if (cleaned.length === 0 || cleaned === '+') return [];
+    
+    // Remover el + si existe para procesar solo los dígitos
+    const hasPlus = cleaned.startsWith('+');
+    const digitsOnly = hasPlus ? cleaned.substring(1) : cleaned;
+    
+    // Extraer los últimos 10 dígitos (número local)
+    let localNumber = digitsOnly;
+    if (digitsOnly.length > 10) {
+        localNumber = digitsOnly.substring(digitsOnly.length - 10);
+    }
+    
+    // Extraer el código de área (primeros 3 dígitos del número local)
+    const areaCode = localNumber.substring(0, 3);
+    const exchange = localNumber.substring(3, 6);
+    const number = localNumber.substring(6, 10);
+    
+    const variations = [];
+    
+    // Formato normalizado: +1xxxxxxxxxx
+    if (localNumber.length === 10) {
+        variations.push(`+1${localNumber}`);
+    }
+    
+    // Formato con 10 dígitos: xxxxxxxxxx
+    variations.push(localNumber);
+    
+    // Formato con guiones: xxx-xxx-xxxx
+    variations.push(`${areaCode}-${exchange}-${number}`);
+    
+    // Formato con paréntesis: (xxx) xxx-xxxx
+    variations.push(`(${areaCode}) ${exchange}-${number}`);
+    
+    // Formato con puntos: xxx.xxx.xxxx
+    variations.push(`${areaCode}.${exchange}.${number}`);
+    
+    // Formato con espacios: xxx xxx xxxx
+    variations.push(`${areaCode} ${exchange} ${number}`);
+    
+    // Formato con +1 y guiones: +1-xxx-xxx-xxxx
+    if (localNumber.length === 10) {
+        variations.push(`+1-${areaCode}-${exchange}-${number}`);
+    }
+    
+    // Si el número original tenía el código de país 1, agregar variaciones con 1
+    if (digitsOnly.length === 11 && digitsOnly.startsWith('1')) {
+        const fullNumber = digitsOnly;
+        variations.push(fullNumber); // 1xxxxxxxxxx
+        variations.push(`+${fullNumber}`); // +1xxxxxxxxxx
+    }
+    
+    // Agregar el número original si no está ya en las variaciones
+    if (!variations.includes(phoneStr)) {
+        variations.push(phoneStr);
+    }
+    
+    // Remover duplicados
+    return [...new Set(variations)];
+}
+
+/**
  * Normaliza un número de teléfono al formato +1xxxxxxxxxx requerido por Make.com
  * @param {string} phone - Número de teléfono en cualquier formato
  * @returns {string|null} - Número normalizado en formato +1xxxxxxxxxx o null si no es válido
@@ -520,13 +595,18 @@ class FollowUpTicketsController {
 
             logger.info(`📥 Processing incoming SMS from ${phone} (normalized: ${normalizedPhone}): ${message.substring(0, 50)}...`);
 
-            // Buscar el estimate por número de teléfono (normalizado y también el original por si acaso)
+            // Generar todas las variaciones posibles del número de teléfono
+            const phoneVariations = generatePhoneVariations(phone);
+            if (normalizedPhone && !phoneVariations.includes(normalizedPhone)) {
+                phoneVariations.push(normalizedPhone);
+            }
+            
+            logger.info(`🔍 Searching for estimate with phone variations: ${phoneVariations.slice(0, 5).join(', ')}... (${phoneVariations.length} total)`);
+
+            // Buscar el estimate por número de teléfono usando todas las variaciones
             const estimate = await Estimate.findOne({
                 where: {
-                    [Op.or]: [
-                        { customer_phone: normalizedPhone },
-                        { customer_phone: phone }
-                    ]
+                    customer_phone: { [Op.in]: phoneVariations }
                 },
                 attributes: ['id', 'name', 'customer_name', 'customer_phone']
             });
