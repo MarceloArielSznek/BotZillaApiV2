@@ -464,45 +464,68 @@ class FollowUpTicketsController {
         try {
             logger.info(`📥 Received webhook from QUO: ${JSON.stringify(req.body, null, 2)}`);
 
+            // Manejar si el body es un array (formato de Make.com)
+            let bodyData = req.body;
+            if (Array.isArray(req.body) && req.body.length > 0) {
+                bodyData = req.body[0];
+                logger.info(`📥 Detected array format, using first element`);
+            }
+
             // Extraer phone y message del objeto de QUO
             let phone, message;
 
             // Formato QUO directo: objeto con from y text
-            if (req.body.from && req.body.text) {
-                phone = req.body.from;
-                message = req.body.text;
+            if (bodyData.from && bodyData.text) {
+                phone = bodyData.from;
+                message = bodyData.text;
             }
-            // Formato alternativo: data.object
-            else if (req.body.data && req.body.data.object) {
-                phone = req.body.data.object.from;
-                message = req.body.data.object.text || req.body.data.object.body;
+            // Formato Make.com/QUO: data.object
+            else if (bodyData.data && bodyData.data.object) {
+                phone = bodyData.data.object.from;
+                message = bodyData.data.object.text || bodyData.data.object.body;
             }
             // Formato simple: phone y message directos
-            else if (req.body.phone && req.body.message) {
-                phone = req.body.phone;
-                message = req.body.message;
+            else if (bodyData.phone && bodyData.message) {
+                phone = bodyData.phone;
+                message = bodyData.message;
             }
 
             if (!phone || !message) {
                 logger.error('Invalid webhook format - missing from/phone or text/message', {
                     body: req.body,
-                    hasFrom: !!req.body.from,
-                    hasText: !!req.body.text,
-                    hasPhone: !!req.body.phone,
-                    hasMessage: !!req.body.message
+                    bodyData: bodyData,
+                    isArray: Array.isArray(req.body),
+                    hasFrom: !!bodyData?.from,
+                    hasText: !!bodyData?.text,
+                    hasPhone: !!bodyData?.phone,
+                    hasMessage: !!bodyData?.message,
+                    hasDataObject: !!(bodyData?.data?.object)
                 });
                 return res.status(400).json({
                     success: false,
-                    message: 'from and text are required. Expected format: { from: "+1234567890", text: "message" }'
+                    message: 'from and text are required. Expected format: { from: "+1234567890", text: "message" } or [{ data: { object: { from: "...", text: "..." } } }]'
                 });
             }
 
-            logger.info(`📥 Processing incoming SMS from ${phone}: ${message.substring(0, 50)}...`);
+            // Normalizar el número de teléfono antes de buscar
+            const normalizedPhone = normalizePhoneNumber(phone);
+            if (!normalizedPhone) {
+                logger.warn(`Invalid phone number format received: ${phone}`);
+                return res.status(400).json({
+                    success: false,
+                    message: `Invalid phone number format: ${phone}`
+                });
+            }
 
-            // Buscar el estimate por número de teléfono
+            logger.info(`📥 Processing incoming SMS from ${phone} (normalized: ${normalizedPhone}): ${message.substring(0, 50)}...`);
+
+            // Buscar el estimate por número de teléfono (normalizado y también el original por si acaso)
             const estimate = await Estimate.findOne({
                 where: {
-                    customer_phone: phone
+                    [Op.or]: [
+                        { customer_phone: normalizedPhone },
+                        { customer_phone: phone }
+                    ]
                 },
                 attributes: ['id', 'name', 'customer_name', 'customer_phone']
             });
@@ -924,4 +947,5 @@ async function emitInboxUpdateForChat(chatId) {
 }
 
 module.exports = new FollowUpTicketsController();
+
 
