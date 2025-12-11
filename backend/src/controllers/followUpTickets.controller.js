@@ -815,13 +815,15 @@ class FollowUpTicketsController {
                         unreadCount: unreadCount
                     };
                 })
-                // Ordenar: primero los que tienen mensajes no leídos, luego por fecha de actualización
+                // Ordenar: primero los que tienen mensajes no leídos, luego por fecha del último mensaje
                 .sort((a, b) => {
                     // Si uno tiene no leídos y el otro no, el que tiene no leídos va primero
                     if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
                     if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
-                    // Si ambos tienen no leídos o ambos no tienen, ordenar por fecha
-                    return new Date(b.updatedAt) - new Date(a.updatedAt);
+                    // Si ambos tienen no leídos o ambos no tienen, ordenar por fecha del último mensaje (más reciente primero)
+                    const aLastMessageTime = a.lastMessage?.sentAt ? new Date(a.lastMessage.sentAt).getTime() : 0;
+                    const bLastMessageTime = b.lastMessage?.sentAt ? new Date(b.lastMessage.sentAt).getTime() : 0;
+                    return bLastMessageTime - aLastMessageTime;
                 });
 
             res.json({

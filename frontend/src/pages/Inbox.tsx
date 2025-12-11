@@ -101,11 +101,13 @@ const Inbox: React.FC = () => {
           const updatedChats = [...prevChats];
           updatedChats[existingIndex] = updatedChat;
           
-          // Reordenar: primero los no leídos, luego por fecha
+          // Reordenar: primero los no leídos, luego por fecha del último mensaje
           updatedChats.sort((a, b) => {
             if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
             if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
-            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+            const aLastMessageTime = a.lastMessage?.sentAt ? new Date(a.lastMessage.sentAt).getTime() : 0;
+            const bLastMessageTime = b.lastMessage?.sentAt ? new Date(b.lastMessage.sentAt).getTime() : 0;
+            return bLastMessageTime - aLastMessageTime;
           });
           
           return updatedChats;
@@ -115,7 +117,9 @@ const Inbox: React.FC = () => {
           newChats.sort((a, b) => {
             if (a.unreadCount > 0 && b.unreadCount === 0) return -1;
             if (a.unreadCount === 0 && b.unreadCount > 0) return 1;
-            return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+            const aLastMessageTime = a.lastMessage?.sentAt ? new Date(a.lastMessage.sentAt).getTime() : 0;
+            const bLastMessageTime = b.lastMessage?.sentAt ? new Date(b.lastMessage.sentAt).getTime() : 0;
+            return bLastMessageTime - aLastMessageTime;
           });
           return newChats;
         }
